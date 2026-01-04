@@ -4,178 +4,149 @@ A formally defined language for schema migration and evolution between relationa
 
 ## Overview
 
-SMEL (Schema Migration & Evolution Language) is a formally defined language that provides a unified approach to:
+SMEL (Schema Migration & Evolution Language) provides a unified approach to:
 - Define schema transformations across heterogeneous database systems
 - Support bidirectional migration between SQL and NoSQL databases
-- Integrate schema evolution operations from the Orion taxonomy 
-- Build upon schema evolution research from the Darwin platform (Störl & Klettke) and Meier's Master thesis
+- Support schema evolution within the same database type
+- Build upon the Orion taxonomy and research from Darwin platform
 
-## Supported Database Types
+## Supported Migration Directions
 
-| Type | Implementation | Entity | Key              | Reference | Aggregation |
-|------|----------------|--------|------------------|-----------|-------------|
-| **Relational** | PostgreSQL | Table | Primary Key      | Foreign Key | — |
-| **Document** | MongoDB | Collection | Document Key     | Document Reference | Embedded Document |
-| **Columnar** | Cassandra | Table | Partition Key + Clustering Key(s) | Table Reference | UDT |
-| **Graph** | Neo4j | Node Label | —¹               | Relationship Type | — |
+| Option | Direction | Description | SMEL Script |
+|--------|-----------|-------------|-------------|
+| 1 | Relational → Document | Cross-model migration | `pg_to_mongo.smel` |
+| 2 | Document → Relational | Cross-model migration | `mongo_to_pg.smel` |
+| 3 | Relational → Relational | Schema evolution (v1 → v2) | `sql_v1_to_v2.smel` |
+| 4 | Document → Document | Schema evolution (v1 → v2) | `mongo_v1_to_v2.smel` |
 
-> ¹ Graph databases identify nodes via internal IDs or optional property constraints, 
->   but do not have a formal Key concept equivalent to relational Primary Keys.
-
-## Process
-```
-┌─────────────────────────┐          ┌─────────────────────────┐
-│      Source Schema      │          │       SMEL Script       │
-│ (Relational | Document  │          │  (Evolution & Migration │
-│  | Columnar | Graph)    │          │       Operations)       │
-└───────────┬─────────────┘          └───────────┬─────────────┘
-            │                                    │
-            ▼                                    ▼
-┌─────────────────────────┐          ┌─────────────────────────┐
-│    Unified Meta Schema  │          │     ANTLR4 Parser       │
-│          (V1)           │          │      (SMELParser)       │     right side is core task
-└───────────┬─────────────┘          └───────────┬─────────────┘
-            │                                    │
-            │                                    ▼
-            │                        ┌─────────────────────────┐
-            │                        │       Parse Tree        │
-            │                        └───────────┬─────────────┘
-            │                                    │
-            └────────────────┬───────────────────┘
-                             │
-                             ▼
-                  ┌─────────────────────────┐
-                  │        Executor         │
-                  │      (SMELExecutor)     │
-                  │                         │
-                  │  Schema V1 + Parse Tree │
-                  │           ↓             │
-                  │  Check: Preview Changes │
-                  │  Run: Apply Operations  │
-                  └───────────┬─────────────┘
-                              │
-                              ▼
-                  ┌─────────────────────────┐
-                  │    Unified Meta Schema  │
-                  │          (V2)           │
-                  └───────────┬─────────────┘
-                              │
-                              ▼
-                  ┌─────────────────────────┐
-                  │      Target Schema      │
-                  │ (Relational | Document  │
-                  │  | Columnar | Graph)    │
-                  └─────────────────────────┘
-```
+## Workflow
 
 ```
-SMEL Operations
-├── Schema Evolution (Orion-based, within same database)
-│   ├── Schema Type:     ADD, DELETE, RENAME, EXTRACT, SPLIT, MERGE
-│   ├── Variation:       DELVAR, ADAPT, UNION
-│   ├── Feature:         DELETE, RENAME, COPY, MOVE, NEST, UNNEST
-│   ├── Attribute:       ADD, CAST, PROMOTE, DEMOTE
-│   ├── Reference:       ADD, CAST, MULT, MORPH
-│   └── Aggregate:       ADD, MULT, MORPH
-│
-└── Schema Migration (Meier-based, across databases)
-    ├── Single-type:  ADD, DELETE, RENAME, FLATTEN, UNWIND, CAST
-    └── Multi-type:   COPY, MOVE, MERGE, SPLIT, NEST, LINKING
+┌─────────────┐     Reverse Eng      ┌─────────────┐      SMEL         ┌─────────────┐     Forward Eng     ┌─────────────┐
+│   Source    │ ──────────────────► │   Meta V1   │ ──────────────► │   Meta V2   │ ──────────────────► │   Target    │
+│   Schema    │                      │  (Unified)  │                  │  (Unified)  │                      │   Schema    │
+│ (DDL/JSON)  │                      │             │                  │             │                      │ (DDL/JSON)  │
+└─────────────┘                      └─────────────┘                  └─────────────┘                      └─────────────┘
 ```
-> **Note:** SMEL Operations and Mapping Rules (EntityType Mapping & DataType Mapping) in this Master Thesis is a work in progress and not finalized.
-## Test Schema
-
-Schema of **UniBench SF1** for Master's thesis validation.
-
-| Data Model | Target Database | Entities |
-|------------|-----------------|----------|
-| **Graph** | Neo4j | Person, Post, Tag |
-| **Relational** | PostgreSQL | Customer, Vendor |
-| **Document** | MongoDB | Product, Order |
-
-> **Note**: UniBench does not include Columnar schema.
 
 ## Installation
+
+### Prerequisites
+- Python 3.10+
+- ANTLR4 runtime
+
+### Setup
 ```bash
+# Clone the repository
+git clone https://github.com/baobaodaren0918/SMEL.git
+cd SMEL
+
+# Create virtual environment
+python -m venv .venv
+
+# Activate virtual environment
+# Windows:
+.venv\Scripts\activate
+# Linux/Mac:
+source .venv/bin/activate
+
+# Install dependencies
 pip install -r requirements.txt
-pip install antlr4-python3-runtime
+```
+
+### Generate Parser (if needed)
+```bash
+# Windows
+.venv\Scripts\antlr4 -Dlanguage=Python3 -visitor grammar/SMEL.g4
+
+# Linux/Mac
+antlr4 -Dlanguage=Python3 -visitor grammar/SMEL.g4
 ```
 
 ## Usage
 
-### Workflow
-```
-Define SMEL.g4 (ANTLR4 grammar file in EBNF notation)
-│
-▼
-Generate Parser/Lexer (antlr4, SMEL.g4)
-│
-▼
-Load source schema → Unified Meta Schema (V1)
-│
-▼
-Load SMEL script → Lexer → Parser → Parse Tree
-│
-▼
-Run: Schema (V1) + Parse Tree → Executor → Schema (V2) (python main.py)
-     (includes syntax validation and schema comparison)
-│
-▼
-Target schema generated
-```
+### Command Line Interface (CLI)
 
-### Command Line Interface
 ```bash
-# Generate Parser/Lexer from grammar
-antlr4 -Dlanguage=Python3 grammar/SMEL.g4 -o grammar
-
-# Run: execute schema migration & evolution (includes syntax validation)
 python main.py
 ```
 
+Output:
+```
+============================================================
+ SMEL - Schema Migration & Evolution Language
+============================================================
+
+  Cross-Model Migration:
+  [1] Relational -> Document
+  [2] Document -> Relational
+
+  Schema Evolution (Same Model):
+  [3] Relational -> Relational (SQL v1 -> v2)
+  [4] Document -> Document (MongoDB v1 -> v2)
+
+  [0] Exit
+
+Choice:
+```
+
+### Web Interface
+
+```bash
+python web_server.py
+```
+
+Opens automatically at `http://localhost:5570` with:
+- Schema Comparison view (Source vs Target)
+- Migration Process view (4-column: Source | Meta V1 | Meta V2 | Target)
+- SMEL Script view with step-by-step operations
+
 ### Programmatic Usage
+
 ```python
-from antlr4 import CommonTokenStream, FileStream
-# from grammar.SMELLexer import SMELLexer
-# from grammar.SMELParser import SMELParser
-# from grammar.SMELExecutor import SMELExecutor
-# from Schema.unified_meta_schema import UnifiedMetaSchema
+from core import run_migration
 
-# 1. Load source schema → Unified Meta Schema (V1)
-# schema = UnifiedMetaSchema.load_from_file("<source_schema>")
+# Run migration (options: 'r2d', 'd2r', 'r2r', 'd2d')
+result = run_migration('d2r')  # Document -> Relational
 
-# 2. Load and parse SMEL script (FileStream → Lexer → Parser)
-# input_stream = FileStream("<smel_script>")
-# lexer = SMELLexer(input_stream)
-# token_stream = CommonTokenStream(lexer)
-# parser = SMELParser(token_stream)
-
-# 3. Get parse tree
-# tree = parser.migration()
-
-# 4. Run: Schema (V1) + Parse Tree → Executor → Schema (V2) (main.py)
-# updated_schema = executor.run(tree)
-
-# 5. Save target schema
-# updated_schema.save_to_file("<target_schema>")
+# Access results
+print(result['source_type'])        # 'Document'
+print(result['target_type'])        # 'Relational'
+print(result['exported_target'])    # Generated PostgreSQL DDL
+print(result['operations_count'])   # Number of SMEL operations applied
 ```
 
-### Project Structure
+## Project Structure
+
 ```
-schema_evolution_language/
+SMEL/
 ├── grammar/
-│   └── SMEL.g4                      # ANTLR4 grammar definition
+│   ├── SMEL.g4                 # ANTLR4 grammar definition
+│   ├── SMELLexer.py            # Generated lexer
+│   ├── SMELParser.py           # Generated parser
+│   └── SMELListener.py         # Generated listener
 ├── Schema/
-│   └── unified_meta_schema.py       # Unified Meta Schema classes
+│   ├── adapters/
+│   │   ├── postgresql_adapter.py   # PostgreSQL ↔ Unified Meta
+│   │   └── mongodb_adapter.py      # MongoDB ↔ Unified Meta
+│   ├── unified_meta_schema.py      # Unified Meta Schema classes
+│   ├── pain001_postgresql.sql      # Sample PostgreSQL schema
+│   ├── pain001_postgresql_v2.sql   # Sample PostgreSQL schema v2
+│   ├── pain001_mongodb.json        # Sample MongoDB schema
+│   └── pain001_mongodb_v2.json     # Sample MongoDB schema v2
 ├── tests/
-│   └── test_smel.py                 # Test suite
-├── main.py                          # Run: execute migration & evolution (includes validation)
+│   ├── pg_to_mongo.smel            # Relational → Document script
+│   ├── mongo_to_pg.smel            # Document → Relational script
+│   ├── sql_v1_to_v2.smel           # SQL evolution script
+│   └── mongo_v1_to_v2.smel         # MongoDB evolution script
+├── core.py                     # Core migration logic
+├── main.py                     # CLI interface
+├── web_server.py               # Web interface
 ├── requirements.txt
 └── README.md
 ```
 
-
-## Language Syntax
+## SMEL Language Syntax
 
 ### Migration Script Structure
 ```
@@ -186,12 +157,58 @@ USING <schema>:<version>
 <operations>
 ```
 
+### Supported Operations
 
-## Running Tests
+#### Schema Evolution (within same database)
+| Operation | Syntax | Description |
+|-----------|--------|-------------|
+| RENAME | `RENAME old TO new IN entity` | Rename attribute |
+| RENAME ENTITY | `RENAME ENTITY old TO new` | Rename entity |
+| ADD ATTRIBUTE | `ADD ATTRIBUTE name TO entity WITH TYPE type` | Add new attribute |
+| ADD ENTITY | `ADD ENTITY name WITH ATTRIBUTES (...)` | Add new entity |
+| DELETE ATTRIBUTE | `DELETE ATTRIBUTE entity.attr` | Delete attribute |
+| DELETE ENTITY | `DELETE ENTITY name` | Delete entity |
+| EXTRACT | `EXTRACT (a,b,c) FROM entity INTO new` | Extract attributes to new entity |
+| COPY | `COPY source.attr TO target.attr` | Copy attribute |
 
-> **Note**: Test suite will be implemented during the validation phase.
-```bash
-#cd schema_evolution_language
-#pip install pytest
-#pytest tests/test_smel.py -v
+#### Schema Migration (across databases)
+| Operation | Syntax | Description |
+|-----------|--------|-------------|
+| NEST | `NEST source INTO target AS alias` | Embed entity as nested object |
+| FLATTEN | `FLATTEN entity.embedded INTO new` | Extract embedded to table |
+| UNWIND | `UNWIND entity.array AS new` | Unwind array to table |
+| ADD REFERENCE | `ADD REFERENCE entity.fk TO target` | Add foreign key reference |
+
+### Example SMEL Script
+```sql
+-- Document to Relational Migration
+MIGRATION pain001_d2r:1.0
+FROM DOCUMENT TO RELATIONAL
+USING pain001_schema:1
+
+-- Flatten embedded party structures
+FLATTEN payment_message.initg_pty INTO party
+    ADD REFERENCE payment_message.initg_pty_id TO party
+
+-- Unwind payment_info array
+UNWIND payment_message.payment_info[] AS payment_info
+    GENERATE KEY pmt_inf_id FROM pmt_inf_id
+    ADD REFERENCE payment_info.msg_id TO payment_message
 ```
+
+## Sample Schema (pain001)
+
+Based on ISO 20022 pain.001 (Customer Credit Transfer Initiation):
+
+| Entity | PostgreSQL | MongoDB |
+|--------|------------|---------|
+| party | Table with party_id PK | Embedded in payment_message |
+| account | Table with acct_id PK | Embedded in payment_info |
+| payment_message | Table with msg_id PK | Root document with _id |
+| payment_info | Table with pmt_inf_id PK | Array in payment_message |
+| credit_transfer_tx | Table with tx_id PK | Array in payment_info |
+| remittance_info | Table with rmt_id PK | Array in credit_transfer_tx |
+
+## License
+
+This project is part of a Master's thesis at FernUniversität in Hagen.
