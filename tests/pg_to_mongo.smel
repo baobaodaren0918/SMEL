@@ -1,0 +1,68 @@
+-- SMEL Migration: PostgreSQL -> MongoDB
+-- ISO 20022 pain.001.001.03 (6 tables -> 1 nested document)
+-- Direction: Normalized (3NF) -> Denormalized (Embedded)
+
+MIGRATION pain001_pg_to_mongo:1.0
+FROM RELATIONAL TO DOCUMENT
+USING pain001_schema:1
+
+-- Step 1: Nest payment_info into payment_message (root document)
+NEST payment_info INTO payment_message AS payment_info
+    WITH CARDINALITY ONE_TO_MANY
+    USING KEY msg_id
+
+-- Step 2: Embed initiating party into payment_message
+NEST party INTO payment_message AS initg_pty
+    WHERE payment_message.initg_pty_id = party.party_id
+    WITH CARDINALITY ONE_TO_ONE
+
+-- Step 3: Embed debtor party into payment_info
+-- 3NF: dbtr derived via dbtr_acct.party_id (no direct dbtr_id in payment_info)
+NEST party INTO payment_info AS dbtr
+    WHERE payment_info.dbtr_acct_id = account.acct_id
+      AND account.party_id = party.party_id
+    WITH CARDINALITY ONE_TO_ONE
+
+-- Step 4: Embed debtor account into payment_info
+NEST account INTO payment_info AS dbtr_acct
+    WHERE payment_info.dbtr_acct_id = account.acct_id
+    WITH CARDINALITY ONE_TO_ONE
+
+-- Step 5: Nest credit_transfer_tx into payment_info
+NEST credit_transfer_tx INTO payment_info AS credit_transfer_tx
+    WITH CARDINALITY ONE_TO_MANY
+    USING KEY pmt_inf_id
+
+-- Step 6: Embed creditor party into credit_transfer_tx
+-- 3NF: cdtr derived via cdtr_acct.party_id (no direct cdtr_id in credit_transfer_tx)
+NEST party INTO credit_transfer_tx AS cdtr
+    WHERE credit_transfer_tx.cdtr_acct_id = account.acct_id
+      AND account.party_id = party.party_id
+    WITH CARDINALITY ONE_TO_ONE
+
+-- Step 7: Embed creditor account into credit_transfer_tx
+NEST account INTO credit_transfer_tx AS cdtr_acct
+    WHERE credit_transfer_tx.cdtr_acct_id = account.acct_id
+    WITH CARDINALITY ONE_TO_ONE
+
+-- Step 8: Nest remittance_info into credit_transfer_tx
+NEST remittance_info INTO credit_transfer_tx AS remittance_info
+    WITH CARDINALITY ZERO_TO_MANY
+    USING KEY tx_id
+
+-- Step 9: Remove foreign key references (not needed in document model)
+-- 3NF: dbtr_id and cdtr_id do not exist (derived via account.party_id)
+DELETE REFERENCE payment_message.initg_pty_id
+DELETE REFERENCE payment_info.msg_id
+DELETE REFERENCE payment_info.dbtr_acct_id
+DELETE REFERENCE credit_transfer_tx.pmt_inf_id
+DELETE REFERENCE credit_transfer_tx.cdtr_acct_id
+DELETE REFERENCE remittance_info.tx_id
+DELETE REFERENCE account.party_id
+
+-- Step 10: Delete original entities (now fully embedded)
+DELETE ENTITY party
+DELETE ENTITY account
+
+-- Step 11: Rename primary key to MongoDB convention
+RENAME msg_id TO _id IN payment_message

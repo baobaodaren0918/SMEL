@@ -1,0 +1,51 @@
+-- SMEL Migration: MongoDB -> PostgreSQL
+-- ISO 20022 pain.001.001.03 (1 nested document -> 6 tables)
+-- Direction: Denormalized (Embedded) -> Normalized (3NF)
+
+MIGRATION pain001_mongo_to_pg:1.0
+FROM DOCUMENT TO RELATIONAL
+USING pain001_schema:1
+
+-- ============================================
+-- Phase 1: Create base tables (party, account)
+-- ============================================
+
+-- Step 1: Extract initiating party -> create party table
+FLATTEN payment_message.initg_pty AS party
+    ADD REFERENCE initg_pty_id TO party
+
+-- Step 2: Delete other embedded parties (data merges into party table)
+DELETE EMBEDDED payment_info.dbtr
+DELETE EMBEDDED credit_transfer_tx.cdtr
+
+-- Step 3: Extract debtor account -> create account table
+FLATTEN payment_info.dbtr_acct AS account
+    ADD REFERENCE dbtr_acct_id TO account
+
+-- Step 4: Delete other embedded accounts
+DELETE EMBEDDED credit_transfer_tx.cdtr_acct
+
+-- Step 5: Add account -> party foreign key
+ADD REFERENCE account.party_id TO party
+
+-- ============================================
+-- Phase 2: Unwind arrays to separate tables
+-- ============================================
+
+-- Step 6: Unwind payment_info array
+UNWIND payment_message.payment_info[] AS payment_info
+    GENERATE KEY pmt_inf_id FROM pmt_inf_id
+    ADD REFERENCE msg_id TO payment_message
+
+-- Step 7: Unwind credit_transfer_tx array
+UNWIND payment_info.credit_transfer_tx[] AS credit_transfer_tx
+    GENERATE KEY tx_id AS SERIAL
+    ADD REFERENCE pmt_inf_id TO payment_info
+
+-- Step 8: Add credit_transfer_tx -> account foreign key
+ADD REFERENCE credit_transfer_tx.cdtr_acct_id TO account
+
+-- Step 9: Unwind remittance_info array
+UNWIND credit_transfer_tx.remittance_info[] AS remittance_info
+    GENERATE KEY rmt_id AS SERIAL
+    ADD REFERENCE tx_id TO credit_transfer_tx

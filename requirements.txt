@@ -1,0 +1,20 @@
+# SMEL - Schema Migration & Evolution Language
+# Requirements
+
+# Parser generator
+antlr4-python3-runtime>=4.13.0
+
+# For visualization (optional)
+graphviz>=0.20
+
+# Database drivers (optional, for actual database connections)
+# pymongo>=4.0.0          # MongoDB
+# psycopg2-binary>=2.9.0  # PostgreSQL
+# cassandra-driver>=3.25  # Cassandra
+# neo4j>=5.0.0            # Neo4j
+
+# Development dependencies
+pytest>=7.0.0
+pytest-cov>=4.0.0
+black>=23.0.0
+mypy>=1.0.0

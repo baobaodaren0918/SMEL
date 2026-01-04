@@ -1,0 +1,85 @@
+{
+  "db_name": "ISO20022_pain001",
+  "db_type": "relational",
+  "version": 1,
+  "entity_types": {
+    "party": {
+      "en_name": "party",
+      "keys": [{"key_type": "PRIMARY", "attributes": ["party_id"]}],
+      "attributes": [
+        {"kind": "attribute", "attr_name": "party_id", "data_type": {"kind": "primitive", "type": "integer"}, "is_key": true, "is_optional": false, "description": "Party ID (auto-generated)"},
+        {"kind": "attribute", "attr_name": "name", "data_type": {"kind": "primitive", "type": "string", "max_length": 140}, "is_key": false, "is_optional": false, "description": "9.1.0 Party name"},
+        {"kind": "attribute", "attr_name": "street_name", "data_type": {"kind": "primitive", "type": "string", "max_length": 70}, "is_key": false, "is_optional": true, "description": "9.1.5 Street name"},
+        {"kind": "attribute", "attr_name": "post_code", "data_type": {"kind": "primitive", "type": "string", "max_length": 16}, "is_key": false, "is_optional": true, "description": "9.1.7 Postal code"},
+        {"kind": "attribute", "attr_name": "town_name", "data_type": {"kind": "primitive", "type": "string", "max_length": 35}, "is_key": false, "is_optional": true, "description": "9.1.8 Town name"},
+        {"kind": "attribute", "attr_name": "country", "data_type": {"kind": "primitive", "type": "string", "max_length": 2}, "is_key": false, "is_optional": true, "description": "9.1.10 Country code"}
+      ],
+      "relationships": []
+    },
+    "account": {
+      "en_name": "account",
+      "keys": [{"key_type": "PRIMARY", "attributes": ["acct_id"]}],
+      "attributes": [
+        {"kind": "attribute", "attr_name": "acct_id", "data_type": {"kind": "primitive", "type": "integer"}, "is_key": true, "is_optional": false, "description": "Account ID"},
+        {"kind": "attribute", "attr_name": "iban", "data_type": {"kind": "primitive", "type": "string", "max_length": 34}, "is_key": false, "is_optional": false, "description": "1.1.1 IBAN"},
+        {"kind": "attribute", "attr_name": "currency", "data_type": {"kind": "primitive", "type": "string", "max_length": 3}, "is_key": false, "is_optional": true, "description": "1.1.11 Currency"},
+        {"kind": "attribute", "attr_name": "agent_bic", "data_type": {"kind": "primitive", "type": "string", "max_length": 11}, "is_key": false, "is_optional": true, "description": "6.1.1 Bank BIC"}
+      ],
+      "relationships": [
+        {"kind": "reference", "ref_name": "party_id", "refs_to": "party", "cardinality": "&", "is_optional": false, "description": "Account owner"}
+      ]
+    },
+    "payment_message": {
+      "en_name": "payment_message",
+      "keys": [{"key_type": "PRIMARY", "attributes": ["msg_id"]}],
+      "attributes": [
+        {"kind": "attribute", "attr_name": "msg_id", "data_type": {"kind": "primitive", "type": "string", "max_length": 35}, "is_key": true, "is_optional": false, "description": "1.1 Message ID"},
+        {"kind": "attribute", "attr_name": "creation_datetime", "data_type": {"kind": "primitive", "type": "timestamp"}, "is_key": false, "is_optional": false, "description": "1.2 Creation datetime"}
+      ],
+      "relationships": [
+        {"kind": "reference", "ref_name": "initg_pty_id", "refs_to": "party", "cardinality": "&", "is_optional": false, "description": "1.8 Initiating party"}
+      ]
+    },
+    "payment_info": {
+      "en_name": "payment_info",
+      "keys": [{"key_type": "PRIMARY", "attributes": ["pmt_inf_id"]}],
+      "attributes": [
+        {"kind": "attribute", "attr_name": "pmt_inf_id", "data_type": {"kind": "primitive", "type": "string", "max_length": 35}, "is_key": true, "is_optional": false, "description": "2.1 Payment info ID"},
+        {"kind": "attribute", "attr_name": "pmt_mtd", "data_type": {"kind": "primitive", "type": "string", "max_length": 3}, "is_key": false, "is_optional": false, "description": "2.2 Payment method"},
+        {"kind": "attribute", "attr_name": "reqd_exctn_dt", "data_type": {"kind": "primitive", "type": "date"}, "is_key": false, "is_optional": false, "description": "2.17 Requested execution date"}
+      ],
+      "relationships": [
+        {"kind": "reference", "ref_name": "msg_id", "refs_to": "payment_message", "cardinality": "&", "is_optional": false, "description": "FK to payment_message"},
+        {"kind": "reference", "ref_name": "dbtr_acct_id", "refs_to": "account", "cardinality": "&", "is_optional": false, "description": "2.20 Debtor account (3NF: dbtr derived via account.party_id)"}
+      ]
+    },
+    "credit_transfer_tx": {
+      "en_name": "credit_transfer_tx",
+      "keys": [{"key_type": "PRIMARY", "attributes": ["tx_id"]}],
+      "attributes": [
+        {"kind": "attribute", "attr_name": "tx_id", "data_type": {"kind": "primitive", "type": "integer"}, "is_key": true, "is_optional": false, "description": "Transaction ID"},
+        {"kind": "attribute", "attr_name": "end_to_end_id", "data_type": {"kind": "primitive", "type": "string", "max_length": 35}, "is_key": false, "is_optional": false, "description": "2.30 End-to-end ID"},
+        {"kind": "attribute", "attr_name": "instd_amt", "data_type": {"kind": "primitive", "type": "decimal", "precision": 13, "scale": 2}, "is_key": false, "is_optional": false, "description": "2.43 Instructed amount"},
+        {"kind": "attribute", "attr_name": "instd_amt_ccy", "data_type": {"kind": "primitive", "type": "string", "max_length": 3}, "is_key": false, "is_optional": false, "description": "2.43 Amount currency"}
+      ],
+      "relationships": [
+        {"kind": "reference", "ref_name": "pmt_inf_id", "refs_to": "payment_info", "cardinality": "&", "is_optional": false, "description": "FK to payment_info"},
+        {"kind": "reference", "ref_name": "cdtr_acct_id", "refs_to": "account", "cardinality": "&", "is_optional": false, "description": "2.80 Creditor account (3NF: cdtr derived via account.party_id)"}
+      ]
+    },
+    "remittance_info": {
+      "en_name": "remittance_info",
+      "keys": [{"key_type": "PRIMARY", "attributes": ["rmt_id"]}],
+      "attributes": [
+        {"kind": "attribute", "attr_name": "rmt_id", "data_type": {"kind": "primitive", "type": "integer"}, "is_key": true, "is_optional": false, "description": "Remittance ID"},
+        {"kind": "attribute", "attr_name": "ustrd", "data_type": {"kind": "primitive", "type": "text"}, "is_key": false, "is_optional": true, "description": "2.99 Unstructured info"},
+        {"kind": "attribute", "attr_name": "strd_ref", "data_type": {"kind": "primitive", "type": "string", "max_length": 35}, "is_key": false, "is_optional": true, "description": "2.126 Structured reference"},
+        {"kind": "attribute", "attr_name": "rfrd_doc_nb", "data_type": {"kind": "primitive", "type": "string", "max_length": 35}, "is_key": false, "is_optional": true, "description": "2.107 Document number"},
+        {"kind": "attribute", "attr_name": "rfrd_doc_amt", "data_type": {"kind": "primitive", "type": "decimal", "precision": 13, "scale": 2}, "is_key": false, "is_optional": true, "description": "2.119 Remitted amount"}
+      ],
+      "relationships": [
+        {"kind": "reference", "ref_name": "tx_id", "refs_to": "credit_transfer_tx", "cardinality": "&", "is_optional": false, "description": "FK to credit_transfer_tx"}
+      ]
+    }
+  }
+}

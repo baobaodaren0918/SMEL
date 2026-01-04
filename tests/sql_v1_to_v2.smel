@@ -1,0 +1,103 @@
+-- SMEL Migration: PostgreSQL v1.0 -> PostgreSQL v2.0
+-- Schema Evolution: Structural refactoring within relational model
+-- Demonstrates: RENAME, EXTRACT, SPLIT, ADD ATTRIBUTE/REFERENCE, DELETE
+
+MIGRATION pain001_sql_evolution:2.0
+FROM RELATIONAL TO RELATIONAL
+USING pain001_schema:1
+
+-- ============================================================
+-- PART 1: Party -> Participant + Address extraction
+-- ============================================================
+
+-- Step 1: Rename party entity to participant
+RENAME ENTITY party TO participant
+
+-- Step 2: Rename party_id to participant_id
+RENAME party_id TO participant_id IN participant
+
+-- Step 3: Extract address fields from participant into new address entity
+EXTRACT (street_name, post_code, town_name, country) FROM participant INTO address
+    GENERATE KEY address_id AS SERIAL
+
+-- Step 4: Add address_id reference to participant
+ADD REFERENCE participant.address_id TO address
+
+-- Step 5: Add audit fields to participant
+ADD ATTRIBUTE created_at TO participant WITH TYPE Timestamp
+ADD ATTRIBUTE updated_at TO participant WITH TYPE Timestamp
+
+-- ============================================================
+-- PART 2: Account updates
+-- ============================================================
+
+-- Step 6: Rename party_id to participant_id in account
+RENAME party_id TO participant_id IN account
+
+-- Step 7: Add is_active flag to account
+ADD ATTRIBUTE is_active TO account WITH TYPE Boolean
+
+-- ============================================================
+-- PART 3: Payment Message updates
+-- ============================================================
+
+-- Step 8: Add status field to payment_message
+ADD ATTRIBUTE status TO payment_message WITH TYPE String
+
+-- ============================================================
+-- PART 4: Payment Info updates
+-- ============================================================
+
+-- Step 9: Add priority field to payment_info
+ADD ATTRIBUTE priority TO payment_info WITH TYPE Integer
+
+-- ============================================================
+-- PART 5: Credit Transfer TX -> Extract Amount
+-- ============================================================
+
+-- Step 10: Extract amount fields from credit_transfer_tx into amount entity
+EXTRACT (instd_amt, instd_amt_ccy) FROM credit_transfer_tx INTO amount
+    GENERATE KEY amount_id AS SERIAL
+
+-- Step 11: Rename fields in amount entity
+RENAME instd_amt TO value IN amount
+RENAME instd_amt_ccy TO currency IN amount
+
+-- Step 12: Add amount_id reference to credit_transfer_tx
+ADD REFERENCE credit_transfer_tx.amount_id TO amount
+
+-- Step 13: Add tx_status field to credit_transfer_tx
+ADD ATTRIBUTE tx_status TO credit_transfer_tx WITH TYPE String
+
+-- ============================================================
+-- PART 6: Remittance Info -> Split into Structured/Unstructured
+-- ============================================================
+
+-- Step 14: Create remittance_structured entity with key
+ADD ENTITY remittance_structured WITH KEY rmt_strd_id
+
+-- Step 15: Add primary key to remittance_structured
+ADD PRIMARY KEY rmt_strd_id TO remittance_structured
+
+-- Step 16: Add tx_id reference to remittance_structured
+ADD REFERENCE remittance_structured.tx_id TO credit_transfer_tx
+
+-- Step 17: Copy structured fields from remittance_info
+COPY remittance_info.strd_ref TO remittance_structured.strd_ref
+COPY remittance_info.rfrd_doc_nb TO remittance_structured.rfrd_doc_nb
+COPY remittance_info.rfrd_doc_amt TO remittance_structured.rfrd_doc_amt
+
+-- Step 18: Create remittance_unstructured entity with key
+ADD ENTITY remittance_unstructured WITH KEY rmt_ustrd_id
+
+-- Step 19: Add primary key to remittance_unstructured
+ADD PRIMARY KEY rmt_ustrd_id TO remittance_unstructured
+
+-- Step 20: Add tx_id reference to remittance_unstructured
+ADD REFERENCE remittance_unstructured.tx_id TO credit_transfer_tx
+
+-- Step 21: Copy unstructured field from remittance_info
+COPY remittance_info.ustrd TO remittance_unstructured.ustrd
+
+-- Step 22: Delete original remittance_info entity
+DELETE ENTITY remittance_info

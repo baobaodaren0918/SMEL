@@ -1,0 +1,27 @@
+# Claude Code configuration
+.claude/
+
+# Temp/test files
+nul
+test.js
+test_output.html
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+
+# IDE
+.idea/
+*.swp
+*.swo
+
+# ANTLR generated files (optional - uncomment if you don't want to commit them)
+# grammar/*.py
+# grammar/*.tokens
+# grammar/*.interp

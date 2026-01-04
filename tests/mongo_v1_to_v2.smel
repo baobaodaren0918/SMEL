@@ -1,0 +1,183 @@
+-- SMEL Migration: MongoDB v1.0 -> MongoDB v2.0
+-- Schema Evolution: Document restructuring with field renaming, nesting, and merging
+-- Demonstrates: RENAME, NEST, MERGE, EXTRACT, ADD ATTRIBUTE, ADD EMBEDDED
+
+MIGRATION pain001_mongo_evolution:2.0
+FROM DOCUMENT TO DOCUMENT
+USING pain001_schema:1
+
+-- ============================================================
+-- PART 1: Root Level Changes (payment_message)
+-- ============================================================
+
+-- Step 1: Rename creation_datetime to created_at
+RENAME creation_datetime TO created_at IN payment_message
+
+-- Step 2: Add status field for message processing
+ADD ATTRIBUTE status TO payment_message WITH TYPE String
+
+-- ============================================================
+-- PART 2: Initiator (formerly initg_pty)
+-- ============================================================
+
+-- Step 3: Rename initg_pty entity to initiator
+RENAME ENTITY initg_pty TO initiator
+
+-- Step 4: Rename party_id to id
+RENAME party_id TO id IN initiator
+
+-- Step 5: Extract address fields into nested address object
+EXTRACT (street_name, post_code, town_name, country) FROM initiator INTO address
+    GENERATE KEY address_id AS SERIAL
+
+-- Step 6: Rename address fields BEFORE nesting
+RENAME street_name TO street IN address
+RENAME post_code TO postal_code IN address
+RENAME town_name TO city IN address
+RENAME country TO country_code IN address
+
+-- Step 7: Nest address back into initiator
+NEST address INTO initiator AS address WITH CARDINALITY ONE_TO_ONE
+
+-- Step 8: Add metadata embedded object to initiator
+ADD EMBEDDED metadata TO initiator WITH CARDINALITY ONE_TO_ONE
+
+-- Step 9: Create metadata entity with audit fields
+ADD ENTITY metadata WITH ATTRIBUTES (created_at, updated_at)
+
+-- ============================================================
+-- PART 3: Payments (formerly payment_info)
+-- ============================================================
+
+-- Step 10: Rename payment_info entity to payments
+RENAME ENTITY payment_info TO payments
+
+-- Step 11: Rename payment info fields
+RENAME pmt_inf_id TO payment_id IN payments
+RENAME pmt_mtd TO method IN payments
+RENAME reqd_exctn_dt TO execution_date IN payments
+
+-- Step 12: Add priority field
+ADD ATTRIBUTE priority TO payments WITH TYPE Integer
+
+-- ============================================================
+-- PART 4: Debtor (formerly dbtr)
+-- ============================================================
+
+-- Step 13: Rename dbtr entity to debtor
+RENAME ENTITY dbtr TO debtor
+
+-- Step 14: Rename party_id to id in debtor
+RENAME party_id TO id IN debtor
+
+-- Step 15: Extract debtor address fields
+EXTRACT (street_name, post_code, town_name, country) FROM debtor INTO debtor_address
+    GENERATE KEY debtor_address_id AS SERIAL
+
+-- Step 16: Rename debtor address fields BEFORE nesting
+RENAME street_name TO street IN debtor_address
+RENAME post_code TO postal_code IN debtor_address
+RENAME town_name TO city IN debtor_address
+RENAME country TO country_code IN debtor_address
+
+-- Step 17: Nest debtor address
+NEST debtor_address INTO debtor AS address WITH CARDINALITY ONE_TO_ONE
+
+-- Step 18: Rename dbtr_acct to account and nest into debtor
+RENAME ENTITY dbtr_acct TO debtor_account
+
+-- Step 19: Rename fields in debtor account
+RENAME acct_id TO id IN debtor_account
+RENAME agent_bic TO bic IN debtor_account
+
+-- Step 20: Nest account into debtor
+NEST debtor_account INTO debtor AS account WITH CARDINALITY ONE_TO_ONE
+
+-- ============================================================
+-- PART 5: Transfers (formerly credit_transfer_tx)
+-- ============================================================
+
+-- Step 21: Rename credit_transfer_tx entity to transfers
+RENAME ENTITY credit_transfer_tx TO transfers
+
+-- Step 22: Rename transfer fields
+RENAME tx_id TO id IN transfers
+RENAME end_to_end_id TO reference IN transfers
+
+-- Step 23: Add status field to transfers
+ADD ATTRIBUTE status TO transfers WITH TYPE String
+
+-- Step 24: Extract amount fields into nested object
+EXTRACT (instd_amt, instd_amt_ccy) FROM transfers INTO amount
+    GENERATE KEY amount_id AS SERIAL
+
+-- Step 25: Rename amount fields
+RENAME instd_amt TO value IN amount
+RENAME instd_amt_ccy TO currency IN amount
+
+-- Step 26: Nest amount into transfers
+NEST amount INTO transfers AS amount WITH CARDINALITY ONE_TO_ONE
+
+-- ============================================================
+-- PART 6: Creditor (formerly cdtr)
+-- ============================================================
+
+-- Step 27: Rename cdtr entity to creditor
+RENAME ENTITY cdtr TO creditor
+
+-- Step 28: Rename party_id to id in creditor
+RENAME party_id TO id IN creditor
+
+-- Step 29: Extract creditor address fields
+EXTRACT (street_name, post_code, town_name, country) FROM creditor INTO creditor_address
+    GENERATE KEY creditor_address_id AS SERIAL
+
+-- Step 30: Rename creditor address fields BEFORE nesting
+RENAME street_name TO street IN creditor_address
+RENAME post_code TO postal_code IN creditor_address
+RENAME town_name TO city IN creditor_address
+RENAME country TO country_code IN creditor_address
+
+-- Step 31: Nest creditor address
+NEST creditor_address INTO creditor AS address WITH CARDINALITY ONE_TO_ONE
+
+-- Step 32: Rename cdtr_acct to account and prepare for nesting
+RENAME ENTITY cdtr_acct TO creditor_account
+
+-- Step 33: Rename fields in creditor account
+RENAME acct_id TO id IN creditor_account
+RENAME agent_bic TO bic IN creditor_account
+
+-- Step 34: Nest account into creditor
+NEST creditor_account INTO creditor AS account WITH CARDINALITY ONE_TO_ONE
+
+-- Step 34a: Clean up intermediate entities (merged into parents)
+DELETE ENTITY debtor_address
+DELETE ENTITY debtor_account
+DELETE ENTITY creditor_address
+DELETE ENTITY creditor_account
+
+-- ============================================================
+-- PART 7: Remittance (formerly remittance_info)
+-- ============================================================
+
+-- Step 35: Rename remittance_info entity to remittance
+RENAME ENTITY remittance_info TO remittance
+
+-- Step 36: Create structured sub-object for remittance
+EXTRACT (strd_ref, rfrd_doc_nb, rfrd_doc_amt) FROM remittance INTO structured
+    GENERATE KEY structured_id AS SERIAL
+
+-- Step 37: Rename structured fields
+RENAME strd_ref TO reference IN structured
+RENAME rfrd_doc_nb TO document_number IN structured
+RENAME rfrd_doc_amt TO amount IN structured
+
+-- Step 38: Nest structured into remittance
+NEST structured INTO remittance AS structured WITH CARDINALITY ONE_TO_ONE
+
+-- Step 39: Rename ustrd to unstructured
+RENAME ustrd TO unstructured IN remittance
+
+-- Step 40: Delete rmt_id (no longer needed in new structure)
+DELETE ATTRIBUTE remittance.rmt_id

@@ -1,0 +1,179 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "payment_message",
+  "description": "Document schema v2.0 - Evolved with structural changes",
+  "bsonType": "object",
+  "required": ["_id", "created_at", "initiator", "payments"],
+  "properties": {
+    "_id": {
+      "bsonType": "string",
+      "maxLength": 35,
+      "description": "Document ID = msg_id"
+    },
+    "created_at": {
+      "bsonType": "timestamp",
+      "description": "Renamed from creation_datetime"
+    },
+    "status": {
+      "bsonType": "string",
+      "enum": ["PENDING", "PROCESSING", "COMPLETED", "FAILED"],
+      "description": "New field: message processing status"
+    },
+    "initiator": {
+      "bsonType": "object",
+      "description": "Renamed from initg_pty, address nested",
+      "required": ["name"],
+      "properties": {
+        "id": { "bsonType": "int", "description": "Renamed from party_id" },
+        "name": { "bsonType": "string", "maxLength": 140 },
+        "address": {
+          "bsonType": "object",
+          "description": "Nested address object (extracted fields)",
+          "properties": {
+            "street": { "bsonType": "string", "maxLength": 70 },
+            "postal_code": { "bsonType": "string", "maxLength": 16 },
+            "city": { "bsonType": "string", "maxLength": 35 },
+            "country_code": { "bsonType": "string", "maxLength": 2 }
+          }
+        },
+        "metadata": {
+          "bsonType": "object",
+          "description": "New audit metadata",
+          "properties": {
+            "created_at": { "bsonType": "timestamp" },
+            "updated_at": { "bsonType": "timestamp" }
+          }
+        }
+      }
+    },
+    "payments": {
+      "bsonType": "array",
+      "description": "Renamed from payment_info",
+      "items": {
+        "bsonType": "object",
+        "required": ["payment_id", "method", "execution_date", "debtor", "transfers"],
+        "properties": {
+          "payment_id": {
+            "bsonType": "string",
+            "maxLength": 35,
+            "description": "Renamed from pmt_inf_id"
+          },
+          "method": {
+            "bsonType": "string",
+            "enum": ["TRF", "CHK"],
+            "description": "Renamed from pmt_mtd"
+          },
+          "execution_date": {
+            "bsonType": "date",
+            "description": "Renamed from reqd_exctn_dt"
+          },
+          "priority": {
+            "bsonType": "int",
+            "description": "New field: payment priority"
+          },
+          "debtor": {
+            "bsonType": "object",
+            "description": "Renamed from dbtr, restructured",
+            "required": ["name", "account"],
+            "properties": {
+              "id": { "bsonType": "int" },
+              "name": { "bsonType": "string", "maxLength": 140 },
+              "address": {
+                "bsonType": "object",
+                "properties": {
+                  "street": { "bsonType": "string", "maxLength": 70 },
+                  "postal_code": { "bsonType": "string", "maxLength": 16 },
+                  "city": { "bsonType": "string", "maxLength": 35 },
+                  "country_code": { "bsonType": "string", "maxLength": 2 }
+                }
+              },
+              "account": {
+                "bsonType": "object",
+                "description": "Merged dbtr_acct into debtor",
+                "required": ["iban"],
+                "properties": {
+                  "id": { "bsonType": "int" },
+                  "iban": { "bsonType": "string", "maxLength": 34 },
+                  "currency": { "bsonType": "string", "maxLength": 3 },
+                  "bic": { "bsonType": "string", "maxLength": 11 }
+                }
+              }
+            }
+          },
+          "transfers": {
+            "bsonType": "array",
+            "description": "Renamed from credit_transfer_tx",
+            "items": {
+              "bsonType": "object",
+              "required": ["reference", "amount", "creditor"],
+              "properties": {
+                "id": { "bsonType": "int", "description": "Renamed from tx_id" },
+                "reference": {
+                  "bsonType": "string",
+                  "maxLength": 35,
+                  "description": "Renamed from end_to_end_id"
+                },
+                "status": {
+                  "bsonType": "string",
+                  "description": "New field: transaction status"
+                },
+                "amount": {
+                  "bsonType": "object",
+                  "description": "Merged instd_amt and instd_amt_ccy",
+                  "required": ["value", "currency"],
+                  "properties": {
+                    "value": { "bsonType": "decimal" },
+                    "currency": { "bsonType": "string", "maxLength": 3 }
+                  }
+                },
+                "creditor": {
+                  "bsonType": "object",
+                  "description": "Renamed from cdtr, restructured",
+                  "required": ["name", "account"],
+                  "properties": {
+                    "id": { "bsonType": "int" },
+                    "name": { "bsonType": "string", "maxLength": 140 },
+                    "address": {
+                      "bsonType": "object",
+                      "properties": {
+                        "street": { "bsonType": "string", "maxLength": 70 },
+                        "postal_code": { "bsonType": "string", "maxLength": 16 },
+                        "city": { "bsonType": "string", "maxLength": 35 },
+                        "country_code": { "bsonType": "string", "maxLength": 2 }
+                      }
+                    },
+                    "account": {
+                      "bsonType": "object",
+                      "required": ["iban"],
+                      "properties": {
+                        "id": { "bsonType": "int" },
+                        "iban": { "bsonType": "string", "maxLength": 34 },
+                        "currency": { "bsonType": "string", "maxLength": 3 },
+                        "bic": { "bsonType": "string", "maxLength": 11 }
+                      }
+                    }
+                  }
+                },
+                "remittance": {
+                  "bsonType": "object",
+                  "description": "Restructured from remittance_info array",
+                  "properties": {
+                    "unstructured": { "bsonType": "string" },
+                    "structured": {
+                      "bsonType": "object",
+                      "properties": {
+                        "reference": { "bsonType": "string", "maxLength": 35 },
+                        "document_number": { "bsonType": "string", "maxLength": 35 },
+                        "amount": { "bsonType": "decimal" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

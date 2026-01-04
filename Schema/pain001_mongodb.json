@@ -1,0 +1,162 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "payment_message",
+  "description": "Document schema equivalent to 3NF relational structure (derived fields removed)",
+  "bsonType": "object",
+  "required": ["_id", "creation_datetime", "initg_pty", "payment_info"],
+  "properties": {
+    "_id": {
+      "bsonType": "string",
+      "maxLength": 35,
+      "description": "Document ID = msg_id (1.1 Message ID, unique 90 days)"
+    },
+    "creation_datetime": {
+      "bsonType": "timestamp",
+      "description": "1.2 Creation date and time"
+    },
+    "initg_pty": {
+      "bsonType": "object",
+      "description": "1.8 Initiating party - Embedded object equivalent to party table (corresponds to FK: payment_message.initg_pty_id ↔ party.party_id)",
+      "required": ["name"],
+      "properties": {
+        "party_id": { "bsonType": "int" },
+        "name": { "bsonType": "string", "maxLength": 140 },
+        "street_name": { "bsonType": "string", "maxLength": 70 },
+        "post_code": { "bsonType": "string", "maxLength": 16 },
+        "town_name": { "bsonType": "string", "maxLength": 35 },
+        "country": { "bsonType": "string", "maxLength": 2 }
+      }
+    },
+    "payment_info": {
+      "bsonType": "array",
+      "description": "Payment Information array - Equivalent to payment_info table (1:N relationship, FK msg_id embedded in parent)",
+      "items": {
+        "bsonType": "object",
+        "required": ["pmt_inf_id", "pmt_mtd", "reqd_exctn_dt", "dbtr", "dbtr_acct", "credit_transfer_tx"],
+        "properties": {
+          "pmt_inf_id": {
+            "bsonType": "string",
+            "maxLength": 35,
+            "description": "2.1 Payment info ID (unique 90 days)"
+          },
+          "pmt_mtd": {
+            "bsonType": "string",
+            "enum": ["TRF", "CHK"],
+            "description": "2.2 Payment method (TRF=Transfer, CHK=Cheque)"
+          },
+          "reqd_exctn_dt": {
+            "bsonType": "date",
+            "description": "2.17 Requested execution date"
+          },
+          "dbtr": {
+            "bsonType": "object",
+            "description": "2.19 Debtor - Embedded party object (3NF: derived via dbtr_acct.party_id)",
+            "required": ["name"],
+            "properties": {
+              "party_id": { "bsonType": "int" },
+              "name": { "bsonType": "string", "maxLength": 140 },
+              "street_name": { "bsonType": "string", "maxLength": 70 },
+              "post_code": { "bsonType": "string", "maxLength": 16 },
+              "town_name": { "bsonType": "string", "maxLength": 35 },
+              "country": { "bsonType": "string", "maxLength": 2 }
+            }
+          },
+          "dbtr_acct": {
+            "bsonType": "object",
+            "description": "2.20 Debtor account - Embedded object equivalent to account table (corresponds to FK: payment_info.dbtr_acct_id ↔ account.acct_id)",
+            "required": ["iban"],
+            "properties": {
+              "acct_id": { "bsonType": "int" },
+              "iban": { "bsonType": "string", "maxLength": 34 },
+              "currency": { "bsonType": "string", "maxLength": 3 },
+              "agent_bic": { "bsonType": "string", "maxLength": 11 }
+            }
+          },
+          "credit_transfer_tx": {
+            "bsonType": "array",
+            "description": "Credit Transfer Transactions array - Equivalent to credit_transfer_tx table (1:N relationship, FK pmt_inf_id embedded in parent)",
+            "items": {
+              "bsonType": "object",
+              "required": ["end_to_end_id", "instd_amt", "instd_amt_ccy", "cdtr", "cdtr_acct"],
+              "properties": {
+                "tx_id": {
+                  "bsonType": "int",
+                  "description": "Transaction ID"
+                },
+                "end_to_end_id": {
+                  "bsonType": "string",
+                  "maxLength": 35,
+                  "description": "2.30 End-to-end ID (unique 90 days)"
+                },
+                "instd_amt": {
+                  "bsonType": "decimal",
+                  "description": "2.43 Instructed amount"
+                },
+                "instd_amt_ccy": {
+                  "bsonType": "string",
+                  "maxLength": 3,
+                  "description": "2.43 Instructed amount currency (ISO 4217)"
+                },
+                "cdtr": {
+                  "bsonType": "object",
+                  "description": "2.79 Creditor - Embedded party object (3NF: derived via cdtr_acct.party_id)",
+                  "required": ["name"],
+                  "properties": {
+                    "party_id": { "bsonType": "int" },
+                    "name": { "bsonType": "string", "maxLength": 140 },
+                    "street_name": { "bsonType": "string", "maxLength": 70 },
+                    "post_code": { "bsonType": "string", "maxLength": 16 },
+                    "town_name": { "bsonType": "string", "maxLength": 35 },
+                    "country": { "bsonType": "string", "maxLength": 2 }
+                  }
+                },
+                "cdtr_acct": {
+                  "bsonType": "object",
+                  "description": "2.80 Creditor account - Embedded object equivalent to account table (corresponds to FK: credit_transfer_tx.cdtr_acct_id ↔ account.acct_id)",
+                  "required": ["iban"],
+                  "properties": {
+                    "acct_id": { "bsonType": "int" },
+                    "iban": { "bsonType": "string", "maxLength": 34 },
+                    "currency": { "bsonType": "string", "maxLength": 3 },
+                    "agent_bic": { "bsonType": "string", "maxLength": 11 }
+                  }
+                },
+                "remittance_info": {
+                  "bsonType": "array",
+                  "description": "Remittance Information array - Equivalent to remittance_info table (1:N relationship, FK tx_id embedded in parent)",
+                  "items": {
+                    "bsonType": "object",
+                    "properties": {
+                      "rmt_id": {
+                        "bsonType": "int",
+                        "description": "Remittance ID"
+                      },
+                      "ustrd": {
+                        "bsonType": "string",
+                        "description": "2.99 Unstructured remittance info"
+                      },
+                      "strd_ref": {
+                        "bsonType": "string",
+                        "maxLength": 35,
+                        "description": "2.126 Structured reference (creditor ref)"
+                      },
+                      "rfrd_doc_nb": {
+                        "bsonType": "string",
+                        "maxLength": 35,
+                        "description": "2.107 Document number (invoice)"
+                      },
+                      "rfrd_doc_amt": {
+                        "bsonType": "decimal",
+                        "description": "2.119 Remitted amount"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
