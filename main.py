@@ -6,12 +6,11 @@ from typing import Dict, List, Set
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from Schema.unified_meta_schema import Database, DatabaseType, EntityType, Reference
+from Schema.unified_meta_schema import Database, DatabaseType, EntityType, Reference, TypeMappings
 from Schema.adapters import PostgreSQLAdapter, MongoDBAdapter
 from core import (
     SCHEMA_DIR, TESTS_DIR, EQUIVALENT_ATTRS,
-    parse_smel, SchemaTransformer,
-    PG_REVERSE_TYPE_MAP, MONGO_REVERSE_TYPE_MAP
+    parse_smel, SchemaTransformer
 )
 
 # ANSI Colors
@@ -29,7 +28,7 @@ def _get_source_type_str(attr, source_type: str) -> str:
     primitive = attr.data_type.primitive_type if hasattr(attr.data_type, 'primitive_type') else PrimitiveType.STRING
 
     if source_type == "Relational":
-        base_type = PG_REVERSE_TYPE_MAP.get(primitive, 'VARCHAR')
+        base_type = TypeMappings.PRIMITIVE_TO_POSTGRESQL.get(primitive, 'VARCHAR')
         if base_type == 'INTEGER' and attr.is_key:
             return 'SERIAL'
         if base_type == 'VARCHAR':
@@ -41,7 +40,7 @@ def _get_source_type_str(attr, source_type: str) -> str:
             return f"DECIMAL({precision},{scale})"
         return base_type
     else:
-        return MONGO_REVERSE_TYPE_MAP.get(primitive, 'string')
+        return TypeMappings.PRIMITIVE_TO_MONGODB.get(primitive, 'string')
 
 
 def get_source_entity_lines(entity: EntityType, width: int, source_type: str) -> List[str]:
