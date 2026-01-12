@@ -29,23 +29,23 @@ DELETE EMBEDDED credit_transfer_tx.cdtr_acct
 ADD REFERENCE account.party_id TO party
 
 -- ============================================
--- Phase 2: Unwind arrays to separate tables
+-- Phase 2: Flatten arrays to separate tables
 -- ============================================
 
--- Step 6: Unwind payment_info array
-UNWIND payment_message.payment_info[] AS payment_info
+-- Step 6: Flatten payment_info array
+FLATTEN payment_message.payment_info[] AS payment_info
     GENERATE KEY pmt_inf_id FROM pmt_inf_id
     ADD REFERENCE msg_id TO payment_message
 
--- Step 7: Unwind credit_transfer_tx array
-UNWIND payment_info.credit_transfer_tx[] AS credit_transfer_tx
+-- Step 7: Flatten credit_transfer_tx array
+FLATTEN payment_info.credit_transfer_tx[] AS credit_transfer_tx
     GENERATE KEY tx_id AS SERIAL
     ADD REFERENCE pmt_inf_id TO payment_info
 
 -- Step 8: Add credit_transfer_tx -> account foreign key
 ADD REFERENCE credit_transfer_tx.cdtr_acct_id TO account
 
--- Step 9: Unwind remittance_info array
-UNWIND credit_transfer_tx.remittance_info[] AS remittance_info
+-- Step 9: Flatten remittance_info array
+FLATTEN credit_transfer_tx.remittance_info[] AS remittance_info
     GENERATE KEY rmt_id AS SERIAL
     ADD REFERENCE tx_id TO credit_transfer_tx

@@ -129,12 +129,14 @@ SMEL/
 │   ├── SMEL.g4                 # ANTLR4 grammar definition
 │   ├── SMELLexer.py            # Generated lexer
 │   ├── SMELParser.py           # Generated parser
-│   └── SMELListener.py         # Generated listener
+│   ├── SMELListener.py         # Generated listener
+│   ├── antlr-4.13.2-complete.jar   # ANTLR4 tool
+│   └── generate_parser.bat     # Parser generation script
 ├── Schema/
 │   ├── adapters/
 │   │   ├── postgresql_adapter.py   # PostgreSQL ↔ Unified Meta
 │   │   └── mongodb_adapter.py      # MongoDB ↔ Unified Meta
-│   ├── unified_meta_schema.py      # Unified Meta Schema classes
+│   ├── unified_meta_schema.py      # Unified Meta Schema + TypeMappings
 │   ├── pain001_postgresql.sql      # Sample PostgreSQL schema
 │   ├── pain001_postgresql_v2.sql   # Sample PostgreSQL schema v2
 │   ├── pain001_mongodb.json        # Sample MongoDB schema
@@ -147,6 +149,7 @@ SMEL/
 │   ├── person_mongo_to_pg_minibeispiel1.smel  # Person mini example script
 │   ├── person_mongodb.json         # Person MongoDB source schema
 │   └── person_postgresql.sql       # Person PostgreSQL target schema
+├── config.py                   # Centralized configuration (paths, migrations)
 ├── core.py                     # Core migration logic
 ├── main.py                     # CLI interface
 ├── web_server.py               # Web interface
@@ -183,11 +186,28 @@ USING <schema>:<version>
 | Operation | Syntax | Description |
 |-----------|--------|-------------|
 | NEST | `NEST source INTO target AS alias` | Embed entity as nested object |
-| FLATTEN | `FLATTEN entity.embedded AS new` | Extract embedded to table |
-| UNWIND | `UNWIND entity.array[] AS new` | Unwind array to table |
+| FLATTEN | `FLATTEN path AS new [clauses]` | Unified extraction operation (see below) |
 | GENERATE KEY | `GENERATE KEY id AS SERIAL` | Generate integer auto-increment key |
 | GENERATE KEY | `GENERATE KEY id AS String PREFIX "x"` | Generate string key with prefix |
 | ADD REFERENCE | `ADD REFERENCE fk_name TO target` | Add foreign key reference |
+| RENAME (in FLATTEN) | `RENAME old TO new` | Rename column within FLATTEN |
+
+#### FLATTEN Operation (Unified)
+FLATTEN handles 3 scenarios based on source type and clauses:
+
+| Scenario | Syntax | Auto-Detection | Result |
+|----------|--------|----------------|--------|
+| Embedded Object | `FLATTEN person.address AS address` | No `[]` + has `GENERATE KEY` | Single PK, copies all attributes |
+| Value Array | `FLATTEN person.tags[] AS person_tag` | Has `[]` + has `GENERATE KEY` | Single PK, adds `value` column (can RENAME) |
+| M:N Reference Array | `FLATTEN person.knows[] AS person_knows` | Has `[]` + no `GENERATE KEY` | Composite PK from all FKs |
+
+#### Key Operations (with composite key support)
+| Operation | Syntax | Description |
+|-----------|--------|-------------|
+| ADD KEY (single) | `ADD PRIMARY KEY id TO entity` | Add single column primary key |
+| ADD KEY (composite) | `ADD PRIMARY KEY (col1, col2) TO entity` | Add composite primary key |
+| DROP KEY (single) | `DROP PRIMARY KEY id FROM entity` | Drop single column primary key |
+| DROP KEY (composite) | `DROP PRIMARY KEY (col1, col2) FROM entity` | Drop composite primary key |
 
 ### Example SMEL Scripts
 
@@ -199,40 +219,69 @@ FROM DOCUMENT TO RELATIONAL
 USING pain001_schema:1
 
 -- Flatten embedded party structures
-FLATTEN payment_message.initg_pty INTO party
-    ADD REFERENCE payment_message.initg_pty_id TO party
+FLATTEN payment_message.initg_pty AS party
+    ADD REFERENCE initg_pty_id TO party
 
--- Unwind payment_info array
-UNWIND payment_message.payment_info[] AS payment_info
+-- Flatten payment_info array (with GENERATE KEY -> single PK)
+FLATTEN payment_message.payment_info[] AS payment_info
     GENERATE KEY pmt_inf_id FROM pmt_inf_id
-    ADD REFERENCE payment_info.msg_id TO payment_message
+    ADD REFERENCE msg_id TO payment_message
 ```
 
-#### Person Mini Example (Simple)
+#### Person Mini Example (with M:N Relationship)
 ```sql
 -- MongoDB -> PostgreSQL Mini Example
+-- Demonstrates: nested object, value array, and M:N self-reference
+-- All using unified FLATTEN operation with parameter-based control
 MIGRATION person_mongo_to_pg:1.0
 FROM DOCUMENT TO RELATIONAL
 USING person_schema:1
 
--- Flatten embedded address object
+-- Step 1: FLATTEN nested object -> separate table (has GENERATE KEY -> single PK)
 FLATTEN person.address AS address
     GENERATE KEY id AS String PREFIX "addr"
     ADD REFERENCE person_id TO person
 
--- Unwind tags array (primitive type)
-UNWIND person.tags[] AS person_tag
+-- Step 2: FLATTEN value array -> separate table (has GENERATE KEY -> single PK)
+-- RENAME value TO tag_value: soft configuration, not hardcoded
+FLATTEN person.tags[] AS person_tag
     GENERATE KEY id AS String PREFIX "t"
     ADD REFERENCE person_id TO person
+    RENAME value TO tag_value
 
--- Rename _id to id
+-- Step 3: FLATTEN reference array -> M:N join table (no GENERATE KEY -> composite PK)
+FLATTEN person.knows[] AS person_knows
+    ADD REFERENCE person_id TO person
+    ADD REFERENCE knows_person_id TO person
+
+-- Step 4: Rename _id to id (PostgreSQL naming convention)
 RENAME _id TO id IN person
 ```
 
-This example demonstrates:
-- `FLATTEN` with `GENERATE KEY AS String PREFIX` for embedded objects
-- `UNWIND` for primitive arrays (string[])
-- Unified string IDs with prefixes (addr001, t001, etc.)
+**Source MongoDB Document:**
+```json
+{
+  "_id": "p001",
+  "name": "Zhang San",
+  "address": { "street": "Hauptstrasse 10", "city": "Berlin" },
+  "tags": ["student", "developer"],
+  "knows": ["p002", "p003"]
+}
+```
+
+**Target PostgreSQL Tables:**
+| Table | Primary Key | Description |
+|-------|-------------|-------------|
+| person | id (VARCHAR) | Main person table |
+| address | id (VARCHAR, prefix "addr") | 1:N with person |
+| person_tag | id (VARCHAR, prefix "t"), tag_value | 1:N with person (value array, renamed column) |
+| person_knows | (person_id, knows_person_id) | M:N self-reference (composite PK) |
+
+This example demonstrates **unified FLATTEN** with 3 scenarios:
+- **Embedded Object**: `FLATTEN person.address` + `GENERATE KEY` → single PK, copies attributes
+- **Value Array**: `FLATTEN person.tags[]` + `GENERATE KEY` → single PK, adds `value` column (can `RENAME`)
+- **M:N Reference**: `FLATTEN person.knows[]` (no `GENERATE KEY`) → composite PK from all FKs
+- **Soft Configuration**: `RENAME value TO tag_value` customizes column name (not hardcoded)
 
 ## Sample Schema (pain001)
 

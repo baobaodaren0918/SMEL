@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from core import run_migration
 
-PORT = 5570
+PORT = 5573
 
 
 class SMELHandler(SimpleHTTPRequestHandler):
@@ -335,6 +335,24 @@ def get_html():
             font-family: 'SF Mono', 'Monaco', 'Menlo', monospace;
             font-size: 13px;
             line-height: 1.7;
+            color: #1D1D1F;
+            white-space: pre-wrap;
+            word-break: break-word;
+            margin: 0;
+        }
+        .schema-view {
+            background: #F5F5F7;
+            border-radius: 12px;
+            padding: 16px;
+            overflow-x: auto;
+            max-height: 600px;
+            overflow-y: auto;
+            border: 1px solid #E8E8ED;
+        }
+        .schema-code {
+            font-family: 'SF Mono', 'Monaco', 'Menlo', monospace;
+            font-size: 11px;
+            line-height: 1.6;
             color: #1D1D1F;
             white-space: pre-wrap;
             word-break: break-word;
@@ -930,7 +948,10 @@ def get_html():
             html += '<span class="schema-badge ' + (isTargetRelational ? 'relational' : 'document') + '">' + migrationData.target_type + '</span></div>';
 
             if (isTargetRelational) {
-                // Relational Target: Show generated DDL with database-specific types
+                // Relational Target: Show ER Diagram + Generated DDL
+                const targetEntities = migrationData.target_with_db_types || migrationData.result;
+                html += '<div class="er-section"><div class="section-title">ER Diagram</div>';
+                html += '<div class="er-diagram">' + generateERDiagram(targetEntities) + '</div></div>';
                 html += '<div class="sql-section"><div class="section-title">Generated DDL</div>';
                 html += '<div class="sql-code-view"><pre>' + escapeHtml(migrationData.exported_target) + '</pre></div></div>';
             } else {
@@ -1029,7 +1050,7 @@ def get_html():
             // Keywords
             const keywords = ['MIGRATION', 'FROM', 'TO', 'USING', 'AS', 'INTO', 'WITH', 'WHERE', 'IN', 'KEY', 'AND',
                 'RELATIONAL', 'DOCUMENT', 'GRAPH', 'COLUMNAR',
-                'NEST', 'UNNEST', 'FLATTEN', 'UNWIND', 'DELETE', 'ADD', 'RENAME', 'COPY', 'MOVE', 'MERGE', 'SPLIT', 'CAST', 'DROP', 'EXTRACT',
+                'NEST', 'UNNEST', 'FLATTEN', 'DELETE', 'ADD', 'RENAME', 'COPY', 'MOVE', 'MERGE', 'SPLIT', 'CAST', 'DROP', 'EXTRACT',
                 'REFERENCE', 'ATTRIBUTE', 'EMBEDDED', 'ENTITY', 'VARIATION', 'RELTYPE',
                 'CARDINALITY', 'ONE_TO_ONE', 'ONE_TO_MANY', 'ZERO_TO_ONE', 'ZERO_TO_MANY',
                 'PRIMARY', 'UNIQUE', 'FOREIGN', 'PARTITION', 'CLUSTERING'];
@@ -1184,12 +1205,35 @@ def get_html():
                     if (params.entity) html += ' <span class="param-key">in:</span> <span class="param-value">' + params.entity + '</span>';
                     break;
                 case 'FLATTEN':
-                    html = '<span class="param-key">source:</span> <span class="param-value">' + params.source + '</span> → ';
-                    html += '<span class="param-key">target:</span> <span class="param-value">' + params.target + '</span>';
+                    // Unified FLATTEN: handles embedded objects, value arrays, and M:N reference arrays
+                    html = '<span class="param-key">FLATTEN</span> ';
+                    html += '<span class="param-value">' + params.source + '</span> → ';
+                    html += '<span class="param-key">AS</span> <span class="param-value">' + params.target + '</span>';
+                    // Indicate PK type based on presence of GENERATE KEY clause
+                    if (params.clauses) {
+                        const hasGenerateKey = params.clauses.some(c => c.type === 'GENERATE_KEY');
+                        if (hasGenerateKey) {
+                            html += ' <span class="param-key">(single PK)</span>';
+                        } else {
+                            html += ' <span class="param-key">(composite PK)</span>';
+                        }
+                    }
                     break;
-                case 'UNWIND':
-                    html = '<span class="param-key">source:</span> <span class="param-value">' + params.source + '</span> → ';
-                    html += '<span class="param-key">alias:</span> <span class="param-value">' + params.alias + '</span>';
+                case 'ADD_KEY':
+                    html = '<span class="param-key">key_type:</span> <span class="param-value">' + params.key_type + '</span> ';
+                    if (params.key_columns) {
+                        const cols = params.key_columns.length > 1 ? '(' + params.key_columns.join(', ') + ')' : params.key_columns[0];
+                        html += '<span class="param-key">columns:</span> <span class="param-value">' + cols + '</span>';
+                    }
+                    if (params.entity) html += ' <span class="param-key">TO</span> <span class="param-value">' + params.entity + '</span>';
+                    break;
+                case 'DROP_KEY':
+                    html = '<span class="param-key">key_type:</span> <span class="param-value">' + params.key_type + '</span> ';
+                    if (params.key_columns) {
+                        const cols = params.key_columns.length > 1 ? '(' + params.key_columns.join(', ') + ')' : params.key_columns[0];
+                        html += '<span class="param-key">columns:</span> <span class="param-value">' + cols + '</span>';
+                    }
+                    if (params.entity) html += ' <span class="param-key">FROM</span> <span class="param-value">' + params.entity + '</span>';
                     break;
                 case 'ADD_REFERENCE':
                     html = '<span class="param-key">reference:</span> <span class="param-value">' + params.reference + '</span> → ';
@@ -1306,7 +1350,7 @@ def get_html():
 
             // Meta V1 and Meta V2 entities (must be aligned)
             const metaEntities = new Set([...Object.keys(migrationData.meta_v1), ...Object.keys(migrationData.result)]);
-            const newEntities = new Set(migrationData.changes.filter(c => c.startsWith('FLATTEN:') || c.startsWith('UNWIND:') || c.startsWith('NEST:')).map(c => c.split(':')[1]));
+            const newEntities = new Set(migrationData.changes.filter(c => c.startsWith('FLATTEN:') || c.startsWith('NEST:')).map(c => c.split(':')[1]));
 
             // Source entities (independent)
             const sourceEntities = Object.values(migrationData.source);
@@ -1322,12 +1366,18 @@ def get_html():
             // Four-column layout
             html += '<div class="four-column-layout">';
 
-            // Column 1: Source Schema (independent, entity cards with DB types)
+            // Column 1: Source Schema (original nested structure before reverse eng)
             html += '<div class="independent-column source-column">';
             html += '<div class="column-header"><h3>Source</h3><div class="subtitle">' + migrationData.source_type + '</div></div>';
             html += '<div class="column-content">';
-            Object.values(migrationData.source).forEach(entity => {
-                html += renderEntityCard(entity, false, true);
+            console.log('original_source:', migrationData.original_source);
+            console.log('source:', migrationData.source);
+            const sourceData = migrationData.original_source && Object.keys(migrationData.original_source).length > 0
+                ? migrationData.original_source
+                : migrationData.source;
+            console.log('Using sourceData:', sourceData);
+            Object.values(sourceData).forEach(entity => {
+                html += renderNestedEntityCard(entity);
             });
             html += '</div></div>';
 
@@ -1367,14 +1417,17 @@ def get_html():
 
             html += '</div></div>';
 
-            // Column 4: Target Schema (independent, entity cards with DB types)
+            // Column 4: Target Schema (Forward Engineering result - Schema format)
             html += '<div class="independent-column target-column">';
             html += '<div class="column-header"><h3>Target</h3><div class="subtitle">' + migrationData.target_type + '</div></div>';
             html += '<div class="column-content">';
-            const targetData = migrationData.target_with_db_types || migrationData.result;
-            Object.values(targetData).forEach(entity => {
-                html += renderEntityCard(entity, false, true);
-            });
+            if (isTargetRelational) {
+                // Show schema format
+                html += '<div class="schema-view"><pre class="schema-code">' + escapeHtml(migrationData.exported_target) + '</pre></div>';
+            } else {
+                // Show generated JSON
+                html += '<div class="json-view">' + syntaxHighlightJSON(migrationData.exported_target) + '</div>';
+            }
             html += '</div></div>';
 
             html += '</div>'; // end four-column-layout
@@ -1415,6 +1468,49 @@ def get_html():
             if (!isSource) {
                 entity.references.forEach(r => { html += '<div class="reference-item">' + r.name + ' &rarr; ' + r.target + '</div>'; });
             }
+            html += '</div></div>';
+            return html;
+        }
+
+        function renderNestedEntityCard(entity) {
+            // Render entity card with nested structure support (for original source)
+            let html = '<div class="entity-card"><div class="entity-name">' + entity.name;
+            if (entity.type) html += ' <span class="entity-type-badge">' + entity.type + '</span>';
+            html += '</div><div class="entity-body">';
+
+            function renderAttributes(attrs, indent) {
+                let result = '';
+                attrs.forEach(a => {
+                    const indentStr = '&nbsp;'.repeat(indent * 2);
+                    if (a.nested) {
+                        // Nested object
+                        result += '<div class="attribute nested-object">' + indentStr + '<span class="attr-name">' + a.name + '</span>';
+                        result += '<span class="attr-type">{object}</span></div>';
+                        result += renderAttributes(a.nested, indent + 1);
+                    } else {
+                        // Regular attribute
+                        result += '<div class="attribute">' + indentStr + '<span class="attr-name">' + a.name + '</span>';
+                        result += '<span class="attr-type">' + a.type + '</span>';
+                        if (a.is_key) result += '<span class="attr-badge pk">PK</span>';
+                        if (a.is_fk) result += '<span class="attr-badge fk">FK</span>';
+                        result += '</div>';
+                    }
+                });
+                return result;
+            }
+
+            if (entity.attributes) {
+                html += renderAttributes(entity.attributes, 0);
+            }
+
+            // Fallback for non-nested structure
+            if (entity.embedded) {
+                entity.embedded.forEach(e => { html += '<div class="embedded-item">&lt;&gt; ' + e.name + ' [' + e.cardinality + ']</div>'; });
+            }
+            if (entity.references) {
+                entity.references.forEach(r => { html += '<div class="reference-item">' + r.name + ' &rarr; ' + r.target + '</div>'; });
+            }
+
             html += '</div></div>';
             return html;
         }

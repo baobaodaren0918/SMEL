@@ -72,11 +72,6 @@ class SMELPrintListener(SMELListener):
         target = ctx.identifier().getText()
         self._print(f"FLATTEN {source} AS {target}")
 
-    def enterUnwind(self, ctx):
-        source = ctx.qualifiedName().getText()
-        alias = ctx.identifier().getText()
-        self._print(f"UNWIND {source} AS {alias}")
-
     def enterReferenceDelete(self, ctx):
         ref = ctx.qualifiedName().getText()
         self._print(f"DELETE REFERENCE {ref}")
@@ -167,18 +162,17 @@ def count_operations(filepath: str) -> dict:
     tree = parser.migration()
 
     counts = {
-        'NEST': 0, 'UNNEST': 0, 'FLATTEN': 0, 'UNWIND': 0,
+        'NEST': 0, 'UNNEST': 0, 'FLATTEN': 0,
         'ADD': 0, 'DELETE': 0, 'DROP': 0, 'RENAME': 0,
         'COPY': 0, 'MOVE': 0, 'MERGE': 0, 'SPLIT': 0,
         'CAST': 0, 'LINKING': 0, 'EXTRACT': 0
     }
 
-    # Count operations in tree (using new unified grammar)
+    # Count operations in tree (unified FLATTEN handles all extraction scenarios)
     for op in tree.operation():
         if op.nest(): counts['NEST'] += 1
         elif op.unnest(): counts['UNNEST'] += 1
         elif op.flatten(): counts['FLATTEN'] += 1
-        elif op.unwind(): counts['UNWIND'] += 1
         elif op.add(): counts['ADD'] += 1
         elif op.delete(): counts['DELETE'] += 1
         elif op.drop(): counts['DROP'] += 1

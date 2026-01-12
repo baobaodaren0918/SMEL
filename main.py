@@ -135,7 +135,7 @@ def print_three_meta_schemas(source_db: Database, meta_v1_db: Database, meta_v2_
             nest_highlights.add(change[5:])
         elif change.startswith("ADD_REF:"):
             ref_highlights.add(change[8:])
-        elif change.startswith("FLATTEN:") or change.startswith("UNWIND:"):
+        elif change.startswith("FLATTEN:"):
             new_entities.add(change.split(":")[1])
 
     headers = [f"Source ({source_type})", "Meta V1 (Unified)", "Meta V2 (Result)"]

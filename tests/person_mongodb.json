@@ -25,6 +25,11 @@
       "bsonType": "array",
       "description": "Array of tags",
       "items": { "bsonType": "string" }
+    },
+    "knows": {
+      "bsonType": "array",
+      "description": "References to other persons (M:N self-reference)",
+      "items": { "bsonType": "string" }
     }
   }
 }

@@ -20,7 +20,7 @@ import os
 # Add project root to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from Schema.unified_meta_schema import Database, Reference, Aggregate
+from Schema.unified_meta_schema import Database, Reference, Embedded
 
 
 def import_schema(source_path: str) -> Database:
@@ -81,7 +81,7 @@ def print_database(db: Database, title: str = "Meta Schema"):
         # Relationships (contains both Reference and Aggregate/Embedded)
         if entity.relationships:
             references = [r for r in entity.relationships if isinstance(r, Reference)]
-            aggregates = [r for r in entity.relationships if isinstance(r, Aggregate)]
+            aggregates = [r for r in entity.relationships if isinstance(r, Embedded)]
 
             if references:
                 print("  References (FK):")
@@ -121,20 +121,23 @@ def print_smel_preview(db: Database, direction: str):
                 print()
     else:
         print("\n  Direction: DOCUMENT -> RELATIONAL")
-        print("  Available operations: FLATTEN, UNWIND, ADD REFERENCE\n")
+        print("  Available operations: FLATTEN (unified), ADD REFERENCE\n")
         print("  Example SMEL statements:")
 
         from Schema.unified_meta_schema import Cardinality
         for entity_name in db.entity_types.keys():
             entity = db.get_entity_type(entity_name)
-            aggregates = [r for r in entity.relationships if isinstance(r, Aggregate)]
+            aggregates = [r for r in entity.relationships if isinstance(r, Embedded)]
             for agg in aggregates:
                 target = agg.get_target_entity_name()
                 if agg.cardinality in [Cardinality.ONE_TO_ONE, Cardinality.ZERO_TO_ONE]:
+                    # Embedded object -> FLATTEN with GENERATE KEY (single PK)
                     print(f"    FLATTEN {entity_name}.{agg.aggr_name} AS {target}")
+                    print(f"        GENERATE KEY <key_name> AS SERIAL")
                     print(f"        ADD REFERENCE {agg.aggr_name}_id TO {target}")
                 else:
-                    print(f"    UNWIND {entity_name}.{agg.aggr_name}[] AS {target}")
+                    # Array -> FLATTEN with [] and GENERATE KEY (single PK)
+                    print(f"    FLATTEN {entity_name}.{agg.aggr_name}[] AS {target}")
                     print(f"        GENERATE KEY <key_name> AS SERIAL")
                     print(f"        ADD REFERENCE <fk_name> TO {entity_name}")
                 print()

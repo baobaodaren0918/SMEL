@@ -1,5 +1,5 @@
 # Unified Meta Schema - Supports: PostgreSQL, MongoDB, Neo4j, Cassandra
-# Based on Andre Conrad's meta_model design with extensions
+# Based on André Conrad's meta_model design with extensions
 
 from enum import Enum
 from typing import Dict, List, Optional, Any, Union
@@ -51,7 +51,7 @@ class PrimitiveType(str, Enum):
 
 
 class PKTypeEnum(str, Enum):
-    """Primary key type for different database systems (from Andre Conrad)."""
+    """Primary key type for different database systems (from André Conrad)."""
     SIMPLE = "simple"           # Standard primary key
     PARTITION = "partition"     # Cassandra partition key
     CLUSTERING = "clustering"   # Cassandra clustering key
@@ -131,6 +131,141 @@ _TYPE_MAPS = {
 
 def _get_native_type(ptype: PrimitiveType, db: DatabaseType) -> str:
     return _TYPE_MAPS[db][ptype]
+
+
+# ============================================================================
+# ADAPTER TYPE MAPPINGS (Centralized)
+# ============================================================================
+# These mappings are used by adapters for parsing and exporting schemas.
+# All adapters should import these from here to avoid duplication.
+
+class TypeMappings:
+    """Centralized type mappings for all database adapters."""
+
+    # -------------------------------------------------------------------------
+    # PostgreSQL Mappings
+    # -------------------------------------------------------------------------
+    # SQL type string -> PrimitiveType (for parsing DDL)
+    POSTGRESQL_TO_PRIMITIVE = {
+        # Auto-increment types
+        'SERIAL': PrimitiveType.INTEGER,
+        'BIGSERIAL': PrimitiveType.LONG,
+        # Integer types
+        'INTEGER': PrimitiveType.INTEGER,
+        'INT': PrimitiveType.INTEGER,
+        'BIGINT': PrimitiveType.LONG,
+        'SMALLINT': PrimitiveType.INTEGER,
+        # Decimal types
+        'DECIMAL': PrimitiveType.DECIMAL,
+        'NUMERIC': PrimitiveType.DECIMAL,
+        'REAL': PrimitiveType.FLOAT,
+        'DOUBLE PRECISION': PrimitiveType.DOUBLE,
+        'FLOAT': PrimitiveType.FLOAT,
+        # String types
+        'VARCHAR': PrimitiveType.STRING,
+        'CHAR': PrimitiveType.STRING,
+        'TEXT': PrimitiveType.STRING,
+        # Boolean
+        'BOOLEAN': PrimitiveType.BOOLEAN,
+        'BOOL': PrimitiveType.BOOLEAN,
+        # Date/Time types
+        'DATE': PrimitiveType.DATE,
+        'TIMESTAMP': PrimitiveType.TIMESTAMP,
+        'TIME': PrimitiveType.TIMESTAMP,
+        # Other types
+        'UUID': PrimitiveType.UUID,
+        'BYTEA': PrimitiveType.BINARY,
+        'JSON': PrimitiveType.STRING,
+        'JSONB': PrimitiveType.STRING,
+    }
+
+    # PrimitiveType -> SQL type string (for exporting DDL)
+    PRIMITIVE_TO_POSTGRESQL = {
+        PrimitiveType.INTEGER: 'INTEGER',
+        PrimitiveType.LONG: 'BIGINT',
+        PrimitiveType.STRING: 'VARCHAR',
+        PrimitiveType.TEXT: 'TEXT',
+        PrimitiveType.DECIMAL: 'DECIMAL',
+        PrimitiveType.FLOAT: 'REAL',
+        PrimitiveType.DOUBLE: 'DOUBLE PRECISION',
+        PrimitiveType.BOOLEAN: 'BOOLEAN',
+        PrimitiveType.DATE: 'DATE',
+        PrimitiveType.TIMESTAMP: 'TIMESTAMP',
+        PrimitiveType.UUID: 'UUID',
+        PrimitiveType.BINARY: 'BYTEA',
+        PrimitiveType.OBJECT_ID: 'VARCHAR',
+    }
+
+    # -------------------------------------------------------------------------
+    # MongoDB Mappings
+    # -------------------------------------------------------------------------
+    # BSON type string -> PrimitiveType (for parsing JSON Schema)
+    MONGODB_TO_PRIMITIVE = {
+        'string': PrimitiveType.STRING,
+        'int': PrimitiveType.INTEGER,
+        'long': PrimitiveType.LONG,
+        'double': PrimitiveType.DOUBLE,
+        'decimal': PrimitiveType.DECIMAL,
+        'bool': PrimitiveType.BOOLEAN,
+        'date': PrimitiveType.DATE,
+        'timestamp': PrimitiveType.TIMESTAMP,
+        'objectId': PrimitiveType.OBJECT_ID,
+        'binData': PrimitiveType.BINARY,
+        'null': PrimitiveType.NULL,
+    }
+
+    # PrimitiveType -> BSON type string (for exporting JSON Schema)
+    PRIMITIVE_TO_MONGODB = {
+        PrimitiveType.STRING: 'string',
+        PrimitiveType.INTEGER: 'int',
+        PrimitiveType.LONG: 'long',
+        PrimitiveType.DOUBLE: 'double',
+        PrimitiveType.DECIMAL: 'decimal',
+        PrimitiveType.FLOAT: 'double',
+        PrimitiveType.BOOLEAN: 'bool',
+        PrimitiveType.DATE: 'date',
+        PrimitiveType.TIMESTAMP: 'timestamp',
+        PrimitiveType.BINARY: 'binData',
+        PrimitiveType.UUID: 'string',
+        PrimitiveType.NULL: 'null',
+        PrimitiveType.TEXT: 'string',
+        PrimitiveType.OBJECT_ID: 'objectId',
+    }
+
+    # -------------------------------------------------------------------------
+    # Display Mappings (for UI/reports)
+    # -------------------------------------------------------------------------
+    # PrimitiveType -> PostgreSQL display format
+    PRIMITIVE_TO_PG_DISPLAY = {
+        PrimitiveType.INTEGER: 'INTEGER',
+        PrimitiveType.LONG: 'BIGINT',
+        PrimitiveType.STRING: 'VARCHAR',
+        PrimitiveType.TEXT: 'TEXT',
+        PrimitiveType.DECIMAL: 'DECIMAL',
+        PrimitiveType.FLOAT: 'REAL',
+        PrimitiveType.DOUBLE: 'DOUBLE PRECISION',
+        PrimitiveType.BOOLEAN: 'BOOLEAN',
+        PrimitiveType.DATE: 'DATE',
+        PrimitiveType.TIMESTAMP: 'TIMESTAMP',
+        PrimitiveType.UUID: 'UUID',
+        PrimitiveType.BINARY: 'BYTEA',
+    }
+
+    # PrimitiveType -> MongoDB display format
+    PRIMITIVE_TO_MONGO_DISPLAY = {
+        PrimitiveType.STRING: 'string',
+        PrimitiveType.INTEGER: 'int',
+        PrimitiveType.LONG: 'long',
+        PrimitiveType.DOUBLE: 'double',
+        PrimitiveType.DECIMAL: 'decimal',
+        PrimitiveType.FLOAT: 'double',
+        PrimitiveType.BOOLEAN: 'bool',
+        PrimitiveType.DATE: 'date',
+        PrimitiveType.TIMESTAMP: 'timestamp',
+        PrimitiveType.UUID: 'string',
+        PrimitiveType.BINARY: 'binData',
+        PrimitiveType.OBJECT_ID: 'objectId',
+    }
 
 
 # ============================================================================
@@ -310,12 +445,12 @@ class Attribute:
 
 
 # ============================================================================
-# CONSTRAINTS (Andre Conrad style)
+# CONSTRAINTS (from André Conrad)
 # ============================================================================
 
 @dataclass
 class UniqueProperty:
-    """Property that is part of a unique/primary key constraint (Andre Conrad style).
+    """Property that is part of a unique/primary key constraint (from André Conrad).
     Uses property_id to reference Attribute by meta_id instead of embedding the object.
     """
     primary_key_type: PKTypeEnum
@@ -344,7 +479,7 @@ class UniqueProperty:
 
 @dataclass
 class ForeignKeyProperty:
-    """Property that is part of a foreign key constraint (Andre Conrad style).
+    """Property that is part of a foreign key constraint (from André Conrad).
     Uses IDs to reference properties instead of embedding objects.
     """
     property_id: str  # References Attribute.meta_id (the FK column)
@@ -384,7 +519,7 @@ class Constraint(ABC):
 
 @dataclass
 class UniqueConstraint(Constraint):
-    """Unique or Primary Key constraint (from Andre Conrad)."""
+    """Unique or Primary Key constraint (from André Conrad)."""
     is_primary_key: bool
     is_managed: bool
     unique_properties: List[UniqueProperty] = field(default_factory=list)
@@ -413,7 +548,7 @@ class UniqueConstraint(Constraint):
 
 @dataclass
 class ForeignKeyConstraint(Constraint):
-    """Foreign Key constraint (from Andre Conrad)."""
+    """Foreign Key constraint (from André Conrad)."""
     is_managed: bool
     foreign_key_properties: List[ForeignKeyProperty] = field(default_factory=list)
 
@@ -471,7 +606,7 @@ class Relationship(ABC):
         if kind == "reference":
             return Reference.from_dict(data)
         elif kind in ("aggregate", "embedded"):
-            return Aggregate.from_dict(data)
+            return Embedded.from_dict(data)
         raise ValueError(f"Unknown relationship kind: {kind}")
 
 
@@ -514,7 +649,8 @@ class Reference(Relationship):
 
 
 @dataclass
-class Aggregate(Relationship):
+class Embedded(Relationship):
+    """Embedded/Aggregate relationship for nested documents (MongoDB style)."""
     aggr_name: str = ""
     aggregates: str = ""  # Entity name (string only, not object reference)
 
@@ -526,7 +662,7 @@ class Aggregate(Relationship):
 
     def to_dict(self) -> Dict[str, Any]:
         d = {
-            "kind": "aggregate",
+            "kind": "embedded",
             "meta_id": self.meta_id,
             "aggr_name": self.aggr_name,
             "aggregates": self.aggregates,
@@ -539,7 +675,7 @@ class Aggregate(Relationship):
         return d
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'Aggregate':
+    def from_dict(cls, data: Dict[str, Any]) -> 'Embedded':
         return cls(
             aggr_name=data.get("aggr_name", data.get("em_name", "")),
             aggregates=data.get("aggregates", data.get("embeds", "")),
@@ -551,7 +687,7 @@ class Aggregate(Relationship):
 
 
 # Alias for backward compatibility
-Embedded = Aggregate
+Aggregate = Embedded
 
 
 # ============================================================================
@@ -611,8 +747,8 @@ class StructuralVariation:
 
 @dataclass
 class EntityType:
-    """Unifies the definition of database entities (Andre Conrad style with List[str] naming)."""
-    object_name: List[str]  # Andre Conrad style: ["schema", "table"] or ["collection", "embedded"]
+    """Unifies the definition of database entities (from André Conrad with List[str] naming)."""
+    object_name: List[str]  # from André Conrad: ["schema", "table"] or ["collection", "embedded"]
     entity_kind: EntityKind = EntityKind.TABLE
     is_root: bool = True
     constraints: List[Constraint] = field(default_factory=list)
@@ -686,8 +822,13 @@ class EntityType:
     def get_references(self) -> List[Reference]:
         return [r for r in self.relationships if isinstance(r, Reference)]
 
-    def get_aggregates(self) -> List[Aggregate]:
-        return [r for r in self.relationships if isinstance(r, Aggregate)]
+    def get_embedded(self) -> List[Embedded]:
+        """Get all embedded relationships."""
+        return [r for r in self.relationships if isinstance(r, Embedded)]
+
+    # Backward compatibility alias
+    def get_aggregates(self) -> List[Embedded]:
+        return self.get_embedded()
 
     def remove_relationship(self, name: str) -> Optional[Relationship]:
         for i, r in enumerate(self.relationships):
@@ -706,7 +847,7 @@ class EntityType:
     def to_dict(self) -> Dict[str, Any]:
         d = {
             "meta_id": self.meta_id,
-            "object_name": self.object_name,  # Andre Conrad style: List[str]
+            "object_name": self.object_name,  # from André Conrad: List[str]
             "entity_kind": self.entity_kind.value,
             "is_root": self.is_root,
             "constraints": [c.to_dict() for c in self.constraints],
@@ -924,7 +1065,7 @@ __all__ = [
     'DataType', 'PrimitiveDataType', 'ListDataType', 'SetDataType', 'MapDataType',
     'Attribute', 'Constraint', 'UniqueProperty', 'ForeignKeyProperty',
     'UniqueConstraint', 'ForeignKeyConstraint',
-    'Relationship', 'Reference', 'Aggregate', 'Embedded',
+    'Relationship', 'Reference', 'Embedded',
     'StructuralVariation', 'EntityType', 'RelationshipType',
-    'Database', 'UnifiedMetaSchema'
+    'Database', 'UnifiedMetaSchema', 'TypeMappings'
 ]

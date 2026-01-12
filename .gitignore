@@ -1,5 +1,6 @@
 # Claude Code configuration
 .claude/
+tmpclaude-*/
 
 # Temp/test files
 nul
@@ -25,3 +26,13 @@ ENV/
 # grammar/*.py
 # grammar/*.tokens
 # grammar/*.interp
+
+# Prevent ANTLR files accidentally generated in root directory
+/SMEL.interp
+/SMEL.tokens
+/SMELLexer.interp
+/SMELLexer.py
+/SMELLexer.tokens
+/SMELListener.py
+/SMELParser.py
+/SMELVisitor.py

@@ -79,13 +79,8 @@ class SMELVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
-    # Visit a parse tree produced by SMELParser#unwind.
-    def visitUnwind(self, ctx:SMELParser.UnwindContext):
-        return self.visitChildren(ctx)
-
-
-    # Visit a parse tree produced by SMELParser#unwindClause.
-    def visitUnwindClause(self, ctx:SMELParser.UnwindClauseContext):
+    # Visit a parse tree produced by SMELParser#columnRenameClause.
+    def visitColumnRenameClause(self, ctx:SMELParser.ColumnRenameClauseContext):
         return self.visitChildren(ctx)
 
 
@@ -226,6 +221,11 @@ class SMELVisitor(ParseTreeVisitor):
 
     # Visit a parse tree produced by SMELParser#keyAdd.
     def visitKeyAdd(self, ctx:SMELParser.KeyAddContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by SMELParser#keyColumns.
+    def visitKeyColumns(self, ctx:SMELParser.KeyColumnsContext):
         return self.visitChildren(ctx)
 
 

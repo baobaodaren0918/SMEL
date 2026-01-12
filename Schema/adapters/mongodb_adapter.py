@@ -1,39 +1,78 @@
 """
 MongoDB Adapter - Parse MongoDB JSON Schema to Unified Meta Schema.
 Converts MongoDB JSON Schema (with bsonType) to Database/EntityType/Attribute objects.
+
+This adapter provides bidirectional conversion:
+  - parse(): MongoDB JSON Schema -> Unified Meta Schema
+  - export_to_json(): Unified Meta Schema -> MongoDB JSON Schema
+
+Data Flow:
+  MongoDB JSON Schema                    Unified Meta Schema
+  ─────────────────────────────────────────────────────────────
+  { "bsonType": "string" }        ->     PrimitiveType.STRING
+  { "bsonType": "objectId" }      ->     PrimitiveType.OBJECT_ID
+  { "bsonType": "array", items }  ->     ListDataType / Embedded
+  { "bsonType": "object" }        ->     EntityType (nested)
 """
 import json
 from typing import Dict, Any, Optional, List
 from ..unified_meta_schema import (
     Database, DatabaseType, EntityType, Attribute,
     UniqueConstraint, UniqueProperty, PKTypeEnum,
-    Embedded, Cardinality, PrimitiveDataType, PrimitiveType, ListDataType
+    Embedded, Cardinality, PrimitiveDataType, PrimitiveType, ListDataType,
+    TypeMappings
 )
 
 
 class MongoDBAdapter:
-    """Adapter to parse MongoDB JSON Schema and create Unified Meta Schema."""
+    """
+    Adapter to parse MongoDB JSON Schema and create Unified Meta Schema.
 
-    # BSON type to PrimitiveType mapping
-    TYPE_MAP = {
-        'string': PrimitiveType.STRING,
-        'int': PrimitiveType.INTEGER,
-        'long': PrimitiveType.LONG,
-        'double': PrimitiveType.DOUBLE,
-        'decimal': PrimitiveType.DECIMAL,
-        'bool': PrimitiveType.BOOLEAN,
-        'date': PrimitiveType.DATE,
-        'timestamp': PrimitiveType.TIMESTAMP,
-        'objectId': PrimitiveType.STRING,
-        'binData': PrimitiveType.BINARY,
-        'null': PrimitiveType.NULL,
-    }
+    This class acts as a translator between MongoDB's JSON Schema format
+    and the internal Unified Meta Schema used by SMEL.
+
+    Example:
+        adapter = MongoDBAdapter()
+        database = adapter.parse(mongo_schema, db_name="mydb")
+    """
+
+    # BSON type to PrimitiveType mapping (from centralized TypeMappings)
+    TYPE_MAP = TypeMappings.MONGODB_TO_PRIMITIVE
 
     def __init__(self):
         self.database: Optional[Database] = None
 
     def parse(self, schema: Dict[str, Any], db_name: str = "database") -> Database:
-        """Parse MongoDB JSON Schema and return Database object."""
+        """
+        Parse MongoDB JSON Schema and return Database object.
+
+        Example Input (MongoDB JSON Schema):
+            {
+                "title": "person",
+                "bsonType": "object",
+                "properties": {
+                    "_id": {"bsonType": "objectId"},
+                    "name": {"bsonType": "string"},
+                    "age": {"bsonType": "int"}
+                }
+            }
+
+        Example Output (Unified Meta Schema):
+            Database(
+                db_name="person",
+                db_type=DatabaseType.DOCUMENT,
+                entity_types={
+                    "person": EntityType(
+                        object_name=["person"],
+                        attributes=[
+                            Attribute("_id", OBJECT_ID, is_key=True),
+                            Attribute("name", STRING),
+                            Attribute("age", INTEGER)
+                        ]
+                    )
+                }
+            )
+        """
         self.database = Database(db_name=db_name, db_type=DatabaseType.DOCUMENT)
 
         # Parse root document as main entity
@@ -44,10 +83,23 @@ class MongoDBAdapter:
         return self.database
 
     def _parse_object_schema(self, schema: Dict[str, Any], name: str, parent_path: List[str] = None, is_root: bool = False) -> EntityType:
-        """Parse an object schema into EntityType."""
+        """
+        Parse an object schema into EntityType.
+
+        Uses André Conrad's object_name: List[str] design for nested paths.
+
+        Example - Nested object:
+            Input: person.address (parent_path=["person"], name="address")
+            Output: EntityType(object_name=["person", "address"])
+
+        Example - Deep nested:
+            Input: person.address.location (parent_path=["person", "address"], name="location")
+            Output: EntityType(object_name=["person", "address", "location"])
+        """
         if parent_path is None:
             parent_path = []
-        # Build full object_name path (Andre Conrad style)
+        # Build full object_name path (from André Conrad)
+        # Example: parent_path=["person"], name="address" -> ["person", "address"]
         object_name = parent_path + [name]
         entity = EntityType(object_name=object_name)
 
@@ -63,6 +115,9 @@ class MongoDBAdapter:
 
             if bson_type == 'object':
                 # Embedded object - pass current entity's object_name as parent_path
+                # Example: { "address": { "bsonType": "object", "properties": {...} } }
+                #   -> Creates EntityType(object_name=["person", "address"])
+                #   -> Creates Embedded relationship with Cardinality.ONE_TO_ONE
                 embedded_entity = self._parse_object_schema(prop_schema, prop_name_lower, parent_path=object_name)
                 self.database.add_entity_type(embedded_entity)
 
@@ -76,11 +131,18 @@ class MongoDBAdapter:
 
             elif bson_type == 'array':
                 # Array - check if array of objects or primitives
+                # Example 1 (object array): { "items": [{"name": "a"}, {"name": "b"}] }
+                #   -> Creates Embedded with Cardinality.ONE_TO_MANY
+                # Example 2 (primitive array): { "tags": ["tag1", "tag2"] }
+                #   -> Creates Attribute with ListDataType
                 items = prop_schema.get('items', {})
                 items_type = items.get('bsonType') or items.get('type', 'string')
 
                 if items_type == 'object':
                     # Array of embedded objects - pass current entity's object_name as parent_path
+                    # Example: { "items": { "bsonType": "array", "items": { "bsonType": "object" } } }
+                    #   -> Creates EntityType for the embedded object
+                    #   -> Creates Embedded with Cardinality.ONE_TO_MANY (or ZERO_TO_MANY)
                     embedded_entity = self._parse_object_schema(items, prop_name_lower, parent_path=object_name)
                     self.database.add_entity_type(embedded_entity)
 
@@ -93,6 +155,8 @@ class MongoDBAdapter:
                     entity.add_relationship(embedded)
                 else:
                     # Array of primitives - use ListDataType to preserve array semantics
+                    # Example: { "tags": { "bsonType": "array", "items": { "bsonType": "string" } } }
+                    #   -> Attribute("tags", ListDataType(element_type=PrimitiveDataType(STRING)))
                     element_type = self._parse_primitive_type(items_type, items)
                     attr = Attribute(
                         attr_name=prop_name_lower,
@@ -149,23 +213,11 @@ class MongoDBAdapter:
         return adapter.parse(schema, db_name)
 
     # ========== Export Methods ==========
+    # These methods convert Unified Meta Schema back to MongoDB JSON Schema
 
-    # Reverse mapping: PrimitiveType -> BSON type
-    REVERSE_TYPE_MAP = {
-        PrimitiveType.STRING: 'string',
-        PrimitiveType.INTEGER: 'int',
-        PrimitiveType.LONG: 'long',
-        PrimitiveType.DOUBLE: 'double',
-        PrimitiveType.DECIMAL: 'decimal',
-        PrimitiveType.FLOAT: 'double',
-        PrimitiveType.BOOLEAN: 'bool',
-        PrimitiveType.DATE: 'date',
-        PrimitiveType.TIMESTAMP: 'timestamp',
-        PrimitiveType.BINARY: 'binData',
-        PrimitiveType.UUID: 'string',
-        PrimitiveType.NULL: 'null',
-        PrimitiveType.TEXT: 'string',
-    }
+    # Reverse mapping (from centralized TypeMappings)
+    # Used when exporting back to MongoDB format
+    REVERSE_TYPE_MAP = TypeMappings.PRIMITIVE_TO_MONGODB
 
     @classmethod
     def export_to_json(cls, database: Database, root_entity_name: str = None) -> Dict[str, Any]:
@@ -274,21 +326,128 @@ class MongoDBAdapter:
 
     @classmethod
     def _export_attribute_to_property(cls, attr: Attribute) -> Dict[str, Any]:
-        """Export an attribute to MongoDB property schema."""
-        bson_type = cls.REVERSE_TYPE_MAP.get(attr.data_type.primitive_type, 'string')
+        """
+        Export an attribute to MongoDB property schema.
 
-        prop = {
-            "bsonType": bson_type
-        }
+        Example 1 - Primitive type:
+            Input:  Attribute("name", PrimitiveDataType(STRING))
+            Output: {"bsonType": "string"}
 
-        # Add maxLength for strings
-        if attr.data_type.max_length and bson_type == 'string':
-            prop["maxLength"] = attr.data_type.max_length
+        Example 2 - Array type:
+            Input:  Attribute("tags", ListDataType(element_type=PrimitiveDataType(STRING)))
+            Output: {"bsonType": "array", "items": {"bsonType": "string"}}
 
-        return prop
+        Example 3 - ObjectId type:
+            Input:  Attribute("_id", PrimitiveDataType(OBJECT_ID))
+            Output: {"bsonType": "objectId"}
+        """
+        data_type = attr.data_type
+
+        # Handle ListDataType (arrays)
+        # Example: ListDataType(STRING) -> {"bsonType": "array", "items": {"bsonType": "string"}}
+        if isinstance(data_type, ListDataType):
+            element_type = data_type.element_type
+            if isinstance(element_type, PrimitiveDataType):
+                element_bson_type = cls.REVERSE_TYPE_MAP.get(element_type.primitive_type, 'string')
+                return {
+                    "bsonType": "array",
+                    "items": {"bsonType": element_bson_type}
+                }
+            else:
+                # Default to string array if element type is unknown
+                return {
+                    "bsonType": "array",
+                    "items": {"bsonType": "string"}
+                }
+
+        # Handle PrimitiveDataType
+        if isinstance(data_type, PrimitiveDataType):
+            bson_type = cls.REVERSE_TYPE_MAP.get(data_type.primitive_type, 'string')
+            prop = {"bsonType": bson_type}
+
+            # Add maxLength for strings
+            if data_type.max_length and bson_type == 'string':
+                prop["maxLength"] = data_type.max_length
+
+            return prop
+
+        # Default fallback
+        return {"bsonType": "string"}
 
     @classmethod
     def export_to_json_string(cls, database: Database, root_entity_name: str = None, indent: int = 2) -> str:
         """Export to formatted JSON string."""
         schema = cls.export_to_json(database, root_entity_name)
         return json.dumps(schema, indent=indent, ensure_ascii=False)
+
+
+# =============================================================================
+# USAGE EXAMPLES
+# =============================================================================
+#
+# Example 1: Parse MongoDB JSON Schema to Unified Meta Schema
+# ------------------------------------------------------------
+#
+# mongo_schema = {
+#     "title": "person",
+#     "bsonType": "object",
+#     "properties": {
+#         "_id": {"bsonType": "objectId"},
+#         "name": {"bsonType": "string"},
+#         "age": {"bsonType": "int"},
+#         "tags": {"bsonType": "array", "items": {"bsonType": "string"}},
+#         "address": {
+#             "bsonType": "object",
+#             "properties": {
+#                 "street": {"bsonType": "string"},
+#                 "city": {"bsonType": "string"}
+#             }
+#         }
+#     }
+# }
+#
+# adapter = MongoDBAdapter()
+# database = adapter.parse(mongo_schema, db_name="mydb")
+#
+# Result:
+#   database.db_name = "mydb"
+#   database.db_type = DatabaseType.DOCUMENT
+#   database.entity_types = {
+#       "person": EntityType(
+#           object_name=["person"],
+#           attributes=[
+#               Attribute("_id", PrimitiveType.OBJECT_ID, is_key=True),
+#               Attribute("name", PrimitiveType.STRING),
+#               Attribute("age", PrimitiveType.INTEGER),
+#               Attribute("tags", ListDataType(element_type=PrimitiveDataType(STRING)))
+#           ],
+#           relationships=[
+#               Embedded(aggr_name="address", aggregates="person.address", cardinality=ZERO_TO_ONE)
+#           ]
+#       ),
+#       "person.address": EntityType(
+#           object_name=["person", "address"],  # from André Conrad
+#           attributes=[
+#               Attribute("street", PrimitiveType.STRING),
+#               Attribute("city", PrimitiveType.STRING)
+#           ]
+#       )
+#   }
+#
+#
+# Example 2: Load from file
+# -------------------------
+#
+# database = MongoDBAdapter.load_from_file("person.json", db_name="mydb")
+#
+#
+# Example 3: Export back to MongoDB JSON Schema
+# ---------------------------------------------
+#
+# json_schema = MongoDBAdapter.export_to_json(database)
+# json_string = MongoDBAdapter.export_to_json_string(database, indent=2)
+#
+# Result preserves types:
+#   {"bsonType": "objectId"} -> OBJECT_ID -> {"bsonType": "objectId"}
+#   {"bsonType": "array", "items": ...} -> ListDataType -> {"bsonType": "array", "items": ...}
+#

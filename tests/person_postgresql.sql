@@ -18,10 +18,19 @@ CREATE TABLE address (
     person_id VARCHAR(255) NOT NULL REFERENCES person(id)
 );
 
--- Table 3: person_tag (unwound from array)
+-- Table 3: person_tag (flattened from value array)
 -- ID with "t" prefix (e.g., "t001", "t002")
+-- 'value' column renamed to 'tag_value' via RENAME clause (soft configuration)
 CREATE TABLE person_tag (
     id VARCHAR(255) PRIMARY KEY,
-    value VARCHAR(255) NOT NULL,
+    tag_value VARCHAR(255) NOT NULL,
     person_id VARCHAR(255) NOT NULL REFERENCES person(id)
+);
+
+-- Table 4: person_knows (M:N self-reference join table)
+-- Composite primary key (person_id, knows_person_id)
+CREATE TABLE person_knows (
+    person_id VARCHAR(255) NOT NULL REFERENCES person(id),
+    knows_person_id VARCHAR(255) NOT NULL REFERENCES person(id),
+    PRIMARY KEY (person_id, knows_person_id)
 );

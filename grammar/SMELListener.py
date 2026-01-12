@@ -134,21 +134,12 @@ class SMELListener(ParseTreeListener):
         pass
 
 
-    # Enter a parse tree produced by SMELParser#unwind.
-    def enterUnwind(self, ctx:SMELParser.UnwindContext):
+    # Enter a parse tree produced by SMELParser#columnRenameClause.
+    def enterColumnRenameClause(self, ctx:SMELParser.ColumnRenameClauseContext):
         pass
 
-    # Exit a parse tree produced by SMELParser#unwind.
-    def exitUnwind(self, ctx:SMELParser.UnwindContext):
-        pass
-
-
-    # Enter a parse tree produced by SMELParser#unwindClause.
-    def enterUnwindClause(self, ctx:SMELParser.UnwindClauseContext):
-        pass
-
-    # Exit a parse tree produced by SMELParser#unwindClause.
-    def exitUnwindClause(self, ctx:SMELParser.UnwindClauseContext):
+    # Exit a parse tree produced by SMELParser#columnRenameClause.
+    def exitColumnRenameClause(self, ctx:SMELParser.ColumnRenameClauseContext):
         pass
 
 
@@ -401,6 +392,15 @@ class SMELListener(ParseTreeListener):
 
     # Exit a parse tree produced by SMELParser#keyAdd.
     def exitKeyAdd(self, ctx:SMELParser.KeyAddContext):
+        pass
+
+
+    # Enter a parse tree produced by SMELParser#keyColumns.
+    def enterKeyColumns(self, ctx:SMELParser.KeyColumnsContext):
+        pass
+
+    # Exit a parse tree produced by SMELParser#keyColumns.
+    def exitKeyColumns(self, ctx:SMELParser.KeyColumnsContext):
         pass
 
 
