@@ -2,7 +2,7 @@
 -- Person Document (multi-level nested objects + arrays) -> Normalized Tables
 -- Direction: Denormalized (Embedded) -> Normalized (3NF)
 --
--- Operation Semantics (per André Conrad reference):
+-- Operation Semantics (per Bianca Meier reference):
 --   FLATTEN: Flatten nested object fields into same table (reduce depth by 1)
 --   UNNEST:  Extract nested object to separate table (normalization)
 --   SPLIT:   Vertical partitioning of same-level fields
@@ -53,7 +53,7 @@ RENAME_FEATURE _id TO person_id IN person
 -- ============================================
 -- Step 1: Extract address table (level 1)
 -- ============================================
-UNNEST person.address:street,city AS address WITH person.person_id
+UNNEST person.address:street,city AS address WITH person.person_id TO address.person_id
 ADD_PRIMARY_KEY address.address_id AS String
 ADD_REFERENCE address.person_id REFERENCES person(person_id) WITH CARDINALITY ONE_TO_ONE
 -- Result:
@@ -65,7 +65,7 @@ ADD_REFERENCE address.person_id REFERENCES person(person_id) WITH CARDINALITY ON
 -- Step 2: Extract employment table (level 1)
 -- ============================================
 -- Note: company{...} shows the nested object structure to transfer
-UNNEST person.employment:position, company{name, address{street, city}} AS employment WITH person.person_id
+UNNEST person.employment:position, company{name, address{street, city}} AS employment WITH person.person_id TO employment.person_id
 ADD_PRIMARY_KEY employment.employment_id AS String
 ADD_REFERENCE employment.person_id REFERENCES person(person_id) WITH CARDINALITY ONE_TO_ONE
 -- Result:
@@ -78,7 +78,7 @@ ADD_REFERENCE employment.person_id REFERENCES person(person_id) WITH CARDINALITY
 -- Step 3: Extract company table (level 2) - from employment table
 -- ============================================
 -- Note: address{...} shows the nested object structure to transfer
-UNNEST employment.company:name, address{street, city} AS company WITH employment.employment_id
+UNNEST employment.company:name, address{street, city} AS company WITH employment.employment_id TO company.employment_id
 ADD_PRIMARY_KEY company.company_id AS String
 ADD_REFERENCE company.employment_id REFERENCES employment(employment_id) WITH CARDINALITY ONE_TO_ONE
 -- Result:
@@ -91,7 +91,7 @@ ADD_REFERENCE company.employment_id REFERENCES employment(employment_id) WITH CA
 -- ============================================
 -- Step 4: Extract company_address table (level 3) - 3rd level nesting!
 -- ============================================
-UNNEST company.address:street,city AS company_address WITH company.company_id
+UNNEST company.address:street,city AS company_address WITH company.company_id TO company_address.company_id
 ADD_PRIMARY_KEY company_address.company_address_id AS String
 ADD_REFERENCE company_address.company_id REFERENCES company(company_id) WITH CARDINALITY ONE_TO_ONE
 -- Result:

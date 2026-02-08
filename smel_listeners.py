@@ -320,22 +320,61 @@ class SMELSpecificListener(SMEL_SpecificListener, BaseSMELListener):
             }, original_keyword="UNWIND"))
 
     def enterNest(self, ctx):
+        # New syntax: NEST identifier COLON unnestFieldList IN qualifiedName WHERE qualifiedName EQUALS qualifiedName (WITH DELETION)?
+        # Reference: Bianca Meier - NEST vendor:id,name,country IN product.vendor WHERE vendor.id = product.vendorid [with Deletion]
+        # Example: NEST address:street,city IN person.address WHERE address.person_id = person.person_id WITH DELETION
+        source_entity = ctx.identifier().getText()  # address
+        target_location = ctx.qualifiedName(0).getText()  # person.address
+        source_fk = ctx.qualifiedName(1).getText()  # address.person_id
+        target_pk = ctx.qualifiedName(2).getText()  # person.person_id
+        with_deletion = ctx.DELETION() is not None  # WITH DELETION option
+
+        # Parse target location: person.address -> target_entity=person, embedded_name=address
+        target_parts = target_location.split(".")
+        target_entity = target_parts[0] if target_parts else target_location
+        embedded_name = target_parts[1] if len(target_parts) > 1 else source_entity
+
+        # Parse field list: attributes to embed
+        attributes, nested = self._parse_unnest_field_list(
+            ctx.unnestFieldList(), SMEL_SpecificParser)
+
         self.operations.append(Operation("NEST", {
-            "source": ctx.identifier(0).getText(),
-            "target": ctx.identifier(1).getText(),
-            "alias": ctx.identifier(2).getText(),
-            "clauses": self._parse_nest_clauses(ctx.nestClause())
-        }))
+            "source": source_entity,       # source entity to embed (address)
+            "target": target_entity,       # target entity (person)
+            "alias": embedded_name,        # embedded field name (address)
+            "attributes": attributes,      # attributes to embed (street, city)
+            "nested": nested,              # nested objects
+            "source_fk": source_fk,        # source FK column (address.person_id)
+            "target_pk": target_pk,        # target PK column (person.person_id)
+            "with_deletion": with_deletion # delete source after embedding
+        }, original_keyword="NEST"))
 
     def enterUnnest(self, ctx):
-        # New syntax: UNNEST qualifiedName COLON unnestFieldList AS identifier WITH qualifiedName
-        # Extracts nested object to separate table (normalization)
-        # Example: UNNEST person.employment:position, company{name, address{street, city}} AS employment
-        #   - 'position' is a regular attribute
-        #   - 'company{...}' is a nested object with its structure explicitly shown
-        source_path = ctx.qualifiedName(0).getText()  # person.employment
-        target_name = ctx.identifier().getText()  # employment
-        parent_key = ctx.qualifiedName(1).getText()  # person.person_id
+        # New syntax: UNNEST qualifiedName COLON unnestFieldList AS identifier (WITH unnestCarryList)?
+        # Reference: Bianca Meier - reverse of NEST operation
+        # Example: UNNEST person.address:street,city AS address WITH person.person_id TO address.person_id
+        # Example with multiple carry fields:
+        #   UNNEST person.employment:position AS employment
+        #       WITH person.person_id TO employment.person_id, person.dept_id TO employment.dept_id
+        #   - WITH clause: copy fields from source to new table (can carry multiple fields)
+        source_path = ctx.qualifiedName().getText()  # person.address (single qualifiedName in unnest rule)
+        target_name = ctx.identifier().getText()  # address (identifier after AS)
+
+        # Parse carry fields (WITH clause is optional)
+        carry_fields = []
+        if ctx.unnestCarryList():
+            for carry_field in ctx.unnestCarryList().unnestCarryField():
+                # unnestCarryField has two qualifiedName: source AS target
+                source_field = carry_field.qualifiedName(0).getText()  # person.person_id
+                target_field = carry_field.qualifiedName(1).getText()  # address.person_id
+                # Extract just the field name from target path
+                target_parts = target_field.split(".")
+                field_name = target_parts[-1] if target_parts else target_field
+                carry_fields.append({
+                    "source": source_field,      # person.person_id
+                    "target": target_field,      # address.person_id
+                    "field_name": field_name     # person_id
+                })
 
         # Parse field list: recursively separate attributes and nested objects
         attributes, nested = self._parse_unnest_field_list(
@@ -343,10 +382,10 @@ class SMELSpecificListener(SMEL_SpecificListener, BaseSMELListener):
 
         self.operations.append(Operation("UNNEST", {
             "source_path": source_path,
-            "attributes": attributes,  # Regular attributes ['position', 'name']
+            "attributes": attributes,  # Regular attributes ['street', 'city']
             "nested": nested,          # Nested objects [{'name': 'company', 'attributes': [...], 'nested': [...]}]
             "target": target_name,
-            "parent_key": parent_key
+            "carry_fields": carry_fields  # List of fields to copy from source to new table
         }, original_keyword="UNNEST"))
 
     def enterExtract(self, ctx):
@@ -750,22 +789,61 @@ class SMELPauschalisiertListener(SMEL_PauschalisiertListener, BaseSMELListener):
             }, original_keyword="UNWIND_PS"))
 
     def enterNest_ps(self, ctx):
+        # New syntax: NEST_PS identifier COLON unnestFieldList IN qualifiedName WHERE qualifiedName EQUALS qualifiedName (WITH DELETION)?
+        # Reference: Bianca Meier - NEST vendor:id,name,country IN product.vendor WHERE vendor.id = product.vendorid [with Deletion]
+        # Example: NEST_PS address:street,city IN person.address WHERE address.person_id = person.person_id WITH DELETION
+        source_entity = ctx.identifier().getText()  # address
+        target_location = ctx.qualifiedName(0).getText()  # person.address
+        source_fk = ctx.qualifiedName(1).getText()  # address.person_id
+        target_pk = ctx.qualifiedName(2).getText()  # person.person_id
+        with_deletion = ctx.DELETION() is not None  # WITH DELETION option
+
+        # Parse target location: person.address -> target_entity=person, embedded_name=address
+        target_parts = target_location.split(".")
+        target_entity = target_parts[0] if target_parts else target_location
+        embedded_name = target_parts[1] if len(target_parts) > 1 else source_entity
+
+        # Parse field list: attributes to embed
+        attributes, nested = self._parse_unnest_field_list(
+            ctx.unnestFieldList(), SMEL_PauschalisiertParser)
+
         self.operations.append(Operation("NEST", {
-            "source": ctx.identifier(0).getText(),
-            "target": ctx.identifier(1).getText(),
-            "alias": ctx.identifier(2).getText(),
-            "clauses": self._parse_nest_clauses(ctx.nestClause())
+            "source": source_entity,       # source entity to embed (address)
+            "target": target_entity,       # target entity (person)
+            "alias": embedded_name,        # embedded field name (address)
+            "attributes": attributes,      # attributes to embed (street, city)
+            "nested": nested,              # nested objects
+            "source_fk": source_fk,        # source FK column (address.person_id)
+            "target_pk": target_pk,        # target PK column (person.person_id)
+            "with_deletion": with_deletion # delete source after embedding
         }, original_keyword="NEST_PS"))
 
     def enterUnnest_ps(self, ctx):
-        # New syntax: UNNEST_PS qualifiedName COLON unnestFieldList AS identifier WITH qualifiedName
-        # Extracts nested object to separate table (normalization)
-        # Example: UNNEST_PS person.employment:position, company{name, address{street, city}} AS employment
-        #   - 'position' is a regular attribute
-        #   - 'company{...}' is a nested object with its structure explicitly shown
-        source_path = ctx.qualifiedName(0).getText()  # person.employment
-        target_name = ctx.identifier().getText()  # employment
-        parent_key = ctx.qualifiedName(1).getText()  # person.person_id
+        # New syntax: UNNEST_PS qualifiedName COLON unnestFieldList AS identifier (WITH unnestCarryList)?
+        # Reference: Bianca Meier - reverse of NEST operation
+        # Example: UNNEST_PS person.address:street,city AS address WITH person.person_id TO address.person_id
+        # Example with multiple carry fields:
+        #   UNNEST_PS person.employment:position AS employment
+        #       WITH person.person_id TO employment.person_id, person.dept_id TO employment.dept_id
+        #   - WITH clause: copy fields from source to new table (can carry multiple fields)
+        source_path = ctx.qualifiedName().getText()  # person.address (single qualifiedName in unnest_ps rule)
+        target_name = ctx.identifier().getText()  # address (identifier after AS)
+
+        # Parse carry fields (WITH clause is optional)
+        carry_fields = []
+        if ctx.unnestCarryList():
+            for carry_field in ctx.unnestCarryList().unnestCarryField():
+                # unnestCarryField has two qualifiedName: source AS target
+                source_field = carry_field.qualifiedName(0).getText()  # person.person_id
+                target_field = carry_field.qualifiedName(1).getText()  # address.person_id
+                # Extract just the field name from target path
+                target_parts = target_field.split(".")
+                field_name = target_parts[-1] if target_parts else target_field
+                carry_fields.append({
+                    "source": source_field,      # person.person_id
+                    "target": target_field,      # address.person_id
+                    "field_name": field_name     # person_id
+                })
 
         # Parse field list: recursively separate attributes and nested objects
         attributes, nested = self._parse_unnest_field_list(
@@ -773,10 +851,10 @@ class SMELPauschalisiertListener(SMEL_PauschalisiertListener, BaseSMELListener):
 
         self.operations.append(Operation("UNNEST", {
             "source_path": source_path,
-            "attributes": attributes,  # Regular attributes ['position', 'name']
+            "attributes": attributes,  # Regular attributes ['street', 'city']
             "nested": nested,          # Nested objects [{'name': 'company', 'attributes': [...], 'nested': [...]}]
             "target": target_name,
-            "parent_key": parent_key
+            "carry_fields": carry_fields  # List of fields to copy from source to new table
         }, original_keyword="UNNEST_PS"))
 
     def enterExtract_ps(self, ctx):

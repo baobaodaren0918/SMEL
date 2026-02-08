@@ -253,15 +253,23 @@ rename_reltype: RENAME_RELTYPE identifier TO identifier;
 flatten: FLATTEN qualifiedName;
 
 // UNNEST - Extract nested object to separate table (normalization)
-// This is the reverse of NEST - extracts embedded document to new table
-// Example: UNNEST person.employment:position, company{name, address{street, city}} AS employment
-//   - 'position' is a regular attribute
-//   - 'company{...}' is a nested object with its structure explicitly shown
-//   Before: person { person_id, employment: { position, company: { name, address: {...} } } }
+// Reference: Bianca Meier - reverse of NEST operation
+// Example: UNNEST person.address:street,city AS address WITH person.person_id TO address.person_id
+// Example with multiple carry fields:
+//   UNNEST person.employment:position AS employment
+//       WITH person.person_id TO employment.person_id, person.dept_id TO employment.dept_id
+//   - 'street,city' are attributes to extract
+//   - WITH clause: copy fields from source to new table (can carry multiple fields)
+//   - WITH is optional, for cases where no parent fields need to be copied
+//   Before: person { person_id, address: { street, city } }
 //   After:  person { person_id }
-//           employment { person_id, position, company: { name, address: {...} } }
+//           address { person_id, street, city }
 // Note: Use separate ADD_PRIMARY_KEY, ADD_REFERENCE for constraints
-unnest: UNNEST qualifiedName COLON unnestFieldList AS identifier WITH qualifiedName;
+unnest: UNNEST qualifiedName COLON unnestFieldList AS identifier (WITH unnestCarryList)?;
+
+// Carry list for UNNEST: fields to copy from source to new table
+unnestCarryList: unnestCarryField (COMMA unnestCarryField)*;
+unnestCarryField: qualifiedName TO qualifiedName;
 
 // Field list for UNNEST: supports both attributes and nested objects (recursive)
 // - identifier: regular attribute (e.g., position, name, street, city)
@@ -280,9 +288,15 @@ unnestField: identifier                                    # AttributeField
 unwind: UNWIND qualifiedName (INTO identifier)?;
 
 // NEST - Merge separate table into embedded document (PostgreSQL -> MongoDB)
-// Example: NEST address INTO person AS address WITH CARDINALITY ONE_TO_ONE
-nest: NEST identifier INTO identifier AS identifier nestClause*;
-nestClause: withCardinalityClause | usingKeyClause | whereClause;
+// Reference: Bianca Meier - NEST vendor:id,name,country IN product.vendor WHERE vendor.id = product.vendorid [with Deletion]
+// Example: NEST address:street,city IN person.address WHERE address.person_id = person.person_id
+// Example with deletion: NEST address:street,city IN person.address WHERE address.person_id = person.person_id WITH DELETION
+//   - 'address' is source entity
+//   - ':street,city' are attributes to embed
+//   - 'IN person.address' specifies target (person entity, address field)
+//   - WHERE clause specifies join condition
+//   - WITH DELETION optionally removes source entity after embedding
+nest: NEST identifier COLON unnestFieldList IN qualifiedName WHERE qualifiedName EQUALS qualifiedName (WITH DELETION)?;
 
 // EXTRACT - Extract attributes from entity to create new entity
 // Example: EXTRACT (a, b, c) FROM Entity INTO NewEntity
@@ -383,7 +397,7 @@ literal: STRING_LITERAL | INTEGER_LITERAL | DECIMAL_LITERAL | TRUE | FALSE | NUL
 // KEYWORDS - Reserved words in SMEL_Specific
 // ----------------------------------------------------------------------------
 MIGRATION: 'MIGRATION'; FROM: 'FROM'; TO: 'TO'; USING: 'USING'; AS: 'AS';
-INTO: 'INTO'; WITH: 'WITH'; WHERE: 'WHERE'; IN: 'IN'; KEY: 'KEY'; AND: 'AND';
+INTO: 'INTO'; WITH: 'WITH'; WHERE: 'WHERE'; IN: 'IN'; KEY: 'KEY'; AND: 'AND'; DELETION: 'DELETION';
 COUNT: 'COUNT'; ON: 'ON';
 
 // Database model types

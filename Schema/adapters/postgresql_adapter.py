@@ -490,7 +490,7 @@ class PostgreSQLAdapter:
             - REFERENCES clauses for FK columns
         """
         lines = []
-        lines.append(f"TABLE {entity.name} (")
+        lines.append(f"CREATE TABLE {entity.name} (")
 
         columns = []
         constraints = []

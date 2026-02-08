@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from core import run_migration
 
-PORT = 5576
+PORT = 5579
 
 
 class SMELHandler(SimpleHTTPRequestHandler):
@@ -1204,6 +1204,17 @@ def get_html():
                             html += '</div>';
                         });
                     }
+
+                    // Show type changed attributes (for CAST and UNWIND operations)
+                    if (affected.type_changed_attributes && affected.type_changed_attributes.length > 0) {
+                        affected.type_changed_attributes.forEach(attr => {
+                            html += '<div class="change-item" style="color:#AF52DE;">';
+                            html += '<span class="change-prefix" style="color:#AF52DE;">~</span>';
+                            html += attr.name + ': <s style="color:#636366;">' + attr.old_type + '</s> → ' + attr.new_type;
+                            html += '<span class="change-label" style="background:rgba(175,82,222,0.15);color:#AF52DE;">type changed</span>';
+                            html += '</div>';
+                        });
+                    }
                 }
 
                 html += '</div>';
@@ -1240,18 +1251,29 @@ def get_html():
                     break;
                 case 'UNNEST':
                     // UNNEST: Extract nested object to separate table (normalization)
-                    // New syntax: UNNEST_PS person.address:street,city AS address WITH person.person_id
+                    // New syntax: UNNEST person.address:street,city AS address WITH person.person_id TO address.person_id
                     html = '<span class="param-value">' + params.source_path + '</span>';
-                    if (params.fields && params.fields.length > 0) {
-                        html += ':' + params.fields.join(',');
+                    if (params.attributes && params.attributes.length > 0) {
+                        html += ':' + params.attributes.join(',');
                     }
                     html += ' <span class="param-key">AS</span> <span class="param-value">' + params.target + '</span>';
-                    html += ' <span class="param-key">WITH</span> <span class="param-value">' + params.parent_key + '</span>';
+                    if (params.carry_fields && params.carry_fields.length > 0) {
+                        html += ' <span class="param-key">WITH</span> ';
+                        html += params.carry_fields.map(cf =>
+                            '<span class="param-value">' + cf.source + '</span> <span class="param-key">TO</span> <span class="param-value">' + cf.target + '</span>'
+                        ).join(', ');
+                    }
                     break;
                 case 'UNWIND':
-                    // UNWIND: Expand array into separate table
-                    html = '<span class="param-value">' + params.source + '</span> → ';
-                    html += '<span class="param-key">INTO</span> <span class="param-value">' + params.target + '</span>';
+                    // UNWIND: Expand array (two modes)
+                    html = '<span class="param-value">' + params.source + '</span>';
+                    if (params.mode === 'create_table' && params.target) {
+                        // Mode 1: Create new table - UNWIND person.tags[] INTO person_tag
+                        html += ' → <span class="param-key">INTO</span> <span class="param-value">' + params.target + '</span>';
+                    } else {
+                        // Mode 2: Expand in place - UNWIND person_tag.tags
+                        html += ' <span class="param-key">(expand in place)</span>';
+                    }
                     break;
                 case 'SPLIT':
                     // SPLIT: Vertical partitioning of same-level fields

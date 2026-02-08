@@ -521,6 +521,24 @@ class SMEL_SpecificListener(ParseTreeListener):
         pass
 
 
+    # Enter a parse tree produced by SMEL_SpecificParser#unnestCarryList.
+    def enterUnnestCarryList(self, ctx:SMEL_SpecificParser.UnnestCarryListContext):
+        pass
+
+    # Exit a parse tree produced by SMEL_SpecificParser#unnestCarryList.
+    def exitUnnestCarryList(self, ctx:SMEL_SpecificParser.UnnestCarryListContext):
+        pass
+
+
+    # Enter a parse tree produced by SMEL_SpecificParser#unnestCarryField.
+    def enterUnnestCarryField(self, ctx:SMEL_SpecificParser.UnnestCarryFieldContext):
+        pass
+
+    # Exit a parse tree produced by SMEL_SpecificParser#unnestCarryField.
+    def exitUnnestCarryField(self, ctx:SMEL_SpecificParser.UnnestCarryFieldContext):
+        pass
+
+
     # Enter a parse tree produced by SMEL_SpecificParser#unnestFieldList.
     def enterUnnestFieldList(self, ctx:SMEL_SpecificParser.UnnestFieldListContext):
         pass
@@ -563,15 +581,6 @@ class SMEL_SpecificListener(ParseTreeListener):
 
     # Exit a parse tree produced by SMEL_SpecificParser#nest.
     def exitNest(self, ctx:SMEL_SpecificParser.NestContext):
-        pass
-
-
-    # Enter a parse tree produced by SMEL_SpecificParser#nestClause.
-    def enterNestClause(self, ctx:SMEL_SpecificParser.NestClauseContext):
-        pass
-
-    # Exit a parse tree produced by SMEL_SpecificParser#nestClause.
-    def exitNestClause(self, ctx:SMEL_SpecificParser.NestClauseContext):
         pass
 
 

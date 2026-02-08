@@ -1,0 +1,145 @@
+-- SMEL Mini-Example: PostgreSQL -> MongoDB (Reverse Migration)
+-- Normalized Tables (3NF) -> Person Document (multi-level nested objects + arrays)
+-- Direction: Normalized (3NF) -> Denormalized (Embedded)
+--
+-- Operation Semantics (per Bianca Meier reference):
+--   NEST:   Embed separate table into parent as nested object (reverse of UNNEST)
+--   MERGE:  Combine two tables into one (reverse of SPLIT)
+--   WRAP:   Combine flat fields into nested object (reverse of FLATTEN) - TODO
+--   WIND:   Collect multiple rows into array (reverse of UNWIND) - TODO
+
+MIGRATION person_pg_to_mongo:1.0
+FROM RELATIONAL TO DOCUMENT
+USING person_schema:1
+
+-- ============================================
+-- Source: PostgreSQL 3NF Tables (7 tables)
+-- ============================================
+-- person (person_id, vorname, nachname, age)
+-- address (address_id, person_id, street, city)
+-- employment (employment_id, person_id, position)
+-- company (company_id, employment_id, name)
+-- company_address (company_address_id, company_id, street, city)
+-- person_tag (person_tag_id, person_id, tag_value)
+-- person_knows (person_id, knows_person_id)
+
+-- ============================================
+-- Target: MongoDB Person Document
+-- ============================================
+-- {
+--   _id: "p001",
+--   name: { vorname: "Lu", nachname: "Li" },
+--   age: "28",
+--   address: { street: "Hauptstrasse 10", city: "Berlin" },
+--   employment: {
+--     position: "Software Engineer",
+--     company: {
+--       name: "Tech Corp",
+--       address: { street: "Business Str 5", city: "Munich" }
+--     }
+--   },
+--   tags: ["student", "developer"],
+--   knows: ["p002", "p003"]
+-- }
+
+-- ============================================
+-- Step 1: Nest company_address into company (Level 3 -> 2)
+-- ============================================
+-- Reverse of: UNNEST company.address:street,city AS company_address WITH company.company_id TO company_address.company_id
+NEST company_address:street,city IN company.address WHERE company_address.company_id = company.company_id WITH DELETION
+-- Result:
+-- company: { company_id, employment_id, name, address{street, city} }
+
+-- ============================================
+-- Step 2: Nest company into employment (Level 2 -> 1)
+-- ============================================
+-- Reverse of: UNNEST employment.company:name, address{street, city} AS company WITH employment.employment_id TO company.employment_id
+NEST company:name, address{street, city} IN employment.company WHERE company.employment_id = employment.employment_id WITH DELETION
+-- Result:
+-- employment: { employment_id, person_id, position, company{name, address{street,city}} }
+
+-- ============================================
+-- Step 3: Nest employment into person (Level 1 -> 0)
+-- ============================================
+-- Reverse of: UNNEST person.employment:position, company{name, address{street, city}} AS employment WITH person.person_id TO employment.person_id
+NEST employment:position, company{name, address{street, city}} IN person.employment WHERE employment.person_id = person.person_id WITH DELETION
+-- Result:
+-- person: { person_id, vorname, nachname, age, employment{position, company{...}} }
+
+-- ============================================
+-- Step 4: Nest address into person (Level 1 -> 0)
+-- ============================================
+-- Reverse of: UNNEST person.address:street,city AS address WITH person.person_id TO address.person_id
+NEST address:street,city IN person.address WHERE address.person_id = person.person_id WITH DELETION
+-- Result:
+-- person: { person_id, vorname, nachname, age, address{street,city}, employment{...} }
+
+-- ============================================
+-- Step 5: Collect person_tag into person.tags array (1:N -> Array)
+-- ============================================
+-- Reverse of: SPLIT person INTO person(...), person_tag(person_id, tags)
+--             UNWIND person_tag.tags
+--             RENAME tags TO tag_value
+-- TODO: WIND operation not yet implemented in grammar
+-- Semantic: Collect multiple rows back into array field
+WIND person_tag.tag_value INTO person.tags BY person_id
+DELETE ENTITY person_tag
+-- Result:
+-- person: { person_id, vorname, nachname, age, address{...}, employment{...}, tags[] }
+
+-- ============================================
+-- Step 6: Collect person_knows into person.knows array (M:N -> Array)
+-- ============================================
+-- Reverse of: SPLIT person INTO person(...), person_knows(person_id, knows)
+--             UNWIND person_knows.knows
+--             RENAME knows TO knows_person_id
+-- TODO: WIND operation not yet implemented in grammar
+-- Semantic: Collect M:N relationship rows back into array field
+WIND person_knows.knows_person_id INTO person.knows BY person_id
+DELETE ENTITY person_knows
+-- Result:
+-- person: { person_id, vorname, nachname, age, address{...}, employment{...}, tags[], knows[] }
+
+-- ============================================
+-- Step 7: Wrap vorname, nachname into name object
+-- ============================================
+-- Reverse of: FLATTEN person.name
+--             RENAME name_vorname TO vorname
+--             RENAME name_nachname TO nachname
+-- TODO: WRAP operation not yet implemented in grammar
+-- Semantic: Combine flat fields into nested object
+WRAP person.vorname, person.nachname AS name IN person
+-- Result:
+-- person: { person_id, name{vorname, nachname}, age, address{...}, employment{...}, tags[], knows[] }
+
+-- ============================================
+-- Step 8: Finalize person document
+-- ============================================
+-- Reverse of: RENAME _id TO person_id
+--             CAST age TO Integer
+RENAME FEATURE person_id TO _id IN person
+CAST person.age TO String
+-- Final Result:
+-- person: {
+--   _id,
+--   name: { vorname, nachname },
+--   age: "28",
+--   address: { street, city },
+--   employment: {
+--     position,
+--     company: {
+--       name,
+--       address: { street, city }
+--     }
+--   },
+--   tags: [],
+--   knows: []
+-- }
+
+-- ============================================
+-- Operation Mapping (Forward <-> Reverse)
+-- ============================================
+-- UNNEST <-> NEST     [IMPLEMENTED]
+-- SPLIT  <-> MERGE    [IMPLEMENTED]
+-- FLATTEN <-> WRAP    [TODO - not in grammar]
+-- UNWIND <-> WIND     [TODO - not in grammar]

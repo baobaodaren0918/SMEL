@@ -294,6 +294,16 @@ class SMEL_SpecificVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
+    # Visit a parse tree produced by SMEL_SpecificParser#unnestCarryList.
+    def visitUnnestCarryList(self, ctx:SMEL_SpecificParser.UnnestCarryListContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by SMEL_SpecificParser#unnestCarryField.
+    def visitUnnestCarryField(self, ctx:SMEL_SpecificParser.UnnestCarryFieldContext):
+        return self.visitChildren(ctx)
+
+
     # Visit a parse tree produced by SMEL_SpecificParser#unnestFieldList.
     def visitUnnestFieldList(self, ctx:SMEL_SpecificParser.UnnestFieldListContext):
         return self.visitChildren(ctx)
@@ -316,11 +326,6 @@ class SMEL_SpecificVisitor(ParseTreeVisitor):
 
     # Visit a parse tree produced by SMEL_SpecificParser#nest.
     def visitNest(self, ctx:SMEL_SpecificParser.NestContext):
-        return self.visitChildren(ctx)
-
-
-    # Visit a parse tree produced by SMEL_SpecificParser#nestClause.
-    def visitNestClause(self, ctx:SMEL_SpecificParser.NestClauseContext):
         return self.visitChildren(ctx)
 
 

@@ -113,8 +113,34 @@ class SchemaTransformer:
         return self.database
 
     def _handle_nest(self, params: Dict) -> None:
-        source_name, target_name, alias = params["source"], params["target"], params["alias"]
+        """
+        NEST: Embed separate table into parent as nested object (denormalization).
+
+        Reference: Bianca Meier - NEST vendor:id,name,country IN product.vendor WHERE vendor.id = product.vendorid [with Deletion]
+        Syntax: NEST address:street,city IN person.address WHERE address.person_id = person.person_id [WITH DELETION]
+
+        Example: NEST_PS address:street,city IN person.address WHERE address.person_id = person.person_id
+          Before: person { person_id }
+                  address { person_id, street, city }
+          After:  person { person_id, address: { street, city } }
+
+        Parameters:
+        - source: address (source entity to embed)
+        - target: person (target entity)
+        - alias: address (embedded field name)
+        - attributes: [street, city] (attributes to embed)
+        - source_fk: address.person_id (source FK for matching)
+        - target_pk: person.person_id (target PK for matching)
+        - with_deletion: True/False (delete source after embedding)
+        """
+        source_name = params.get("source")
+        target_name = params.get("target")
+        alias = params.get("alias")
+        attributes = params.get("attributes", [])
+        with_deletion = params.get("with_deletion", False)
         cardinality = Cardinality.ONE_TO_ONE
+
+        # Backward compatibility: support old "clauses" format
         for c in params.get("clauses", []):
             if c["type"] == "CARDINALITY":
                 cardinality = self.CARDINALITY_MAP.get(c["value"], Cardinality.ONE_TO_ONE)
@@ -124,21 +150,37 @@ class SchemaTransformer:
         if not source_entity or not target_entity:
             return
 
+        # Create embedded entity with specified attributes (or all non-FK attributes if not specified)
         fk_attr_names = {rel.ref_name for rel in source_entity.get_references()}
         embedded_entity = EntityType(object_name=[alias])
-        for attr in source_entity.attributes:
-            if attr.attr_name not in fk_attr_names:
-                embedded_entity.add_attribute(Attribute(attr.attr_name, attr.data_type, False, attr.is_optional))
+
+        if attributes:
+            # Use specified attributes
+            for attr_name in attributes:
+                attr = source_entity.get_attribute(attr_name)
+                if attr:
+                    embedded_entity.add_attribute(Attribute(attr.attr_name, attr.data_type, False, attr.is_optional))
+        else:
+            # Use all non-FK attributes (backward compatibility)
+            for attr in source_entity.attributes:
+                if attr.attr_name not in fk_attr_names:
+                    embedded_entity.add_attribute(Attribute(attr.attr_name, attr.data_type, False, attr.is_optional))
 
         self.database.add_entity_type(embedded_entity)
         target_entity.add_relationship(Embedded(aggr_name=alias, aggregates=alias, cardinality=cardinality,
                                                 is_optional=not cardinality.is_required()))
         self.changes.append(f"NEST:{target_name}.{alias}")
 
+        # Remove FK reference from target to source
         for rel in list(target_entity.relationships):
             if isinstance(rel, Reference) and rel.get_target_entity_name() == source_name:
                 target_entity.remove_relationship(rel.ref_name)
                 target_entity.remove_attribute(rel.ref_name)
+
+        # Delete source entity if WITH DELETION is specified
+        if with_deletion:
+            self.database.remove_entity_type(source_name)
+            self.changes.append(f"DELETE_ENTITY:{source_name}")
 
     def _handle_flatten(self, params: Dict) -> None:
         """
@@ -210,28 +252,31 @@ class SchemaTransformer:
         """
         UNNEST: Extract nested object to separate table (normalization).
 
-        This is the reverse of NEST - extracts embedded document to new table.
-        Uses EXPLICIT design: nested objects must be explicitly specified with {braces}.
+        Reference: Bianca Meier - reverse of NEST operation
+        Syntax: UNNEST person.address:street,city AS address WITH person.person_id TO address.person_id
 
-        Example: UNNEST_PS person.employment:position,{company} AS employment WITH person.person_id
-          - 'position' is a regular attribute
-          - '{company}' is a nested object (explicitly marked)
-          Before: person { person_id, employment: { position, company: { name } } }
+        Multiple carry fields:
+          UNNEST person.employment:position AS employment
+              WITH person.person_id TO employment.person_id, person.dept_id TO employment.dept_id
+
+        Example: UNNEST_PS person.address:street,city AS address WITH person.person_id TO address.person_id
+          Before: person { person_id, address: { street, city } }
           After:  person { person_id }
-                  employment { person_id, position, company: { name } }
+                  address { person_id, street, city }
 
         Parameters:
-        - source_path: person.employment (the nested path to extract)
-        - attributes: [position] (regular attributes to include)
-        - nested: [company] (nested objects to transfer, from {braces})
-        - target: employment (the new table name)
-        - parent_key: person.person_id (the parent's key to copy as FK)
+        - source_path: person.address (the nested path to extract)
+        - attributes: [street, city] (attributes to include)
+        - nested: [] (nested objects to transfer, from {braces})
+        - target: address (the new table name)
+        - carry_fields: [{'source': 'person.person_id', 'target': 'address.person_id', 'field_name': 'person_id'}]
+                        List of fields to copy from source to new table
         """
         source_path = params.get("source_path")
         attributes = params.get("attributes", [])  # Regular attributes
         nested_raw = params.get("nested", [])  # Nested objects from parser
         target_name = params.get("target")
-        parent_key = params.get("parent_key")
+        carry_fields = params.get("carry_fields", [])  # Fields to copy from source
 
         # Extract nested object names from the new recursive format
         # New format: [{'name': 'company', 'attributes': [...], 'nested': [...]}]
@@ -243,10 +288,10 @@ class SchemaTransformer:
             else:
                 nested_objects.append(item)
 
-        if not source_path or not target_name or not parent_key:
+        if not source_path or not target_name:
             return
 
-        # Parse source path: person.employment -> parent=person, nested=employment
+        # Parse source path: person.address -> parent=person, nested=address
         path_parts = source_path.split(".")
         if len(path_parts) < 2:
             return
@@ -254,20 +299,10 @@ class SchemaTransformer:
         nested_name = path_parts[-1]
         parent_path = ".".join(path_parts[:-1])
 
-        # Parse parent key: person.person_id -> key=person_id
-        parent_key_parts = parent_key.split(".")
-        if len(parent_key_parts) < 2:
-            return
-        parent_key_name = parent_key_parts[-1]
-
         # Get parent entity
         parent_entity = self.database.get_entity_type(parent_path)
         if not parent_entity:
             return
-
-        # Get the parent's key attribute (for FK type)
-        parent_key_attr = parent_entity.get_attribute(parent_key_name)
-        fk_type = parent_key_attr.data_type if parent_key_attr else PrimitiveDataType(PrimitiveType.STRING)
 
         # Try to find the embedded entity
         embedded_entity = None
@@ -290,9 +325,24 @@ class SchemaTransformer:
         # Create new entity
         new_entity = EntityType(object_name=[target_name])
 
-        # Add parent's key as FK
-        fk_attr = Attribute(parent_key_name, fk_type, False, False)
-        new_entity.add_attribute(fk_attr)
+        # Add carry fields (fields copied from parent table to new table)
+        # These are the fields specified in WITH clause, e.g.:
+        #   WITH person.person_id AS address.person_id, person.dept_id AS address.dept_id
+        for carry in carry_fields:
+            source_field = carry.get("source", "")  # e.g., person.person_id
+            field_name = carry.get("field_name", "")  # e.g., person_id
+
+            # Parse source field to get the attribute name
+            source_parts = source_field.split(".")
+            source_attr_name = source_parts[-1] if source_parts else source_field
+
+            # Get the source attribute's type from parent entity
+            source_attr = parent_entity.get_attribute(source_attr_name)
+            field_type = source_attr.data_type if source_attr else PrimitiveDataType(PrimitiveType.STRING)
+
+            # Add the field to the new entity
+            carry_attr = Attribute(field_name, field_type, False, False)
+            new_entity.add_attribute(carry_attr)
 
         # Collect embedded relationship names from the source entity
         embedded_map = {}  # name -> Embedded relationship
@@ -790,6 +840,19 @@ class SchemaTransformer:
                 unique_properties=unique_props
             )
 
+        # Remove existing primary key constraints before adding new one
+        if isinstance(constraint, UniqueConstraint) and constraint.is_primary_key:
+            # Clear is_key on old PK attributes
+            for old_c in entity.constraints:
+                if isinstance(old_c, UniqueConstraint) and old_c.is_primary_key:
+                    for up in old_c.unique_properties:
+                        old_attr = entity.get_attribute_by_id(up.property_id)
+                        if old_attr and old_attr.attr_name not in key_columns:
+                            old_attr.is_key = False
+            # Remove old PK constraints
+            entity.constraints = [c for c in entity.constraints
+                                  if not (isinstance(c, UniqueConstraint) and c.is_primary_key)]
+
         entity.add_constraint(constraint)
         key_names_str = ", ".join(key_columns)
         self.changes.append(f"ADD_KEY:{entity_name}.({key_names_str})")
@@ -1114,15 +1177,20 @@ class SchemaTransformer:
 
             new_entity = EntityType(object_name=[part_name])
 
+            # Track old->new meta_id mapping for constraint updates
+            meta_id_map = {}
+
             # If fields are explicitly specified, use them
             if part_fields:
                 for field_name in part_fields:
                     attr = source.get_attribute(field_name)
                     if attr:
-                        # Don't mark as key here (will be handled by PK constraint)
-                        new_entity.add_attribute(Attribute(
-                            attr.attr_name, attr.data_type, False, attr.is_optional
-                        ))
+                        # Create new attribute with is_key preserved from source
+                        new_attr = Attribute(
+                            attr.attr_name, attr.data_type, attr.is_key, attr.is_optional
+                        )
+                        meta_id_map[attr.meta_id] = new_attr.meta_id
+                        new_entity.add_attribute(new_attr)
             else:
                 # Fallback: split attributes evenly (old behavior)
                 attrs = list(source.attributes)
@@ -1133,13 +1201,20 @@ class SchemaTransformer:
                     selected_attrs = attrs[mid:] if mid > 0 else attrs[1:]
 
                 for attr in selected_attrs:
-                    new_entity.add_attribute(Attribute(
-                        attr.attr_name, attr.data_type, False, attr.is_optional
-                    ))
+                    new_attr = Attribute(
+                        attr.attr_name, attr.data_type, attr.is_key, attr.is_optional
+                    )
+                    meta_id_map[attr.meta_id] = new_attr.meta_id
+                    new_entity.add_attribute(new_attr)
 
-            # Each part reuses the source primary key
+            # Each part reuses the source primary key with updated property_ids
             if pk:
-                new_entity.add_constraint(copy.deepcopy(pk))
+                new_pk = copy.deepcopy(pk)
+                # Update property_ids to point to new attribute meta_ids
+                for up in new_pk.unique_properties:
+                    if up.property_id in meta_id_map:
+                        up.property_id = meta_id_map[up.property_id]
+                new_entity.add_constraint(new_pk)
 
             self.database.add_entity_type(new_entity)
             created_entities.append(part_name)
@@ -1400,12 +1475,22 @@ def db_to_dict(db: Database) -> Dict[str, Any]:
     """
     entities = {}
     for name, entity in db.entity_types.items():
+        def get_type_str(data_type):
+            """Convert data type to string representation."""
+            if hasattr(data_type, 'primitive_type'):
+                return data_type.primitive_type.value
+            elif hasattr(data_type, 'element_type'):
+                # ListDataType - show as array[element_type]
+                element = get_type_str(data_type.element_type)
+                return f"array[{element}]"
+            return 'unknown'
+
         entities[name] = {
             "name": name,
             "attributes": [
                 {
                     "name": a.attr_name,
-                    "type": a.data_type.primitive_type.value if hasattr(a.data_type, 'primitive_type') else 'unknown',
+                    "type": get_type_str(a.data_type),
                     "is_key": a.is_key,
                     "is_optional": a.is_optional
                 }
@@ -1659,7 +1744,19 @@ def _calculate_changes(prev: Dict, after: Dict, op) -> Dict:
         new_refs = set(after_refs.keys()) - set(prev_refs.keys())
         deleted_refs = set(prev_refs.keys()) - set(after_refs.keys())
 
-        if new_attrs or deleted_attrs or new_embedded or deleted_embedded or new_refs or deleted_refs:
+        # Check for attribute TYPE changes (for CAST and UNWIND operations)
+        type_changed_attrs = []
+        for attr_name in set(prev_attrs.keys()) & set(after_attrs.keys()):
+            prev_type = prev_attrs[attr_name].get("type", "")
+            after_type = after_attrs[attr_name].get("type", "")
+            if prev_type != after_type:
+                type_changed_attrs.append({
+                    "name": attr_name,
+                    "old_type": prev_type,
+                    "new_type": after_type
+                })
+
+        if new_attrs or deleted_attrs or new_embedded or deleted_embedded or new_refs or deleted_refs or type_changed_attrs:
             changes["modified_entities"].append(name)
             changes["affected_entities"].append({
                 "name": name,
@@ -1670,7 +1767,8 @@ def _calculate_changes(prev: Dict, after: Dict, op) -> Dict:
                 "new_embedded": [after_embedded[e] for e in new_embedded],
                 "deleted_embedded": list(deleted_embedded),
                 "new_references": [after_refs[r] for r in new_refs],
-                "deleted_references": list(deleted_refs)
+                "deleted_references": list(deleted_refs),
+                "type_changed_attributes": type_changed_attrs
             })
 
     return changes
