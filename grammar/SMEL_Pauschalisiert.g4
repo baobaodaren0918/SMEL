@@ -259,12 +259,22 @@ flatten_ps: FLATTEN_PS qualifiedName;
 
 // UNNEST_PS - Extract nested object to separate table (normalization)
 // This is the reverse of NEST - extracts embedded document to new table
-// Example: UNNEST_PS person.address:street,city AS address WITH person.person_id
-//   Before: person { person_id, address: { street, city } }
+// Example: UNNEST_PS person.employment:position,{company} AS employment WITH person.person_id
+//   - 'position' is a regular attribute
+//   - '{company}' is a nested object (wrapped in braces)
+//   Before: person { person_id, employment: { position, company: {...} } }
 //   After:  person { person_id }
-//          address { person_id, street, city }
+//           employment { person_id, position, company: {...} }
 // Note: Use separate ADD_PS KEY, ADD_PS REFERENCE for constraints
-unnest_ps: UNNEST_PS qualifiedName COLON identifierList AS identifier WITH qualifiedName;
+unnest_ps: UNNEST_PS qualifiedName COLON unnestFieldList AS identifier WITH qualifiedName;
+
+// Field list for UNNEST: supports both attributes and nested objects
+// - identifier: regular attribute (e.g., position, name)
+// - {identifier}: nested object to transfer (e.g., {company}, {address})
+unnestFieldList: unnestField (COMMA unnestField)*;
+unnestField: identifier                    # AttributeField
+           | LBRACE identifier RBRACE      # NestedField
+           ;
 
 // UNWIND_PS - Expand array field into multiple rows
 // Reference: André Conrad - array expansion operation
@@ -414,6 +424,7 @@ TRUE: 'true' | 'TRUE'; FALSE: 'false' | 'FALSE'; NULL: 'null' | 'NULL';
 
 // Symbols
 COLON: ':'; COMMA: ','; DOT: '.'; LPAREN: '('; RPAREN: ')'; LBRACKET: '['; RBRACKET: ']';
+LBRACE: '{'; RBRACE: '}';
 EQUALS: '=';
 
 // ----------------------------------------------------------------------------

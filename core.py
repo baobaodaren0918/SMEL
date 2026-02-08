@@ -211,21 +211,25 @@ class SchemaTransformer:
         UNNEST: Extract nested object to separate table (normalization).
 
         This is the reverse of NEST - extracts embedded document to new table.
-        Inner nested objects are preserved and transferred to the new table.
+        Uses EXPLICIT design: nested objects must be explicitly specified with {braces}.
 
-        Example: UNNEST_PS person.employment:position AS employment WITH person.person_id
+        Example: UNNEST_PS person.employment:position,{company} AS employment WITH person.person_id
+          - 'position' is a regular attribute
+          - '{company}' is a nested object (explicitly marked)
           Before: person { person_id, employment: { position, company: { name } } }
           After:  person { person_id }
-                  employment { person_id, position, company: { name } }  <- company preserved!
+                  employment { person_id, position, company: { name } }
 
         Parameters:
         - source_path: person.employment (the nested path to extract)
-        - fields: [position] (fields to include in new table)
+        - attributes: [position] (regular attributes to include)
+        - nested: [company] (nested objects to transfer, from {braces})
         - target: employment (the new table name)
         - parent_key: person.person_id (the parent's key to copy as FK)
         """
         source_path = params.get("source_path")
-        fields = params.get("fields", [])
+        attributes = params.get("attributes", [])  # Regular attributes
+        nested_objects = params.get("nested", [])  # Nested objects from {braces}
         target_name = params.get("target")
         parent_key = params.get("parent_key")
 
@@ -287,13 +291,13 @@ class SchemaTransformer:
                 if isinstance(rel, Embedded):
                     embedded_map[rel.aggr_name] = rel
 
-        # Separate fields into attributes and embedded objects
-        fields_set = set(fields)
-        specified_embedded = fields_set & set(embedded_map.keys())  # embedded objects in field list
-        specified_attributes = fields_set - specified_embedded       # regular attributes
+        # EXPLICIT DESIGN: attributes and nested are already separated by the parser
+        # - attributes: regular fields like 'position', 'name'
+        # - nested_objects: nested objects like 'company', 'address' (from {braces})
+        specified_embedded = set(nested_objects) & set(embedded_map.keys())
 
         # Add specified attributes from embedded entity
-        for field_name in specified_attributes:
+        for field_name in attributes:
             if embedded_entity:
                 attr = embedded_entity.get_attribute(field_name)
                 if attr:

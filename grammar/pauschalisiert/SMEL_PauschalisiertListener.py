@@ -557,6 +557,33 @@ class SMEL_PauschalisiertListener(ParseTreeListener):
         pass
 
 
+    # Enter a parse tree produced by SMEL_PauschalisiertParser#unnestFieldList.
+    def enterUnnestFieldList(self, ctx:SMEL_PauschalisiertParser.UnnestFieldListContext):
+        pass
+
+    # Exit a parse tree produced by SMEL_PauschalisiertParser#unnestFieldList.
+    def exitUnnestFieldList(self, ctx:SMEL_PauschalisiertParser.UnnestFieldListContext):
+        pass
+
+
+    # Enter a parse tree produced by SMEL_PauschalisiertParser#AttributeField.
+    def enterAttributeField(self, ctx:SMEL_PauschalisiertParser.AttributeFieldContext):
+        pass
+
+    # Exit a parse tree produced by SMEL_PauschalisiertParser#AttributeField.
+    def exitAttributeField(self, ctx:SMEL_PauschalisiertParser.AttributeFieldContext):
+        pass
+
+
+    # Enter a parse tree produced by SMEL_PauschalisiertParser#NestedField.
+    def enterNestedField(self, ctx:SMEL_PauschalisiertParser.NestedFieldContext):
+        pass
+
+    # Exit a parse tree produced by SMEL_PauschalisiertParser#NestedField.
+    def exitNestedField(self, ctx:SMEL_PauschalisiertParser.NestedFieldContext):
+        pass
+
+
     # Enter a parse tree produced by SMEL_PauschalisiertParser#unwind_ps.
     def enterUnwind_ps(self, ctx:SMEL_PauschalisiertParser.Unwind_psContext):
         pass

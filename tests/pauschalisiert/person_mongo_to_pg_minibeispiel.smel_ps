@@ -64,8 +64,8 @@ ADD_PS REFERENCE address.person_id REFERENCES person(person_id) WITH CARDINALITY
 -- ============================================
 -- Step 2: Extract employment table (level 1)
 -- ============================================
--- Note: 'company' is explicitly listed to transfer the nested object
-UNNEST_PS person.employment:position,company AS employment WITH person.person_id
+-- Note: {company} in braces = nested object to transfer
+UNNEST_PS person.employment:position,{company} AS employment WITH person.person_id
 ADD_PS KEY employment.employment_id AS String
 ADD_PS REFERENCE employment.person_id REFERENCES person(person_id) WITH CARDINALITY ONE_TO_ONE
 -- Result:
@@ -77,8 +77,8 @@ ADD_PS REFERENCE employment.person_id REFERENCES person(person_id) WITH CARDINAL
 -- ============================================
 -- Step 3: Extract company table (level 2) - from employment table
 -- ============================================
--- Note: 'address' is explicitly listed to transfer the nested object
-UNNEST_PS employment.company:name,address AS company WITH employment.employment_id
+-- Note: {address} in braces = nested object to transfer
+UNNEST_PS employment.company:name,{address} AS company WITH employment.employment_id
 ADD_PS KEY company.company_id AS String
 ADD_PS REFERENCE company.employment_id REFERENCES employment(employment_id) WITH CARDINALITY ONE_TO_ONE
 -- Result:

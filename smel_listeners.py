@@ -287,20 +287,32 @@ class SMELSpecificListener(SMEL_SpecificListener, BaseSMELListener):
         }))
 
     def enterUnnest(self, ctx):
-        # New syntax: UNNEST qualifiedName COLON identifierList AS identifier WITH qualifiedName
+        # New syntax: UNNEST qualifiedName COLON unnestFieldList AS identifier WITH qualifiedName
         # Extracts nested object to separate table (normalization)
-        # Example: UNNEST person.address:street,city AS address WITH person.person_id
-        #   Before: person { person_id, address: { street, city } }
-        #   After:  person { person_id }
-        #          address { person_id, street, city }
-        source_path = ctx.qualifiedName(0).getText()  # person.address
-        fields = [id.getText() for id in ctx.identifierList().identifier()]  # street, city
-        target_name = ctx.identifier().getText()  # address
+        # Example: UNNEST person.employment:position,{company} AS employment WITH person.person_id
+        #   - 'position' is a regular attribute
+        #   - '{company}' is a nested object (wrapped in braces)
+        source_path = ctx.qualifiedName(0).getText()  # person.employment
+        target_name = ctx.identifier().getText()  # employment
         parent_key = ctx.qualifiedName(1).getText()  # person.person_id
+
+        # Parse field list: separate attributes and nested objects
+        attributes = []  # Regular fields like 'position', 'name'
+        nested = []      # Nested objects like '{company}', '{address}'
+
+        for field_ctx in ctx.unnestFieldList().unnestField():
+            # Check if it's an AttributeField or NestedField
+            if hasattr(field_ctx, 'LBRACE') and field_ctx.LBRACE():
+                # NestedField: {identifier}
+                nested.append(field_ctx.identifier().getText())
+            else:
+                # AttributeField: identifier
+                attributes.append(field_ctx.identifier().getText())
 
         self.operations.append(Operation("UNNEST", {
             "source_path": source_path,
-            "fields": fields,
+            "attributes": attributes,  # Regular attributes
+            "nested": nested,          # Nested objects to transfer
             "target": target_name,
             "parent_key": parent_key
         }, original_keyword="UNNEST"))
@@ -714,20 +726,32 @@ class SMELPauschalisiertListener(SMEL_PauschalisiertListener, BaseSMELListener):
         }, original_keyword="NEST_PS"))
 
     def enterUnnest_ps(self, ctx):
-        # New syntax: UNNEST_PS qualifiedName COLON identifierList AS identifier WITH qualifiedName
+        # New syntax: UNNEST_PS qualifiedName COLON unnestFieldList AS identifier WITH qualifiedName
         # Extracts nested object to separate table (normalization)
-        # Example: UNNEST_PS person.address:street,city AS address WITH person.person_id
-        #   Before: person { person_id, address: { street, city } }
-        #   After:  person { person_id }
-        #          address { person_id, street, city }
-        source_path = ctx.qualifiedName(0).getText()  # person.address
-        fields = [id.getText() for id in ctx.identifierList().identifier()]  # street, city
-        target_name = ctx.identifier().getText()  # address
+        # Example: UNNEST_PS person.employment:position,{company} AS employment WITH person.person_id
+        #   - 'position' is a regular attribute
+        #   - '{company}' is a nested object (wrapped in braces)
+        source_path = ctx.qualifiedName(0).getText()  # person.employment
+        target_name = ctx.identifier().getText()  # employment
         parent_key = ctx.qualifiedName(1).getText()  # person.person_id
+
+        # Parse field list: separate attributes and nested objects
+        attributes = []  # Regular fields like 'position', 'name'
+        nested = []      # Nested objects like '{company}', '{address}'
+
+        for field_ctx in ctx.unnestFieldList().unnestField():
+            # Check if it's an AttributeField or NestedField
+            if hasattr(field_ctx, 'LBRACE') and field_ctx.LBRACE():
+                # NestedField: {identifier}
+                nested.append(field_ctx.identifier().getText())
+            else:
+                # AttributeField: identifier
+                attributes.append(field_ctx.identifier().getText())
 
         self.operations.append(Operation("UNNEST", {
             "source_path": source_path,
-            "fields": fields,
+            "attributes": attributes,  # Regular attributes
+            "nested": nested,          # Nested objects to transfer
             "target": target_name,
             "parent_key": parent_key
         }, original_keyword="UNNEST_PS"))
