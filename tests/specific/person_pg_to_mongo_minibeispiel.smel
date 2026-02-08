@@ -2,7 +2,7 @@
 -- Normalized Tables (3NF) -> Person Document (multi-level nested objects + arrays)
 -- Direction: Normalized (3NF) -> Denormalized (Embedded)
 --
--- Operation Semantics (per Bianca Meier reference):
+-- Operation Semantics:
 --   NEST:      Embed separate table into parent as nested object (reverse of UNNEST)
 --   UNFLATTEN: Combine flat fields into nested object (reverse of FLATTEN)
 --   WIND:      Collect multiple rows into array (reverse of UNWIND)
@@ -128,7 +128,7 @@ CAST person.age TO String
 -- ============================================
 -- Operation Mapping (Forward <-> Reverse)
 -- ============================================
--- UNNEST  <-> NEST       [Bianca Meier]
+-- UNNEST  <-> NEST
 -- FLATTEN <-> UNFLATTEN  [Symmetric naming]
 -- UNWIND  <-> WIND       [Symmetric naming]
 -- SPLIT   <-> MERGE      [Andre Conrad]

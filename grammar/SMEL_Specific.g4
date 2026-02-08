@@ -259,7 +259,6 @@ flatten: FLATTEN qualifiedName;
 unflatten: UNFLATTEN identifier LPAREN identifierList RPAREN AS identifier;
 
 // UNNEST - Extract nested object to separate table (normalization)
-// Reference: Bianca Meier - reverse of NEST operation
 // Example: UNNEST person.address:street,city AS address WITH person.person_id TO address.person_id
 // Example with multiple carry fields:
 //   UNNEST person.employment:position AS employment
@@ -301,7 +300,6 @@ unwind: UNWIND qualifiedName (INTO identifier)?;
 wind: WIND identifier INTO qualifiedName WHERE condition (WITH DELETION)?;
 
 // NEST - Merge separate table into embedded document (PostgreSQL -> MongoDB)
-// Reference: Bianca Meier - NEST vendor:id,name,country IN product.vendor WHERE vendor.id = product.vendorid [with Deletion]
 // Example: NEST address:street,city IN person.address WHERE address.person_id = person.person_id
 // Example with deletion: NEST address:street,city IN person.address WHERE address.person_id = person.person_id WITH DELETION
 //   - 'address' is source entity

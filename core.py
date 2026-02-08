@@ -116,7 +116,6 @@ class SchemaTransformer:
         """
         NEST: Embed separate table into parent as nested object (denormalization).
 
-        Reference: Bianca Meier - NEST vendor:id,name,country IN product.vendor WHERE vendor.id = product.vendorid [with Deletion]
         Syntax: NEST address:street,city IN person.address WHERE address.person_id = person.person_id [WITH DELETION]
 
         Example: NEST_PS address:street,city IN person.address WHERE address.person_id = person.person_id
@@ -294,7 +293,6 @@ class SchemaTransformer:
         """
         UNNEST: Extract nested object to separate table (normalization).
 
-        Reference: Bianca Meier - reverse of NEST operation
         Syntax: UNNEST person.address:street,city AS address WITH person.person_id TO address.person_id
 
         Multiple carry fields:

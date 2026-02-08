@@ -361,7 +361,6 @@ class SMELSpecificListener(SMEL_SpecificListener, BaseSMELListener):
 
     def enterNest(self, ctx):
         # New syntax: NEST identifier COLON unnestFieldList IN qualifiedName WHERE qualifiedName EQUALS qualifiedName (WITH DELETION)?
-        # Reference: Bianca Meier - NEST vendor:id,name,country IN product.vendor WHERE vendor.id = product.vendorid [with Deletion]
         # Example: NEST address:street,city IN person.address WHERE address.person_id = person.person_id WITH DELETION
         source_entity = ctx.identifier().getText()  # address
         target_location = ctx.qualifiedName(0).getText()  # person.address
@@ -391,7 +390,6 @@ class SMELSpecificListener(SMEL_SpecificListener, BaseSMELListener):
 
     def enterUnnest(self, ctx):
         # New syntax: UNNEST qualifiedName COLON unnestFieldList AS identifier (WITH unnestCarryList)?
-        # Reference: Bianca Meier - reverse of NEST operation
         # Example: UNNEST person.address:street,city AS address WITH person.person_id TO address.person_id
         # Example with multiple carry fields:
         #   UNNEST person.employment:position AS employment
@@ -870,7 +868,6 @@ class SMELPauschalisiertListener(SMEL_PauschalisiertListener, BaseSMELListener):
 
     def enterNest_ps(self, ctx):
         # New syntax: NEST_PS identifier COLON unnestFieldList IN qualifiedName WHERE qualifiedName EQUALS qualifiedName (WITH DELETION)?
-        # Reference: Bianca Meier - NEST vendor:id,name,country IN product.vendor WHERE vendor.id = product.vendorid [with Deletion]
         # Example: NEST_PS address:street,city IN person.address WHERE address.person_id = person.person_id WITH DELETION
         source_entity = ctx.identifier().getText()  # address
         target_location = ctx.qualifiedName(0).getText()  # person.address
@@ -900,7 +897,6 @@ class SMELPauschalisiertListener(SMEL_PauschalisiertListener, BaseSMELListener):
 
     def enterUnnest_ps(self, ctx):
         # New syntax: UNNEST_PS qualifiedName COLON unnestFieldList AS identifier (WITH unnestCarryList)?
-        # Reference: Bianca Meier - reverse of NEST operation
         # Example: UNNEST_PS person.address:street,city AS address WITH person.person_id TO address.person_id
         # Example with multiple carry fields:
         #   UNNEST_PS person.employment:position AS employment

@@ -2,7 +2,7 @@
 -- Person Document (multi-level nested objects + arrays) -> Normalized Tables
 -- Direction: Denormalized (Embedded) -> Normalized (3NF)
 --
--- Operation Semantics (per Bianca Meier reference):
+-- Operation Semantics:
 --   FLATTEN: Flatten nested object fields into same table (reduce depth by 1)
 --   UNNEST:  Extract nested object to separate table (normalization)
 --   SPLIT:   Vertical partitioning of same-level fields
