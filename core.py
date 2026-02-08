@@ -229,9 +229,19 @@ class SchemaTransformer:
         """
         source_path = params.get("source_path")
         attributes = params.get("attributes", [])  # Regular attributes
-        nested_objects = params.get("nested", [])  # Nested objects from {braces}
+        nested_raw = params.get("nested", [])  # Nested objects from parser
         target_name = params.get("target")
         parent_key = params.get("parent_key")
+
+        # Extract nested object names from the new recursive format
+        # New format: [{'name': 'company', 'attributes': [...], 'nested': [...]}]
+        # Old format: ['company', 'address'] (for backward compatibility)
+        nested_objects = []
+        for item in nested_raw:
+            if isinstance(item, dict):
+                nested_objects.append(item['name'])
+            else:
+                nested_objects.append(item)
 
         if not source_path or not target_name or not parent_key:
             return

@@ -254,21 +254,21 @@ flatten: FLATTEN qualifiedName;
 
 // UNNEST - Extract nested object to separate table (normalization)
 // This is the reverse of NEST - extracts embedded document to new table
-// Example: UNNEST person.employment:position,{company} AS employment WITH person.person_id
+// Example: UNNEST person.employment:position, company{name, address{street, city}} AS employment
 //   - 'position' is a regular attribute
-//   - '{company}' is a nested object (wrapped in braces)
-//   Before: person { person_id, employment: { position, company: {...} } }
+//   - 'company{...}' is a nested object with its structure explicitly shown
+//   Before: person { person_id, employment: { position, company: { name, address: {...} } } }
 //   After:  person { person_id }
-//           employment { person_id, position, company: {...} }
+//           employment { person_id, position, company: { name, address: {...} } }
 // Note: Use separate ADD_PRIMARY_KEY, ADD_REFERENCE for constraints
 unnest: UNNEST qualifiedName COLON unnestFieldList AS identifier WITH qualifiedName;
 
-// Field list for UNNEST: supports both attributes and nested objects
-// - identifier: regular attribute (e.g., position, name)
-// - {identifier}: nested object to transfer (e.g., {company}, {address})
+// Field list for UNNEST: supports both attributes and nested objects (recursive)
+// - identifier: regular attribute (e.g., position, name, street, city)
+// - identifier{...}: nested object with its contents (e.g., company{name, address{street, city}})
 unnestFieldList: unnestField (COMMA unnestField)*;
-unnestField: identifier                    # AttributeField
-           | LBRACE identifier RBRACE      # NestedField
+unnestField: identifier                                    # AttributeField
+           | identifier LBRACE unnestFieldList RBRACE      # NestedField
            ;
 
 // UNWIND - Expand array field into multiple rows

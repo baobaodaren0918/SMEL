@@ -16,7 +16,9 @@ from typing import Dict, List, Any
 sys.path.insert(0, str(Path(__file__).parent))
 
 from grammar.specific.SMEL_SpecificListener import SMEL_SpecificListener
+from grammar.specific.SMEL_SpecificParser import SMEL_SpecificParser
 from grammar.pauschalisiert.SMEL_PauschalisiertListener import SMEL_PauschalisiertListener
+from grammar.pauschalisiert.SMEL_PauschalisiertParser import SMEL_PauschalisiertParser
 
 
 @dataclass
@@ -225,6 +227,45 @@ class BaseSMELListener:
                 result['cardinality'] = clause.withCardinalityClause().cardinalityType().getText()
         return result
 
+    def _parse_unnest_field_list(self, field_list_ctx, parser_module):
+        """
+        Recursively parse UNNEST field list to separate attributes and nested objects.
+
+        Grammar structure:
+          unnestFieldList: unnestField (COMMA unnestField)*;
+          unnestField: identifier                                    # AttributeField
+                     | identifier LBRACE unnestFieldList RBRACE      # NestedField
+
+        Args:
+            field_list_ctx: The unnestFieldList context from parser
+            parser_module: Either SMEL_SpecificParser or SMEL_PauschalisiertParser
+
+        Returns:
+            tuple: (attributes, nested)
+                   - attributes: list of simple attribute names ['position', 'name']
+                   - nested: list of nested object dicts [{'name': 'company', 'children': {...}}]
+        """
+        attributes = []
+        nested = []
+
+        for field_ctx in field_list_ctx.unnestField():
+            if isinstance(field_ctx, parser_module.AttributeFieldContext):
+                # Simple attribute: position, name, street, city
+                attributes.append(field_ctx.identifier().getText())
+            elif isinstance(field_ctx, parser_module.NestedFieldContext):
+                # Nested object: company{name, address{street, city}}
+                nested_name = field_ctx.identifier().getText()
+                # Recursively parse nested field list
+                nested_field_list = field_ctx.unnestFieldList()
+                child_attrs, child_nested = self._parse_unnest_field_list(nested_field_list, parser_module)
+                nested.append({
+                    'name': nested_name,
+                    'attributes': child_attrs,
+                    'nested': child_nested
+                })
+
+        return attributes, nested
+
 
 # ==============================================================================
 # SMEL_Specific Listener - For SMEL_Specific.g4
@@ -289,30 +330,21 @@ class SMELSpecificListener(SMEL_SpecificListener, BaseSMELListener):
     def enterUnnest(self, ctx):
         # New syntax: UNNEST qualifiedName COLON unnestFieldList AS identifier WITH qualifiedName
         # Extracts nested object to separate table (normalization)
-        # Example: UNNEST person.employment:position,{company} AS employment WITH person.person_id
+        # Example: UNNEST person.employment:position, company{name, address{street, city}} AS employment
         #   - 'position' is a regular attribute
-        #   - '{company}' is a nested object (wrapped in braces)
+        #   - 'company{...}' is a nested object with its structure explicitly shown
         source_path = ctx.qualifiedName(0).getText()  # person.employment
         target_name = ctx.identifier().getText()  # employment
         parent_key = ctx.qualifiedName(1).getText()  # person.person_id
 
-        # Parse field list: separate attributes and nested objects
-        attributes = []  # Regular fields like 'position', 'name'
-        nested = []      # Nested objects like '{company}', '{address}'
-
-        for field_ctx in ctx.unnestFieldList().unnestField():
-            # Check if it's an AttributeField or NestedField
-            if hasattr(field_ctx, 'LBRACE') and field_ctx.LBRACE():
-                # NestedField: {identifier}
-                nested.append(field_ctx.identifier().getText())
-            else:
-                # AttributeField: identifier
-                attributes.append(field_ctx.identifier().getText())
+        # Parse field list: recursively separate attributes and nested objects
+        attributes, nested = self._parse_unnest_field_list(
+            ctx.unnestFieldList(), SMEL_SpecificParser)
 
         self.operations.append(Operation("UNNEST", {
             "source_path": source_path,
-            "attributes": attributes,  # Regular attributes
-            "nested": nested,          # Nested objects to transfer
+            "attributes": attributes,  # Regular attributes ['position', 'name']
+            "nested": nested,          # Nested objects [{'name': 'company', 'attributes': [...], 'nested': [...]}]
             "target": target_name,
             "parent_key": parent_key
         }, original_keyword="UNNEST"))
@@ -728,30 +760,21 @@ class SMELPauschalisiertListener(SMEL_PauschalisiertListener, BaseSMELListener):
     def enterUnnest_ps(self, ctx):
         # New syntax: UNNEST_PS qualifiedName COLON unnestFieldList AS identifier WITH qualifiedName
         # Extracts nested object to separate table (normalization)
-        # Example: UNNEST_PS person.employment:position,{company} AS employment WITH person.person_id
+        # Example: UNNEST_PS person.employment:position, company{name, address{street, city}} AS employment
         #   - 'position' is a regular attribute
-        #   - '{company}' is a nested object (wrapped in braces)
+        #   - 'company{...}' is a nested object with its structure explicitly shown
         source_path = ctx.qualifiedName(0).getText()  # person.employment
         target_name = ctx.identifier().getText()  # employment
         parent_key = ctx.qualifiedName(1).getText()  # person.person_id
 
-        # Parse field list: separate attributes and nested objects
-        attributes = []  # Regular fields like 'position', 'name'
-        nested = []      # Nested objects like '{company}', '{address}'
-
-        for field_ctx in ctx.unnestFieldList().unnestField():
-            # Check if it's an AttributeField or NestedField
-            if hasattr(field_ctx, 'LBRACE') and field_ctx.LBRACE():
-                # NestedField: {identifier}
-                nested.append(field_ctx.identifier().getText())
-            else:
-                # AttributeField: identifier
-                attributes.append(field_ctx.identifier().getText())
+        # Parse field list: recursively separate attributes and nested objects
+        attributes, nested = self._parse_unnest_field_list(
+            ctx.unnestFieldList(), SMEL_PauschalisiertParser)
 
         self.operations.append(Operation("UNNEST", {
             "source_path": source_path,
-            "attributes": attributes,  # Regular attributes
-            "nested": nested,          # Nested objects to transfer
+            "attributes": attributes,  # Regular attributes ['position', 'name']
+            "nested": nested,          # Nested objects [{'name': 'company', 'attributes': [...], 'nested': [...]}]
             "target": target_name,
             "parent_key": parent_key
         }, original_keyword="UNNEST_PS"))
