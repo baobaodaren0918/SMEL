@@ -43,6 +43,13 @@ MIGRATION_CONFIGS = {
         "source_type": "Document",
         "target_type": "Relational",
     },
+    # Person: PostgreSQL -> MongoDB (Reverse Migration)
+    "person_r2d_specific": {
+        "source_file": TESTS_DIR / "person_postgresql.sql",
+        "smel_file": TESTS_DIR / "mongo_person_to_document_minibeispiel.smel",
+        "source_type": "Relational",
+        "target_type": "Document",
+    },
 }
 
 

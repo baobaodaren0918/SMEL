@@ -845,8 +845,9 @@ def get_html():
             <span class="control-label">Migration Direction</span>
             <div class="dropdown">
                 <select id="directionSelect">
-                    <option value="person_d2r_specific">Person: MongoDB &rarr; PostgreSQL (Specific Operations)</option>
-                    <option value="person_d2r_pauschalisiert" selected>Person: MongoDB &rarr; PostgreSQL (Pauschalisiert Operations)</option>
+                    <option value="person_d2r_specific">Person: MongoDB &rarr; PostgreSQL (Specific)</option>
+                    <option value="person_d2r_pauschalisiert" selected>Person: MongoDB &rarr; PostgreSQL (Pauschalisiert)</option>
+                    <option value="person_r2d_specific">Person: PostgreSQL &rarr; MongoDB (Reverse)</option>
                 </select>
             </div>
         </div>
