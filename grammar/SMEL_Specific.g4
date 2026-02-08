@@ -60,7 +60,7 @@ operation: add_attribute | add_reference | add_embedded | add_entity
          | remove_index | remove_unique_key | remove_foreign_key
          | remove_label | remove_variation
          | rename_feature | rename_entity | rename_reltype
-         | flatten | unwind | nest | unnest | extract
+         | flatten | unflatten | unwind | wind | nest | unnest | extract
          | copy | copy_key | move | merge | split | cast | linking
 ;
 
@@ -252,6 +252,12 @@ rename_reltype: RENAME_RELTYPE identifier TO identifier;
 //   After:  person { name_vorname, name_nachname, age }
 flatten: FLATTEN qualifiedName;
 
+// UNFLATTEN - Combine flat fields into nested object (reverse of FLATTEN)
+// Example: UNFLATTEN person(vorname, nachname) AS name
+//   Before: person { vorname, nachname, age }
+//   After:  person { name: { vorname, nachname }, age }
+unflatten: UNFLATTEN identifier LPAREN identifierList RPAREN AS identifier;
+
 // UNNEST - Extract nested object to separate table (normalization)
 // Reference: Bianca Meier - reverse of NEST operation
 // Example: UNNEST person.address:street,city AS address WITH person.person_id TO address.person_id
@@ -286,6 +292,13 @@ unnestField: identifier                                    # AttributeField
 //   2. Create new table: UNWIND person.tags[] INTO person_tag (legacy, creates new table)
 // Note: Use separate ADD_PRIMARY_KEY, ADD_FOREIGN_KEY, RENAME_FEATURE for constraints
 unwind: UNWIND qualifiedName (INTO identifier)?;
+
+// WIND - Collect multiple rows into array field (reverse of UNWIND)
+// Example: WIND person_tag INTO person.tags WHERE person_tag.person_id = person.person_id
+//   Before: person_tag { person_id, tag_value } (multiple rows)
+//   After:  person { tags: ["value1", "value2", ...] }
+// Note: WITH DELETION optionally removes source entity after collecting
+wind: WIND identifier INTO qualifiedName WHERE condition (WITH DELETION)?;
 
 // NEST - Merge separate table into embedded document (PostgreSQL -> MongoDB)
 // Reference: Bianca Meier - NEST vendor:id,name,country IN product.vendor WHERE vendor.id = product.vendorid [with Deletion]
@@ -404,7 +417,8 @@ COUNT: 'COUNT'; ON: 'ON';
 RELATIONAL: 'RELATIONAL'; DOCUMENT: 'DOCUMENT'; GRAPH: 'GRAPH'; COLUMNAR: 'COLUMNAR';
 
 // Structure operations
-NEST: 'NEST'; UNNEST: 'UNNEST'; FLATTEN: 'FLATTEN'; EXTRACT: 'EXTRACT'; UNWIND: 'UNWIND';
+NEST: 'NEST'; UNNEST: 'UNNEST'; FLATTEN: 'FLATTEN'; UNFLATTEN: 'UNFLATTEN';
+EXTRACT: 'EXTRACT'; UNWIND: 'UNWIND'; WIND: 'WIND';
 
 // Simple operations
 COPY: 'COPY'; COPY_KEY: 'COPY_KEY'; MOVE: 'MOVE'; MERGE: 'MERGE'; SPLIT: 'SPLIT'; CAST: 'CAST'; LINKING: 'LINKING';

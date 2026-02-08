@@ -1275,6 +1275,20 @@ def get_html():
                         html += ' <span class="param-key">(expand in place)</span>';
                     }
                     break;
+                case 'UNFLATTEN':
+                    // UNFLATTEN: Combine flat fields into nested object (reverse of FLATTEN)
+                    html = '<span class="param-value">' + params.entity + '</span>';
+                    html += '(' + params.fields.join(', ') + ')';
+                    html += ' <span class="param-key">AS</span> <span class="param-value">' + params.nested_name + '</span>';
+                    break;
+                case 'WIND':
+                    // WIND: Collect multiple rows into array (reverse of UNWIND)
+                    html = '<span class="param-value">' + params.source + '</span>';
+                    html += ' <span class="param-key">INTO</span> <span class="param-value">' + params.target + '.' + params.array_name + '</span>';
+                    if (params.with_deletion) {
+                        html += ' <span class="param-key">WITH DELETION</span>';
+                    }
+                    break;
                 case 'SPLIT':
                     // SPLIT: Vertical partitioning of same-level fields
                     // New syntax: SPLIT_PS person INTO person(a, b), person_tag(a, c)

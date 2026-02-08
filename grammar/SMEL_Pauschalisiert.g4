@@ -49,7 +49,7 @@ version: VERSION_NUMBER | INTEGER_LITERAL;                          // 1 | 1.0 |
 // Type:       CAST_PS, LINKING_PS
 // CRUD:       ADD_PS, DELETE_PS, REMOVE_PS, RENAME_PS
 
-operation: nest_ps | unnest_ps | flatten_ps | unwind_ps
+operation: nest_ps | unnest_ps | flatten_ps | unflatten_ps | unwind_ps | wind_ps
          | copy_ps | copy_key_ps | move_ps | merge_ps | split_ps | cast_ps | linking_ps | extract_ps
          | add_ps | delete_ps | remove_ps | rename_ps;
 
@@ -257,6 +257,12 @@ withPropertiesClause: WITH PROPERTIES LPAREN identifierList RPAREN;
 //   After:  person { name_vorname, name_nachname, age }
 flatten_ps: FLATTEN_PS qualifiedName;
 
+// UNFLATTEN_PS - Combine flat fields into nested object (reverse of FLATTEN)
+// Example: UNFLATTEN_PS person(vorname, nachname) AS name
+//   Before: person { vorname, nachname, age }
+//   After:  person { name: { vorname, nachname }, age }
+unflatten_ps: UNFLATTEN_PS identifier LPAREN identifierList RPAREN AS identifier;
+
 // UNNEST_PS - Extract nested object to separate table (normalization)
 // Reference: Bianca Meier - reverse of NEST operation
 // Example: UNNEST_PS person.address:street,city AS address WITH person.person_id TO address.person_id
@@ -291,6 +297,13 @@ unnestField: identifier                                    # AttributeField
 //   2. Create new table: UNWIND_PS person.tags[] INTO person_tag (legacy, creates new table)
 // Note: Use separate ADD_PS KEY, ADD_PS REFERENCE, RENAME_PS FEATURE for constraints
 unwind_ps: UNWIND_PS qualifiedName (INTO identifier)?;
+
+// WIND_PS - Collect multiple rows into array field (reverse of UNWIND)
+// Example: WIND_PS person_tag INTO person.tags WHERE person_tag.person_id = person.person_id
+//   Before: person_tag { person_id, tag_value } (multiple rows)
+//   After:  person { tags: ["value1", "value2", ...] }
+// Note: WITH DELETION optionally removes source entity after collecting
+wind_ps: WIND_PS identifier INTO qualifiedName WHERE condition (WITH DELETION)?;
 
 // NEST_PS - Merge separate table into embedded document (PostgreSQL -> MongoDB)
 // Reference: Bianca Meier - NEST vendor:id,name,country IN product.vendor WHERE vendor.id = product.vendorid [with Deletion]
@@ -396,8 +409,8 @@ COUNT: 'COUNT'; ON: 'ON';
 RELATIONAL: 'RELATIONAL'; DOCUMENT: 'DOCUMENT'; GRAPH: 'GRAPH'; COLUMNAR: 'COLUMNAR';
 
 // Generalized operations with _PS suffix
-NEST_PS: 'NEST_PS'; UNNEST_PS: 'UNNEST_PS'; FLATTEN_PS: 'FLATTEN_PS'; EXTRACT_PS: 'EXTRACT_PS';
-UNWIND_PS: 'UNWIND_PS';
+NEST_PS: 'NEST_PS'; UNNEST_PS: 'UNNEST_PS'; FLATTEN_PS: 'FLATTEN_PS'; UNFLATTEN_PS: 'UNFLATTEN_PS';
+EXTRACT_PS: 'EXTRACT_PS'; UNWIND_PS: 'UNWIND_PS'; WIND_PS: 'WIND_PS';
 ADD_PS: 'ADD_PS'; DELETE_PS: 'DELETE_PS'; REMOVE_PS: 'REMOVE_PS'; RENAME_PS: 'RENAME_PS';
 COPY_PS: 'COPY_PS'; COPY_KEY_PS: 'COPY_KEY_PS'; MOVE_PS: 'MOVE_PS'; MERGE_PS: 'MERGE_PS'; SPLIT_PS: 'SPLIT_PS';
 CAST_PS: 'CAST_PS'; LINKING_PS: 'LINKING_PS';

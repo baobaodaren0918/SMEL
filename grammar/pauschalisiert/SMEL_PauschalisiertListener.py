@@ -548,6 +548,15 @@ class SMEL_PauschalisiertListener(ParseTreeListener):
         pass
 
 
+    # Enter a parse tree produced by SMEL_PauschalisiertParser#unflatten_ps.
+    def enterUnflatten_ps(self, ctx:SMEL_PauschalisiertParser.Unflatten_psContext):
+        pass
+
+    # Exit a parse tree produced by SMEL_PauschalisiertParser#unflatten_ps.
+    def exitUnflatten_ps(self, ctx:SMEL_PauschalisiertParser.Unflatten_psContext):
+        pass
+
+
     # Enter a parse tree produced by SMEL_PauschalisiertParser#unnest_ps.
     def enterUnnest_ps(self, ctx:SMEL_PauschalisiertParser.Unnest_psContext):
         pass
@@ -608,6 +617,15 @@ class SMEL_PauschalisiertListener(ParseTreeListener):
 
     # Exit a parse tree produced by SMEL_PauschalisiertParser#unwind_ps.
     def exitUnwind_ps(self, ctx:SMEL_PauschalisiertParser.Unwind_psContext):
+        pass
+
+
+    # Enter a parse tree produced by SMEL_PauschalisiertParser#wind_ps.
+    def enterWind_ps(self, ctx:SMEL_PauschalisiertParser.Wind_psContext):
+        pass
+
+    # Exit a parse tree produced by SMEL_PauschalisiertParser#wind_ps.
+    def exitWind_ps(self, ctx:SMEL_PauschalisiertParser.Wind_psContext):
         pass
 
 

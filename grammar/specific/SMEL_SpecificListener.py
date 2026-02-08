@@ -512,6 +512,15 @@ class SMEL_SpecificListener(ParseTreeListener):
         pass
 
 
+    # Enter a parse tree produced by SMEL_SpecificParser#unflatten.
+    def enterUnflatten(self, ctx:SMEL_SpecificParser.UnflattenContext):
+        pass
+
+    # Exit a parse tree produced by SMEL_SpecificParser#unflatten.
+    def exitUnflatten(self, ctx:SMEL_SpecificParser.UnflattenContext):
+        pass
+
+
     # Enter a parse tree produced by SMEL_SpecificParser#unnest.
     def enterUnnest(self, ctx:SMEL_SpecificParser.UnnestContext):
         pass
@@ -572,6 +581,15 @@ class SMEL_SpecificListener(ParseTreeListener):
 
     # Exit a parse tree produced by SMEL_SpecificParser#unwind.
     def exitUnwind(self, ctx:SMEL_SpecificParser.UnwindContext):
+        pass
+
+
+    # Enter a parse tree produced by SMEL_SpecificParser#wind.
+    def enterWind(self, ctx:SMEL_SpecificParser.WindContext):
+        pass
+
+    # Exit a parse tree produced by SMEL_SpecificParser#wind.
+    def exitWind(self, ctx:SMEL_SpecificParser.WindContext):
         pass
 
 

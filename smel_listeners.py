@@ -301,6 +301,20 @@ class SMELSpecificListener(SMEL_SpecificListener, BaseSMELListener):
             "source": ctx.qualifiedName().getText()
         }, original_keyword="FLATTEN"))
 
+    def enterUnflatten(self, ctx):
+        # UNFLATTEN - Combine flat fields into nested object (reverse of FLATTEN)
+        # Example: UNFLATTEN person(vorname, nachname) AS name
+        #   Before: person { vorname, nachname, age }
+        #   After:  person { name: { vorname, nachname }, age }
+        entity = ctx.identifier(0).getText()  # person
+        fields = [id.getText() for id in ctx.identifierList().identifier()]  # [vorname, nachname]
+        nested_name = ctx.identifier(1).getText()  # name
+        self.operations.append(Operation("UNFLATTEN", {
+            "entity": entity,
+            "fields": fields,
+            "nested_name": nested_name
+        }, original_keyword="UNFLATTEN"))
+
     def enterUnwind(self, ctx):
         source = ctx.qualifiedName().getText()
         target = ctx.identifier().getText() if ctx.identifier() else None
@@ -318,6 +332,32 @@ class SMELSpecificListener(SMEL_SpecificListener, BaseSMELListener):
                 "mode": "expand_in_place",
                 "source": source
             }, original_keyword="UNWIND"))
+
+    def enterWind(self, ctx):
+        # WIND - Collect multiple rows into array field (reverse of UNWIND)
+        # Example: WIND person_tag INTO person.tags WHERE person_tag.person_id = person.person_id
+        #   Before: person_tag { person_id, tag_value } (multiple rows)
+        #   After:  person { tags: ["value1", "value2", ...] }
+        source_entity = ctx.identifier().getText()  # person_tag
+        target_location = ctx.qualifiedName().getText()  # person.tags
+        condition = ctx.condition()
+        source_fk = condition.qualifiedName(0).getText()  # person_tag.person_id
+        target_pk = condition.qualifiedName(1).getText()  # person.person_id
+        with_deletion = ctx.DELETION() is not None  # WITH DELETION option
+
+        # Parse target location: person.tags -> target_entity=person, array_name=tags
+        target_parts = target_location.split(".")
+        target_entity = target_parts[0] if target_parts else target_location
+        array_name = target_parts[1] if len(target_parts) > 1 else "items"
+
+        self.operations.append(Operation("WIND", {
+            "source": source_entity,       # source entity to collect (person_tag)
+            "target": target_entity,       # target entity (person)
+            "array_name": array_name,      # array field name (tags)
+            "source_fk": source_fk,        # source FK column (person_tag.person_id)
+            "target_pk": target_pk,        # target PK column (person.person_id)
+            "with_deletion": with_deletion # delete source after collecting
+        }, original_keyword="WIND"))
 
     def enterNest(self, ctx):
         # New syntax: NEST identifier COLON unnestFieldList IN qualifiedName WHERE qualifiedName EQUALS qualifiedName (WITH DELETION)?
@@ -770,6 +810,20 @@ class SMELPauschalisiertListener(SMEL_PauschalisiertListener, BaseSMELListener):
             "source": ctx.qualifiedName().getText()
         }, original_keyword="FLATTEN_PS"))
 
+    def enterUnflatten_ps(self, ctx):
+        # UNFLATTEN_PS - Combine flat fields into nested object (reverse of FLATTEN)
+        # Example: UNFLATTEN_PS person(vorname, nachname) AS name
+        #   Before: person { vorname, nachname, age }
+        #   After:  person { name: { vorname, nachname }, age }
+        entity = ctx.identifier(0).getText()  # person
+        fields = [id.getText() for id in ctx.identifierList().identifier()]  # [vorname, nachname]
+        nested_name = ctx.identifier(1).getText()  # name
+        self.operations.append(Operation("UNFLATTEN", {
+            "entity": entity,
+            "fields": fields,
+            "nested_name": nested_name
+        }, original_keyword="UNFLATTEN_PS"))
+
     def enterUnwind_ps(self, ctx):
         source = ctx.qualifiedName().getText()
         target = ctx.identifier().getText() if ctx.identifier() else None
@@ -787,6 +841,32 @@ class SMELPauschalisiertListener(SMEL_PauschalisiertListener, BaseSMELListener):
                 "mode": "expand_in_place",
                 "source": source
             }, original_keyword="UNWIND_PS"))
+
+    def enterWind_ps(self, ctx):
+        # WIND_PS - Collect multiple rows into array field (reverse of UNWIND)
+        # Example: WIND_PS person_tag INTO person.tags WHERE person_tag.person_id = person.person_id
+        #   Before: person_tag { person_id, tag_value } (multiple rows)
+        #   After:  person { tags: ["value1", "value2", ...] }
+        source_entity = ctx.identifier().getText()  # person_tag
+        target_location = ctx.qualifiedName().getText()  # person.tags
+        condition = ctx.condition()
+        source_fk = condition.qualifiedName(0).getText()  # person_tag.person_id
+        target_pk = condition.qualifiedName(1).getText()  # person.person_id
+        with_deletion = ctx.DELETION() is not None  # WITH DELETION option
+
+        # Parse target location: person.tags -> target_entity=person, array_name=tags
+        target_parts = target_location.split(".")
+        target_entity = target_parts[0] if target_parts else target_location
+        array_name = target_parts[1] if len(target_parts) > 1 else "items"
+
+        self.operations.append(Operation("WIND", {
+            "source": source_entity,       # source entity to collect (person_tag)
+            "target": target_entity,       # target entity (person)
+            "array_name": array_name,      # array field name (tags)
+            "source_fk": source_fk,        # source FK column (person_tag.person_id)
+            "target_pk": target_pk,        # target PK column (person.person_id)
+            "with_deletion": with_deletion # delete source after collecting
+        }, original_keyword="WIND_PS"))
 
     def enterNest_ps(self, ctx):
         # New syntax: NEST_PS identifier COLON unnestFieldList IN qualifiedName WHERE qualifiedName EQUALS qualifiedName (WITH DELETION)?

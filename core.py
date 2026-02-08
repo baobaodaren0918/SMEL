@@ -21,7 +21,7 @@ from antlr4.error.ErrorListener import ErrorListener
 from Schema.unified_meta_schema import (
     Database, DatabaseType, EntityType, Attribute,
     UniqueConstraint, ForeignKeyConstraint, UniqueProperty, ForeignKeyProperty, PKTypeEnum,
-    Reference, Embedded, Cardinality, PrimitiveDataType, PrimitiveType,
+    Reference, Embedded, Cardinality, PrimitiveDataType, PrimitiveType, ListDataType,
     StructuralVariation, RelationshipType, TypeMappings
 )
 from Schema.adapters import PostgreSQLAdapter, MongoDBAdapter
@@ -247,6 +247,48 @@ class SchemaTransformer:
         self.database.remove_entity_type(full_embedded_path)
 
         self.changes.append(f"FLATTEN:{source_path}")
+
+    def _handle_unflatten(self, params: Dict) -> None:
+        """
+        UNFLATTEN: Combine flat fields into nested object (reverse of FLATTEN).
+
+        Example: UNFLATTEN person(vorname, nachname) AS name
+          Before: person { vorname, nachname, age }
+          After:  person { name: { vorname, nachname }, age }
+
+        The specified fields are moved into a new nested object.
+        """
+        entity_name = params["entity"]
+        fields = params["fields"]
+        nested_name = params["nested_name"]
+
+        entity = self.database.get_entity_type(entity_name)
+        if not entity:
+            return
+
+        # Create new embedded entity for the nested object
+        nested_entity = EntityType(object_name=[nested_name])
+
+        # Move specified fields from parent to nested entity
+        for field_name in fields:
+            attr = entity.get_attribute(field_name)
+            if attr:
+                nested_entity.add_attribute(Attribute(
+                    attr.attr_name, attr.data_type, attr.is_key, attr.is_optional
+                ))
+                entity.remove_attribute(field_name)
+
+        # Add nested entity to database
+        self.database.add_entity_type(nested_entity)
+
+        # Add embedded relationship from parent to nested
+        entity.add_relationship(Embedded(
+            aggr_name=nested_name,
+            aggregates=nested_name,
+            cardinality=Cardinality.ONE_TO_ONE
+        ))
+
+        self.changes.append(f"UNFLATTEN:{entity_name}({','.join(fields)})->{nested_name}")
 
     def _handle_unnest(self, params: Dict) -> None:
         """
@@ -506,6 +548,56 @@ class SchemaTransformer:
         # Remove the array attribute from parent
         if attr:
             parent_entity.remove_attribute(array_name)
+
+    def _handle_wind(self, params: Dict) -> None:
+        """
+        WIND: Collect multiple rows into array field (reverse of UNWIND).
+
+        Example: WIND person_tag INTO person.tags WHERE person_tag.person_id = person.person_id
+          Before: person_tag { person_id, tag_value } (multiple rows)
+          After:  person { tags: ["value1", "value2", ...] }
+
+        Note: WITH DELETION optionally removes source entity after collecting.
+        """
+        source_entity_name = params["source"]  # person_tag
+        target_entity_name = params["target"]  # person
+        array_name = params["array_name"]      # tags
+        with_deletion = params.get("with_deletion", False)
+
+        source_entity = self.database.get_entity_type(source_entity_name)
+        target_entity = self.database.get_entity_type(target_entity_name)
+
+        if not source_entity or not target_entity:
+            return
+
+        # Find the value attribute in source entity (the field to collect into array)
+        # Usually it's a non-key, non-FK field
+        value_attr = None
+        for attr in source_entity.attributes:
+            if not attr.is_key and attr.attr_name not in [r.ref_name for r in source_entity.get_references()]:
+                value_attr = attr
+                break
+
+        if not value_attr:
+            # Fallback: use first non-key attribute
+            for attr in source_entity.attributes:
+                if not attr.is_key:
+                    value_attr = attr
+                    break
+
+        # Create array attribute in target entity
+        if value_attr:
+            array_type = ListDataType(element_type=value_attr.data_type)
+        else:
+            array_type = ListDataType(element_type=PrimitiveDataType(PrimitiveType.STRING))
+
+        target_entity.add_attribute(Attribute(array_name, array_type, False, True))
+
+        # Optionally delete source entity
+        if with_deletion:
+            self.database.remove_entity_type(source_entity_name)
+
+        self.changes.append(f"WIND:{source_entity_name}->{target_entity_name}.{array_name}")
 
     def _handle_delete_reference(self, params: Dict) -> None:
         parts = params["reference"].split(".")
