@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from core import run_migration
 
-PORT = 5579
+PORT = 5580
 
 
 class SMELHandler(SimpleHTTPRequestHandler):
