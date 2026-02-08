@@ -72,7 +72,7 @@ ADD_REFERENCE employment.person_id REFERENCES person(person_id) WITH CARDINALITY
 -- person: { person_id, name{vorname,nachname}, age, tags[], knows[] }
 -- address: { address_id, person_id, street, city }
 -- employment: { employment_id, person_id, position, company{name,address{street,city}} }
---             ↑ company explicitly transferred as nested object!
+--                                                      ↑ company explicitly transferred as nested object!
 
 -- ============================================
 -- Step 3: Extract company table (level 2) - from employment table
@@ -86,7 +86,7 @@ ADD_REFERENCE company.employment_id REFERENCES employment(employment_id) WITH CA
 -- address: { address_id, person_id, street, city }
 -- employment: { employment_id, person_id, position }
 -- company: { company_id, employment_id, name, address{street,city} }
---           ↑ address explicitly transferred as nested object!
+--                                                ↑ address explicitly transferred as nested object!
 
 -- ============================================
 -- Step 4: Extract company_address table (level 3) - 3rd level nesting!

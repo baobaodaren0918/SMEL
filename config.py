@@ -43,10 +43,17 @@ MIGRATION_CONFIGS = {
         "source_type": "Document",
         "target_type": "Relational",
     },
-    # Person: PostgreSQL -> MongoDB (Reverse Migration)
+    # Person: PostgreSQL -> MongoDB (Specific Grammar)
     "person_r2d_specific": {
         "source_file": TESTS_DIR / "person_postgresql.sql",
-        "smel_file": TESTS_DIR / "mongo_person_to_document_minibeispiel.smel",
+        "smel_file": TESTS_DIR / "specific" / "person_pg_to_mongo_minibeispiel.smel",
+        "source_type": "Relational",
+        "target_type": "Document",
+    },
+    # Person: PostgreSQL -> MongoDB (Pauschalisiert Grammar)
+    "person_r2d_pauschalisiert": {
+        "source_file": TESTS_DIR / "person_postgresql.sql",
+        "smel_file": TESTS_DIR / "pauschalisiert" / "person_pg_to_mongo_minibeispiel.smel_ps",
         "source_type": "Relational",
         "target_type": "Document",
     },
