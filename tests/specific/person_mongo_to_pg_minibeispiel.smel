@@ -64,19 +64,21 @@ ADD_REFERENCE address.person_id REFERENCES person(person_id) WITH CARDINALITY ON
 -- ============================================
 -- Step 2: Extract employment table (level 1)
 -- ============================================
-UNNEST person.employment:position AS employment WITH person.person_id
+-- Note: 'company' is explicitly listed to transfer the nested object
+UNNEST person.employment:position,company AS employment WITH person.person_id
 ADD_PRIMARY_KEY employment.employment_id AS String
 ADD_REFERENCE employment.person_id REFERENCES person(person_id) WITH CARDINALITY ONE_TO_ONE
 -- Result:
 -- person: { person_id, name{vorname,nachname}, age, tags[], knows[] }
 -- address: { address_id, person_id, street, city }
 -- employment: { employment_id, person_id, position, company{name,address{street,city}} }
---             ↑ company preserved as inner nested object!
+--             ↑ company explicitly transferred as nested object!
 
 -- ============================================
 -- Step 3: Extract company table (level 2) - from employment table
 -- ============================================
-UNNEST employment.company:name AS company WITH employment.employment_id
+-- Note: 'address' is explicitly listed to transfer the nested object
+UNNEST employment.company:name,address AS company WITH employment.employment_id
 ADD_PRIMARY_KEY company.company_id AS String
 ADD_REFERENCE company.employment_id REFERENCES employment(employment_id) WITH CARDINALITY ONE_TO_ONE
 -- Result:
@@ -84,7 +86,7 @@ ADD_REFERENCE company.employment_id REFERENCES employment(employment_id) WITH CA
 -- address: { address_id, person_id, street, city }
 -- employment: { employment_id, person_id, position }
 -- company: { company_id, employment_id, name, address{street,city} }
---           ↑ address preserved as inner nested object!
+--           ↑ address explicitly transferred as nested object!
 
 -- ============================================
 -- Step 4: Extract company_address table (level 3) - 3rd level nesting!

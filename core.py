@@ -280,19 +280,20 @@ class SchemaTransformer:
         fk_attr = Attribute(parent_key_name, fk_type, False, False)
         new_entity.add_attribute(fk_attr)
 
-        # Collect embedded relationship names to avoid adding them as attributes
-        embedded_names = set()
+        # Collect embedded relationship names from the source entity
+        embedded_map = {}  # name -> Embedded relationship
         if embedded_entity:
             for rel in embedded_entity.relationships:
                 if isinstance(rel, Embedded):
-                    embedded_names.add(rel.aggr_name)
+                    embedded_map[rel.aggr_name] = rel
 
-        # Add specified fields from embedded entity (skip embedded objects - they're transferred separately)
-        for field_name in fields:
-            # Skip if this is an embedded relationship (will be transferred below)
-            if field_name in embedded_names:
-                continue
+        # Separate fields into attributes and embedded objects
+        fields_set = set(fields)
+        specified_embedded = fields_set & set(embedded_map.keys())  # embedded objects in field list
+        specified_attributes = fields_set - specified_embedded       # regular attributes
 
+        # Add specified attributes from embedded entity
+        for field_name in specified_attributes:
             if embedded_entity:
                 attr = embedded_entity.get_attribute(field_name)
                 if attr:
@@ -300,7 +301,7 @@ class SchemaTransformer:
                         attr.attr_name, attr.data_type, False, attr.is_optional
                     ))
                 else:
-                    # Field not found and not embedded, add as string
+                    # Field not found, add as string
                     new_entity.add_attribute(Attribute(
                         field_name, PrimitiveDataType(PrimitiveType.STRING), False, True
                     ))
@@ -309,51 +310,53 @@ class SchemaTransformer:
                     field_name, PrimitiveDataType(PrimitiveType.STRING), False, True
                 ))
 
-        # IMPORTANT: Transfer inner embedded relationships and recursively update all nested paths
-        # e.g., when extracting person.employment -> employment:
-        #   person.employment.company -> employment.company
-        #   person.employment.company.address -> employment.company.address
-        if embedded_entity:
+        # EXPLICIT DESIGN: Only transfer embedded objects that are specified in the field list
+        # e.g., UNNEST person.employment:position,company -> only transfer 'company' if listed
+        if embedded_entity and specified_embedded:
             old_prefix = full_embedded_path  # e.g., "person.employment"
             new_prefix = target_name          # e.g., "employment"
 
-            # First, collect all entities that need path updates (to avoid modifying dict during iteration)
-            entities_to_update = []
-            for entity_name in list(self.database.entity_types.keys()):
-                if entity_name.startswith(old_prefix + "."):
-                    entities_to_update.append(entity_name)
+            # For each specified embedded object, transfer it and all its nested entities
+            for emb_name in specified_embedded:
+                inner_rel = embedded_map.get(emb_name)
+                if not inner_rel:
+                    continue
 
-            # Update all nested entity paths recursively
-            for old_entity_path in entities_to_update:
-                # person.employment.company -> employment.company
-                # person.employment.company.address -> employment.company.address
-                new_entity_path = new_prefix + old_entity_path[len(old_prefix):]
+                # Collect all entities under this embedded object path
+                emb_old_path = inner_rel.aggregates  # e.g., "person.employment.company"
+                emb_new_path = f"{new_prefix}.{emb_name}"  # e.g., "employment.company"
 
-                nested_entity = self.database.get_entity_type(old_entity_path)
-                if nested_entity:
-                    self.database.remove_entity_type(old_entity_path)
-                    nested_entity.object_name = new_entity_path.split(".")
-                    self.database.add_entity_type(nested_entity)
+                # Update paths for this embedded and all its nested entities
+                entities_to_update = [emb_old_path]
+                for entity_name in list(self.database.entity_types.keys()):
+                    if entity_name.startswith(emb_old_path + "."):
+                        entities_to_update.append(entity_name)
 
-                    # Also update embedded relationships within this entity to point to new paths
-                    for rel in nested_entity.relationships:
-                        if isinstance(rel, Embedded):
-                            if rel.aggregates.startswith(old_prefix + "."):
-                                rel.aggregates = new_prefix + rel.aggregates[len(old_prefix):]
+                for old_entity_path in entities_to_update:
+                    # person.employment.company -> employment.company
+                    # person.employment.company.address -> employment.company.address
+                    new_entity_path = new_prefix + old_entity_path[len(old_prefix):]
 
-            # Transfer direct inner embedded relationships to the new entity
-            for inner_rel in list(embedded_entity.relationships):
-                if isinstance(inner_rel, Embedded):
-                    # Calculate new path for this relationship
-                    new_aggregates_path = new_prefix + inner_rel.aggregates[len(old_prefix):]
+                    nested_entity = self.database.get_entity_type(old_entity_path)
+                    if nested_entity:
+                        self.database.remove_entity_type(old_entity_path)
+                        nested_entity.object_name = new_entity_path.split(".")
+                        self.database.add_entity_type(nested_entity)
 
-                    new_rel = Embedded(
-                        aggr_name=inner_rel.aggr_name,
-                        aggregates=new_aggregates_path,
-                        cardinality=inner_rel.cardinality,
-                        is_optional=inner_rel.is_optional
-                    )
-                    new_entity.add_relationship(new_rel)
+                        # Update embedded relationships within this entity
+                        for rel in nested_entity.relationships:
+                            if isinstance(rel, Embedded):
+                                if rel.aggregates.startswith(old_prefix + "."):
+                                    rel.aggregates = new_prefix + rel.aggregates[len(old_prefix):]
+
+                # Add the embedded relationship to the new entity
+                new_rel = Embedded(
+                    aggr_name=inner_rel.aggr_name,
+                    aggregates=emb_new_path,
+                    cardinality=inner_rel.cardinality,
+                    is_optional=inner_rel.is_optional
+                )
+                new_entity.add_relationship(new_rel)
 
         # Add new entity to database
         self.database.add_entity_type(new_entity)
