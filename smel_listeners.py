@@ -335,29 +335,40 @@ class SMELSpecificListener(SMEL_SpecificListener, BaseSMELListener):
 
     def enterWind(self, ctx):
         # WIND - Collect multiple rows into array field (reverse of UNWIND)
-        # Example: WIND person_tag INTO person.tags WHERE person_tag.person_id = person.person_id
-        #   Before: person_tag { person_id, tag_value } (multiple rows)
-        #   After:  person { tags: ["value1", "value2", ...] }
-        source_entity = ctx.identifier().getText()  # person_tag
-        target_location = ctx.qualifiedName().getText()  # person.tags
-        condition = ctx.condition()
-        source_fk = condition.qualifiedName(0).getText()  # person_tag.person_id
-        target_pk = condition.qualifiedName(1).getText()  # person.person_id
-        with_deletion = ctx.DELETION() is not None  # WITH DELETION option
+        # Two modes (symmetric with UNWIND):
+        #   Mode 1 (in-place): WIND person_tag.tags → scalar to array in same entity
+        #   Mode 2 (cross-entity): WIND person_tag INTO person.tags WHERE ... [WITH DELETION]
+        qualified_names = ctx.qualifiedName()
 
-        # Parse target location: person.tags -> target_entity=person, array_name=tags
-        target_parts = target_location.split(".")
-        target_entity = target_parts[0] if target_parts else target_location
-        array_name = target_parts[1] if len(target_parts) > 1 else "items"
+        if ctx.INTO():
+            # Mode 2: Cross-entity - WIND person_tag INTO person.tags WHERE ...
+            source_entity = qualified_names[0].getText()  # person_tag
+            target_location = qualified_names[1].getText()  # person.tags
+            condition = ctx.condition()
+            source_fk = condition.qualifiedName(0).getText()
+            target_pk = condition.qualifiedName(1).getText()
+            with_deletion = ctx.DELETION() is not None
 
-        self.operations.append(Operation("WIND", {
-            "source": source_entity,       # source entity to collect (person_tag)
-            "target": target_entity,       # target entity (person)
-            "array_name": array_name,      # array field name (tags)
-            "source_fk": source_fk,        # source FK column (person_tag.person_id)
-            "target_pk": target_pk,        # target PK column (person.person_id)
-            "with_deletion": with_deletion # delete source after collecting
-        }, original_keyword="WIND"))
+            target_parts = target_location.split(".")
+            target_entity = target_parts[0] if target_parts else target_location
+            array_name = target_parts[1] if len(target_parts) > 1 else "items"
+
+            self.operations.append(Operation("WIND", {
+                "mode": "cross_entity",
+                "source": source_entity,
+                "target": target_entity,
+                "array_name": array_name,
+                "source_fk": source_fk,
+                "target_pk": target_pk,
+                "with_deletion": with_deletion
+            }, original_keyword="WIND"))
+        else:
+            # Mode 1: In-place - WIND person_tag.tags (reverse of UNWIND person_tag.tags)
+            source = qualified_names[0].getText()  # person_tag.tags
+            self.operations.append(Operation("WIND", {
+                "mode": "collect_in_place",
+                "source": source
+            }, original_keyword="WIND"))
 
     def enterNest(self, ctx):
         # New syntax: NEST identifier COLON unnestFieldList IN qualifiedName WHERE qualifiedName EQUALS qualifiedName (WITH DELETION)?
@@ -842,29 +853,40 @@ class SMELPauschalisiertListener(SMEL_PauschalisiertListener, BaseSMELListener):
 
     def enterWind_ps(self, ctx):
         # WIND_PS - Collect multiple rows into array field (reverse of UNWIND)
-        # Example: WIND_PS person_tag INTO person.tags WHERE person_tag.person_id = person.person_id
-        #   Before: person_tag { person_id, tag_value } (multiple rows)
-        #   After:  person { tags: ["value1", "value2", ...] }
-        source_entity = ctx.identifier().getText()  # person_tag
-        target_location = ctx.qualifiedName().getText()  # person.tags
-        condition = ctx.condition()
-        source_fk = condition.qualifiedName(0).getText()  # person_tag.person_id
-        target_pk = condition.qualifiedName(1).getText()  # person.person_id
-        with_deletion = ctx.DELETION() is not None  # WITH DELETION option
+        # Two modes (symmetric with UNWIND_PS):
+        #   Mode 1 (in-place): WIND_PS person_tag.tags → scalar to array in same entity
+        #   Mode 2 (cross-entity): WIND_PS person_tag INTO person.tags WHERE ... [WITH DELETION]
+        qualified_names = ctx.qualifiedName()
 
-        # Parse target location: person.tags -> target_entity=person, array_name=tags
-        target_parts = target_location.split(".")
-        target_entity = target_parts[0] if target_parts else target_location
-        array_name = target_parts[1] if len(target_parts) > 1 else "items"
+        if ctx.INTO():
+            # Mode 2: Cross-entity - WIND_PS person_tag INTO person.tags WHERE ...
+            source_entity = qualified_names[0].getText()  # person_tag
+            target_location = qualified_names[1].getText()  # person.tags
+            condition = ctx.condition()
+            source_fk = condition.qualifiedName(0).getText()
+            target_pk = condition.qualifiedName(1).getText()
+            with_deletion = ctx.DELETION() is not None
 
-        self.operations.append(Operation("WIND", {
-            "source": source_entity,       # source entity to collect (person_tag)
-            "target": target_entity,       # target entity (person)
-            "array_name": array_name,      # array field name (tags)
-            "source_fk": source_fk,        # source FK column (person_tag.person_id)
-            "target_pk": target_pk,        # target PK column (person.person_id)
-            "with_deletion": with_deletion # delete source after collecting
-        }, original_keyword="WIND_PS"))
+            target_parts = target_location.split(".")
+            target_entity = target_parts[0] if target_parts else target_location
+            array_name = target_parts[1] if len(target_parts) > 1 else "items"
+
+            self.operations.append(Operation("WIND", {
+                "mode": "cross_entity",
+                "source": source_entity,
+                "target": target_entity,
+                "array_name": array_name,
+                "source_fk": source_fk,
+                "target_pk": target_pk,
+                "with_deletion": with_deletion
+            }, original_keyword="WIND_PS"))
+        else:
+            # Mode 1: In-place - WIND_PS person_tag.tags (reverse of UNWIND_PS person_tag.tags)
+            source = qualified_names[0].getText()  # person_tag.tags
+            self.operations.append(Operation("WIND", {
+                "mode": "collect_in_place",
+                "source": source
+            }, original_keyword="WIND_PS"))
 
     def enterNest_ps(self, ctx):
         # New syntax: NEST_PS identifier COLON unnestFieldList IN qualifiedName WHERE qualifiedName EQUALS qualifiedName (WITH DELETION)?

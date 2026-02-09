@@ -14,7 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from core import run_migration
 
-PORT = 5580
+PORT = 5582
 
 
 class SMELHandler(SimpleHTTPRequestHandler):
@@ -970,8 +970,16 @@ def get_html():
                 html += '<div class="sql-section"><div class="section-title">Generated DDL</div>';
                 html += '<div class="sql-code-view"><pre>' + escapeHtml(migrationData.exported_target) + '</pre></div></div>';
             } else {
-                // Document Target: JSON structure view
-                html += '<div class="document-view"><div class="json-display">' + syntaxHighlightJSON(migrationData.exported_target) + '</div></div>';
+                // Document Target: card view (same style as Source) + JSON Schema
+                const targetNested = migrationData.target_nested;
+                if (targetNested && Object.keys(targetNested).length > 0) {
+                    html += '<div class="document-view">';
+                    Object.values(targetNested).forEach(entity => {
+                        html += renderNestedEntityCard(entity);
+                    });
+                    html += '</div>';
+                }
+                html += '<div class="document-view"><div class="section-title">JSON Schema</div><div class="json-display">' + syntaxHighlightJSON(migrationData.exported_target) + '</div></div>';
             }
             html += '</div></div>';
             container.innerHTML = html;
@@ -1285,10 +1293,17 @@ def get_html():
                     break;
                 case 'WIND':
                     // WIND: Collect multiple rows into array (reverse of UNWIND)
-                    html = '<span class="param-value">' + params.source + '</span>';
-                    html += ' <span class="param-key">INTO</span> <span class="param-value">' + params.target + '.' + params.array_name + '</span>';
-                    if (params.with_deletion) {
-                        html += ' <span class="param-key">WITH DELETION</span>';
+                    if (params.mode === 'collect_in_place') {
+                        // Mode 1: In-place - WIND person_tag.tags (scalar → array in same entity)
+                        html = '<span class="param-value">' + params.source + '</span>';
+                        html += ' <span class="param-key">(in-place: scalar → array)</span>';
+                    } else {
+                        // Mode 2: Cross-entity - WIND source INTO target.field WHERE ...
+                        html = '<span class="param-value">' + params.source + '</span>';
+                        html += ' <span class="param-key">INTO</span> <span class="param-value">' + params.target + '.' + params.array_name + '</span>';
+                        if (params.with_deletion) {
+                            html += ' <span class="param-key">WITH DELETION</span>';
+                        }
                     }
                     break;
                 case 'SPLIT':
@@ -1535,8 +1550,15 @@ def get_html():
                 // Show schema format
                 html += '<div class="schema-view"><pre class="schema-code">' + escapeHtml(migrationData.exported_target) + '</pre></div>';
             } else {
-                // Show generated JSON
-                html += '<div class="json-view">' + syntaxHighlightJSON(migrationData.exported_target) + '</div>';
+                // Document Target: show card view (same style as Source)
+                const targetNested = migrationData.target_nested;
+                if (targetNested && Object.keys(targetNested).length > 0) {
+                    Object.values(targetNested).forEach(entity => {
+                        html += renderNestedEntityCard(entity);
+                    });
+                } else {
+                    html += '<div class="json-view">' + syntaxHighlightJSON(migrationData.exported_target) + '</div>';
+                }
             }
             html += '</div></div>';
 

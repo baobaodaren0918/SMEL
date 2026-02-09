@@ -298,11 +298,11 @@ unnestField: identifier                                    # AttributeField
 unwind_ps: UNWIND_PS qualifiedName (INTO identifier)?;
 
 // WIND_PS - Collect multiple rows into array field (reverse of UNWIND)
-// Example: WIND_PS person_tag INTO person.tags WHERE person_tag.person_id = person.person_id
-//   Before: person_tag { person_id, tag_value } (multiple rows)
-//   After:  person { tags: ["value1", "value2", ...] }
-// Note: WITH DELETION optionally removes source entity after collecting
-wind_ps: WIND_PS identifier INTO qualifiedName WHERE condition (WITH DELETION)?;
+// Supports two modes (symmetric with UNWIND_PS):
+//   1. Collect in place: WIND_PS person_tag.tags (collects rows back into array in same entity)
+//   2. Cross-entity:     WIND_PS person_tag INTO person.tags WHERE person_tag.person_id = person.person_id [WITH DELETION]
+// Note: Use mode 1 with MERGE_PS for clean reverse of UNWIND_PS + SPLIT_PS
+wind_ps: WIND_PS qualifiedName (INTO qualifiedName WHERE condition (WITH DELETION)?)?;
 
 // NEST_PS - Merge separate table into embedded document (PostgreSQL -> MongoDB)
 // Example: NEST_PS address:street,city IN person.address WHERE address.person_id = person.person_id

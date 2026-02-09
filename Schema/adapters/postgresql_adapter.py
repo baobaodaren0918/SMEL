@@ -175,14 +175,17 @@ class PostgreSQLAdapter:
         # e.g., DECIMAL(15,2) should not be split
         columns = self._split_columns(table_body)
 
+        table_level_constraints = []
+
         for col_def in columns:
             col_def = col_def.strip()
             if not col_def:
                 continue
 
-            # Skip table-level constraint definitions (parsed separately)
+            # Collect table-level constraint definitions for later processing
             upper = col_def.upper()
             if any(upper.startswith(kw) for kw in ['PRIMARY KEY', 'FOREIGN KEY', 'UNIQUE', 'CHECK', 'CONSTRAINT']):
+                table_level_constraints.append(col_def)
                 continue
 
             # Parse column definition
@@ -204,6 +207,32 @@ class PostgreSQLAdapter:
                 # e.g., "person_id INTEGER REFERENCES person(id)"
                 if ref_info:
                     self._pending_references.append((entity.name, ref_info[0], ref_info[1]))
+
+        # Parse table-level constraints
+        # e.g., "PRIMARY KEY (person_id, knows_person_id)"
+        for constraint_def in table_level_constraints:
+            upper = constraint_def.upper().strip()
+            if upper.startswith('PRIMARY KEY'):
+                # Extract column names from PRIMARY KEY (col1, col2, ...)
+                pk_match = re.search(r'PRIMARY\s+KEY\s*\(([^)]+)\)', constraint_def, re.IGNORECASE)
+                if pk_match:
+                    pk_col_names = [c.strip() for c in pk_match.group(1).split(',')]
+                    unique_props = []
+                    for col_name in pk_col_names:
+                        attr = entity.get_attribute(col_name)
+                        if attr:
+                            attr.is_key = True
+                            unique_props.append(UniqueProperty(
+                                primary_key_type=PKTypeEnum.SIMPLE,
+                                property_id=attr.meta_id
+                            ))
+                    if unique_props:
+                        constraint = UniqueConstraint(
+                            is_primary_key=True,
+                            is_managed=True,
+                            unique_properties=unique_props
+                        )
+                        entity.add_constraint(constraint)
 
         # Auto-create primary key constraint for SERIAL columns
         # (SERIAL implies PRIMARY KEY even without explicit declaration)

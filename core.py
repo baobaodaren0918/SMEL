@@ -153,6 +153,8 @@ class SchemaTransformer:
         fk_attr_names = {rel.ref_name for rel in source_entity.get_references()}
         embedded_entity = EntityType(object_name=[alias])
 
+        nested = params.get("nested", [])
+
         if attributes:
             # Use specified attributes
             for attr_name in attributes:
@@ -165,10 +167,16 @@ class SchemaTransformer:
                 if attr.attr_name not in fk_attr_names:
                     embedded_entity.add_attribute(Attribute(attr.attr_name, attr.data_type, False, attr.is_optional))
 
-        self.database.add_entity_type(embedded_entity)
-        target_entity.add_relationship(Embedded(aggr_name=alias, aggregates=alias, cardinality=cardinality,
-                                                is_optional=not cardinality.is_required()))
-        self.changes.append(f"NEST:{target_name}.{alias}")
+        # Copy nested embedded relationships from source entity
+        # e.g., NEST company:name, address{street,city} -> copy "address" Embedded from company
+        for nested_obj in nested:
+            nested_name = nested_obj['name']
+            for rel in source_entity.get_embedded():
+                if rel.aggr_name == nested_name:
+                    embedded_entity.add_relationship(
+                        Embedded(aggr_name=nested_name, aggregates=rel.aggregates,
+                                 cardinality=rel.cardinality, is_optional=rel.is_optional))
+                    break
 
         # Remove FK reference from target to source
         for rel in list(target_entity.relationships):
@@ -176,10 +184,16 @@ class SchemaTransformer:
                 target_entity.remove_relationship(rel.ref_name)
                 target_entity.remove_attribute(rel.ref_name)
 
-        # Delete source entity if WITH DELETION is specified
+        # Delete source entity BEFORE adding the new embedded entity
+        # (otherwise when source_name == alias, remove would delete the newly created entity)
         if with_deletion:
             self.database.remove_entity_type(source_name)
             self.changes.append(f"DELETE_ENTITY:{source_name}")
+
+        self.database.add_entity_type(embedded_entity)
+        target_entity.add_relationship(Embedded(aggr_name=alias, aggregates=alias, cardinality=cardinality,
+                                                is_optional=not cardinality.is_required()))
+        self.changes.append(f"NEST:{target_name}.{alias}")
 
     def _handle_flatten(self, params: Dict) -> None:
         """
@@ -551,12 +565,35 @@ class SchemaTransformer:
         """
         WIND: Collect multiple rows into array field (reverse of UNWIND).
 
-        Example: WIND person_tag INTO person.tags WHERE person_tag.person_id = person.person_id
-          Before: person_tag { person_id, tag_value } (multiple rows)
-          After:  person { tags: ["value1", "value2", ...] }
+        Two modes (symmetric with UNWIND):
+          Mode 1 (in-place): WIND person_tag.tags
+            Before: person_tag { person_id, tags } (multiple rows, scalar)
+            After:  person_tag { person_id, tags[] } (single row, array)
+            Reverse of: UNWIND person_tag.tags
 
-        Note: WITH DELETION optionally removes source entity after collecting.
+          Mode 2 (cross-entity): WIND person_tag INTO person.tags WHERE ...
+            Before: person_tag { person_id, tag_value } (multiple rows)
+            After:  person { tags: ["value1", "value2", ...] }
         """
+        mode = params.get("mode", "cross_entity")
+
+        if mode == "collect_in_place":
+            # Mode 1: In-place - convert scalar attribute to array (reverse of UNWIND in-place)
+            source_path = params.get("source", "")
+            parts = source_path.split(".")
+            if len(parts) >= 2:
+                entity_name = parts[0]
+                attr_name = parts[-1]
+                entity = self.database.get_entity_type(entity_name)
+                if entity:
+                    attr = entity.get_attribute(attr_name)
+                    if attr:
+                        # Convert scalar type to ListDataType (reverse of UNWIND which does List -> scalar)
+                        attr.data_type = ListDataType(element_type=attr.data_type)
+                        self.changes.append(f"WIND_INPLACE:{entity_name}.{attr_name}")
+            return
+
+        # Mode 2: Cross-entity (existing behavior)
         source_entity_name = params["source"]  # person_tag
         target_entity_name = params["target"]  # person
         array_name = params["array_name"]      # tags
@@ -601,10 +638,13 @@ class SchemaTransformer:
         parts = params["reference"].split(".")
         if len(parts) != 2:
             return
-        entity = self.database.get_entity_type(parts[0])
+        entity_name, ref_name = parts[0], parts[1]
+        entity = self.database.get_entity_type(entity_name)
         if entity:
-            entity.remove_relationship(parts[1])
-            entity.remove_attribute(parts[1])
+            entity.remove_relationship(ref_name)
+            # Note: Only remove the FK relationship/constraint, NOT the attribute itself.
+            # This matches SQL semantics where DROP CONSTRAINT keeps the column.
+            self.changes.append(f"DELETE_REFERENCE:{entity_name}.{ref_name}")
 
     def _handle_delete_embedded(self, params: Dict) -> None:
         parts = params["embedded"].split(".")
@@ -1211,10 +1251,20 @@ class SchemaTransformer:
             if attr.attr_name not in existing_names:
                 new_entity.add_attribute(Attribute(attr.attr_name, attr.data_type, False, attr.is_optional))
 
-        # Copy primary key from source1
-        pk = source1.get_primary_key()
-        if pk:
-            new_entity.add_constraint(copy.deepcopy(pk))
+        # Copy all constraints from source1
+        for constraint in source1.constraints:
+            new_entity.add_constraint(copy.deepcopy(constraint))
+
+        # Copy relationships from source1 (Embedded, Reference, etc.)
+        for rel in source1.relationships:
+            new_entity.add_relationship(copy.deepcopy(rel))
+
+        # Copy relationships from source2 (avoid duplicates by name)
+        existing_rel_names = {getattr(r, 'ref_name', getattr(r, 'aggr_name', '')) for r in new_entity.relationships}
+        for rel in source2.relationships:
+            rel_name = getattr(rel, 'ref_name', getattr(rel, 'aggr_name', ''))
+            if rel_name not in existing_rel_names:
+                new_entity.add_relationship(copy.deepcopy(rel))
 
         self.database.add_entity_type(new_entity)
 
@@ -2099,6 +2149,7 @@ def run_migration(direction: str) -> Dict[str, Any]:
         "smel_file": smel_file.name,
         "operations_detail": operations_detail,
         "original_source": parse_original_source(raw_source, source_type),  # Original nested structure (before reverse eng)
+        "target_nested": parse_original_source(exported_target, target_type),  # Target nested structure (for card view)
         "source": db_to_source_dict(meta_v1_db, source_type),  # Original format (SERIAL, VARCHAR, bsonType)
         "meta_v1": db_to_dict(meta_v1_db),                     # Unified Meta format (integer, string)
         "result": db_to_dict(result_db),                       # Unified Meta format (integer, string)
