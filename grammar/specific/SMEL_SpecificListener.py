@@ -476,12 +476,12 @@ class SMEL_SpecificListener(ParseTreeListener):
         pass
 
 
-    # Enter a parse tree produced by SMEL_SpecificParser#rename_feature.
-    def enterRename_feature(self, ctx:SMEL_SpecificParser.Rename_featureContext):
+    # Enter a parse tree produced by SMEL_SpecificParser#rename_attribute.
+    def enterRename_attribute(self, ctx:SMEL_SpecificParser.Rename_attributeContext):
         pass
 
-    # Exit a parse tree produced by SMEL_SpecificParser#rename_feature.
-    def exitRename_feature(self, ctx:SMEL_SpecificParser.Rename_featureContext):
+    # Exit a parse tree produced by SMEL_SpecificParser#rename_attribute.
+    def exitRename_attribute(self, ctx:SMEL_SpecificParser.Rename_attributeContext):
         pass
 
 
@@ -599,15 +599,6 @@ class SMEL_SpecificListener(ParseTreeListener):
 
     # Exit a parse tree produced by SMEL_SpecificParser#nest.
     def exitNest(self, ctx:SMEL_SpecificParser.NestContext):
-        pass
-
-
-    # Enter a parse tree produced by SMEL_SpecificParser#extract.
-    def enterExtract(self, ctx:SMEL_SpecificParser.ExtractContext):
-        pass
-
-    # Exit a parse tree produced by SMEL_SpecificParser#extract.
-    def exitExtract(self, ctx:SMEL_SpecificParser.ExtractContext):
         pass
 
 

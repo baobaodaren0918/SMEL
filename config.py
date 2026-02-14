@@ -57,6 +57,34 @@ MIGRATION_CONFIGS = {
         "source_type": "Relational",
         "target_type": "Document",
     },
+    # Person: PostgreSQL V1 -> PostgreSQL V2 (Specific Grammar)
+    "person_r2r_specific": {
+        "source_file": TESTS_DIR / "person_postgresql.sql",
+        "smel_file": TESTS_DIR / "specific" / "person_pg1_to_pg2_minibeispiel.smel",
+        "source_type": "Relational",
+        "target_type": "Relational",
+    },
+    # Person: PostgreSQL V1 -> PostgreSQL V2 (Pauschalisiert Grammar)
+    "person_r2r_pauschalisiert": {
+        "source_file": TESTS_DIR / "person_postgresql.sql",
+        "smel_file": TESTS_DIR / "pauschalisiert" / "person_pg1_to_pg2_minibeispiel.smel_ps",
+        "source_type": "Relational",
+        "target_type": "Relational",
+    },
+    # Person: MongoDB V1 -> MongoDB V2 (Specific Grammar)
+    "person_d2d_specific": {
+        "source_file": TESTS_DIR / "person_mongodb.json",
+        "smel_file": TESTS_DIR / "specific" / "person_mongo1_to_mongo2_minibeispiel.smel",
+        "source_type": "Document",
+        "target_type": "Document",
+    },
+    # Person: MongoDB V1 -> MongoDB V2 (Pauschalisiert Grammar)
+    "person_d2d_pauschalisiert": {
+        "source_file": TESTS_DIR / "person_mongodb.json",
+        "smel_file": TESTS_DIR / "pauschalisiert" / "person_mongo1_to_mongo2_minibeispiel.smel_ps",
+        "source_type": "Document",
+        "target_type": "Document",
+    },
 }
 
 

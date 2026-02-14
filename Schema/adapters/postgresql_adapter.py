@@ -22,6 +22,7 @@ from ..unified_meta_schema import (
     Database, DatabaseType, EntityType, Attribute,
     UniqueConstraint, UniqueProperty, PKTypeEnum,
     Reference, Cardinality, PrimitiveDataType, PrimitiveType,
+    ListDataType, SetDataType, MapDataType,
     TypeMappings
 )
 
@@ -605,6 +606,16 @@ class PostgreSQLAdapter:
             INTEGER with is_key=True   -> "SERIAL" (auto-increment)
             INTEGER with is_key=False  -> "INTEGER"
         """
+        # Complex types -> JSONB in PostgreSQL
+        if isinstance(attr.data_type, ListDataType):
+            return 'JSONB'
+        elif isinstance(attr.data_type, SetDataType):
+            return 'JSONB'
+        elif isinstance(attr.data_type, MapDataType):
+            return 'JSONB'
+        elif not isinstance(attr.data_type, PrimitiveDataType):
+            return 'VARCHAR'
+
         primitive = attr.data_type.primitive_type
         base_type = cls.REVERSE_TYPE_MAP.get(primitive, 'VARCHAR')
 

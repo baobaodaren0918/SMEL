@@ -35,7 +35,7 @@ class Operation:
     """Represents a single SMEL operation."""
     op_type: str
     params: Dict[str, Any] = field(default_factory=dict)
-    original_keyword: str = ""  # Original keyword from source (e.g., "FLATTEN_PS", "RENAME_FEATURE")
+    original_keyword: str = ""  # Original keyword from source (e.g., "FLATTEN_PS", "RENAME_ATTRIBUTE")
 
 
 class BaseSMELListener:
@@ -51,81 +51,41 @@ class BaseSMELListener:
 
     # ========== Helper methods for parsing clauses ==========
 
-    def _parse_flatten_clauses(self, clause_list):
+    def _parse_condition_pairs(self, condition_ctx):
+        """Recursively parse condition tree into list of (left = right) join pairs.
+
+        Supports:
+          a.x = b.y                        → [{"left": "a.x", "right": "b.y"}]
+          a.x = b.y AND a.z = b.z          → [{"left": "a.x", ...}, {"left": "a.z", ...}]
+          (a.x = b.y) AND a.z = b.z        → same, with parentheses
         """
-        Parse FLATTEN clauses: GENERATE KEY, ADD REFERENCE, RENAME
-        Returns list format compatible with SchemaTransformer in core.py
+        pairs = []
+        # Leaf: qualifiedName EQUALS qualifiedName
+        qns = condition_ctx.qualifiedName()
+        if qns and len(qns) == 2:
+            pairs.append({
+                "left": qns[0].getText(),
+                "right": qns[1].getText()
+            })
+        # Recursive: condition AND condition  /  (condition)
+        sub_conditions = condition_ctx.condition()
+        if sub_conditions:
+            for sub in sub_conditions:
+                pairs.extend(self._parse_condition_pairs(sub))
+        return pairs
+
+    def _parse_attribute_clauses(self, clause_list):
+        """Parse attribute clauses: WITH TYPE, WITH DEFAULT, NOT NULL.
+        Returns list of dicts, e.g. [{'type': 'TYPE', 'data_type': 'String'}, {'type': 'NOT_NULL'}]
         """
         result = []
         for clause in clause_list:
-            if hasattr(clause, 'generateKeyClause') and clause.generateKeyClause():
-                gk = clause.generateKeyClause()
-                identifiers = gk.identifier() if isinstance(gk.identifier(), list) else [gk.identifier()]
-
-                if gk.SERIAL():
-                    result.append({
-                        "type": "GENERATE_KEY",
-                        "key_name": identifiers[0].getText(),
-                        "mode": "SERIAL"
-                    })
-                elif gk.STRING():
-                    prefix = gk.STRING_LITERAL().getText().strip("'\"")
-                    result.append({
-                        "type": "GENERATE_KEY",
-                        "key_name": identifiers[0].getText(),
-                        "mode": "STRING",
-                        "prefix": prefix
-                    })
-                elif gk.FROM():
-                    result.append({
-                        "type": "GENERATE_KEY",
-                        "key_name": identifiers[0].getText(),
-                        "mode": "FROM",
-                        "from_field": identifiers[1].getText() if len(identifiers) > 1 else None
-                    })
-
-            elif hasattr(clause, 'addReferenceClause') and clause.addReferenceClause():
-                ref_clause = clause.addReferenceClause()
-                identifiers = ref_clause.identifier() if isinstance(ref_clause.identifier(), list) else [ref_clause.identifier()]
-                result.append({
-                    "type": "ADD_REFERENCE",
-                    "ref_name": identifiers[0].getText(),
-                    "target": identifiers[1].getText() if len(identifiers) > 1 else None
-                })
-
-            elif hasattr(clause, 'columnRenameClause') and clause.columnRenameClause():
-                rename = clause.columnRenameClause()
-                rename_ids = rename.identifier() if isinstance(rename.identifier(), list) else [rename.identifier()]
-                result.append({
-                    "type": "RENAME",
-                    "old_name": rename_ids[0].getText(),
-                    "new_name": rename_ids[1].getText() if len(rename_ids) > 1 else None
-                })
-        return result
-
-
-    def _parse_nest_clauses(self, clause_list):
-        """Parse NEST clauses"""
-        result = {}
-        for clause in clause_list:
-            if hasattr(clause, 'withCardinalityClause') and clause.withCardinalityClause():
-                result['cardinality'] = clause.withCardinalityClause().cardinalityType().getText()
-            elif hasattr(clause, 'usingKeyClause') and clause.usingKeyClause():
-                result['key'] = clause.usingKeyClause().identifier().getText()
-            elif hasattr(clause, 'whereClause') and clause.whereClause():
-                result['where'] = clause.whereClause().condition().getText()
-        return result
-
-    def _parse_attribute_clauses(self, clause_list):
-        """Parse attribute clauses: WITH TYPE, WITH DEFAULT, NOT NULL"""
-        result = {}
-        for clause in clause_list:
             if hasattr(clause, 'withTypeClause') and clause.withTypeClause():
-                result['type'] = clause.withTypeClause().dataType().getText()
+                result.append({'type': 'TYPE', 'data_type': clause.withTypeClause().dataType().getText()})
             elif hasattr(clause, 'withDefaultClause') and clause.withDefaultClause():
-                result['default'] = clause.withDefaultClause().literal().getText()
+                result.append({'type': 'DEFAULT', 'value': clause.withDefaultClause().literal().getText()})
             elif hasattr(clause, 'notNullClause') and clause.notNullClause():
-                result['not_null'] = True
+                result.append({'type': 'NOT_NULL'})
         return result
 
     def _parse_reference_clauses(self, clause_list):
@@ -141,25 +101,29 @@ class BaseSMELListener:
         return result
 
     def _parse_embedded_clauses(self, clause_list):
-        """Parse embedded clauses"""
-        result = {}
+        """Parse embedded clauses.
+        Returns list of dicts, e.g. [{'type': 'CARDINALITY', 'value': 'ONE_TO_ONE'}]
+        """
+        result = []
         for clause in clause_list:
             if hasattr(clause, 'withCardinalityClause') and clause.withCardinalityClause():
-                result['cardinality'] = clause.withCardinalityClause().cardinalityType().getText()
+                result.append({'type': 'CARDINALITY', 'value': clause.withCardinalityClause().cardinalityType().getText()})
             elif hasattr(clause, 'withStructureClause') and clause.withStructureClause():
                 ids = clause.withStructureClause().identifierList()
-                result['structure'] = [id.getText() for id in ids.identifier()]
+                result.append({'type': 'STRUCTURE', 'fields': [id.getText() for id in ids.identifier()]})
         return result
 
     def _parse_entity_clauses(self, clause_list):
-        """Parse entity clauses"""
-        result = {}
+        """Parse entity clauses.
+        Returns list of dicts, e.g. [{'type': 'ATTRIBUTES', 'attributes': ['id', 'name']}, {'type': 'KEY', 'key_name': 'id'}]
+        """
+        result = []
         for clause in clause_list:
             if hasattr(clause, 'withAttributesClause') and clause.withAttributesClause():
                 ids = clause.withAttributesClause().identifierList()
-                result['attributes'] = [id.getText() for id in ids.identifier()]
+                result.append({'type': 'ATTRIBUTES', 'attributes': [id.getText() for id in ids.identifier()]})
             elif hasattr(clause, 'withKeyClause') and clause.withKeyClause():
-                result['key'] = clause.withKeyClause().identifier().getText()
+                result.append({'type': 'KEY', 'key_name': clause.withKeyClause().identifier().getText()})
         return result
 
     def _parse_key_columns(self, key_columns_ctx):
@@ -275,7 +239,7 @@ class SMELSpecificListener(SMEL_SpecificListener, BaseSMELListener):
     """
     Listener for SMEL_Specific.g4 grammar.
 
-    Uses specific keywords like ADD_ATTRIBUTE, DELETE_ENTITY, RENAME_FEATURE.
+    Uses specific keywords like ADD_ATTRIBUTE, DELETE_ENTITY, RENAME_ATTRIBUTE.
     """
 
     def __init__(self):
@@ -334,50 +298,26 @@ class SMELSpecificListener(SMEL_SpecificListener, BaseSMELListener):
             }, original_keyword="UNWIND"))
 
     def enterWind(self, ctx):
-        # WIND - Collect multiple rows into array field (reverse of UNWIND)
-        # Two modes (symmetric with UNWIND):
-        #   Mode 1 (in-place): WIND person_tag.tags → scalar to array in same entity
-        #   Mode 2 (cross-entity): WIND person_tag INTO person.tags WHERE ... [WITH DELETION]
-        qualified_names = ctx.qualifiedName()
-
-        if ctx.INTO():
-            # Mode 2: Cross-entity - WIND person_tag INTO person.tags WHERE ...
-            source_entity = qualified_names[0].getText()  # person_tag
-            target_location = qualified_names[1].getText()  # person.tags
-            condition = ctx.condition()
-            source_fk = condition.qualifiedName(0).getText()
-            target_pk = condition.qualifiedName(1).getText()
-            with_deletion = ctx.DELETION() is not None
-
-            target_parts = target_location.split(".")
-            target_entity = target_parts[0] if target_parts else target_location
-            array_name = target_parts[1] if len(target_parts) > 1 else "items"
-
-            self.operations.append(Operation("WIND", {
-                "mode": "cross_entity",
-                "source": source_entity,
-                "target": target_entity,
-                "array_name": array_name,
-                "source_fk": source_fk,
-                "target_pk": target_pk,
-                "with_deletion": with_deletion
-            }, original_keyword="WIND"))
-        else:
-            # Mode 1: In-place - WIND person_tag.tags (reverse of UNWIND person_tag.tags)
-            source = qualified_names[0].getText()  # person_tag.tags
-            self.operations.append(Operation("WIND", {
-                "mode": "collect_in_place",
-                "source": source
-            }, original_keyword="WIND"))
+        # WIND - Convert scalar attribute back to array (reverse of UNWIND)
+        # Syntax: WIND person_tag.tags
+        # Cross-entity movement is handled by MERGE, not WIND.
+        source = ctx.qualifiedName().getText()  # person_tag.tags
+        self.operations.append(Operation("WIND", {
+            "source": source
+        }, original_keyword="WIND"))
 
     def enterNest(self, ctx):
-        # New syntax: NEST identifier COLON unnestFieldList IN qualifiedName WHERE qualifiedName EQUALS qualifiedName (WITH DELETION)?
+        # Syntax: NEST identifier COLON unnestFieldList IN qualifiedName WHERE condition (WITH DELETION)?
         # Example: NEST address:street,city IN person.address WHERE address.person_id = person.person_id WITH DELETION
+        # Example: NEST address:street,city IN person.address WHERE address.person_id = person.person_id AND address.dept_id = person.dept_id
         source_entity = ctx.identifier().getText()  # address
-        target_location = ctx.qualifiedName(0).getText()  # person.address
-        source_fk = ctx.qualifiedName(1).getText()  # address.person_id
-        target_pk = ctx.qualifiedName(2).getText()  # person.person_id
+        target_location = ctx.qualifiedName().getText()  # person.address (single qualifiedName in rule)
         with_deletion = ctx.DELETION() is not None  # WITH DELETION option
+
+        # Parse WHERE condition(s): supports single or AND-chained conditions
+        join_conditions = self._parse_condition_pairs(ctx.condition())
+        source_fk = join_conditions[0]["left"] if join_conditions else ""
+        target_pk = join_conditions[0]["right"] if join_conditions else ""
 
         # Parse target location: person.address -> target_entity=person, embedded_name=address
         target_parts = target_location.split(".")
@@ -394,8 +334,9 @@ class SMELSpecificListener(SMEL_SpecificListener, BaseSMELListener):
             "alias": embedded_name,        # embedded field name (address)
             "attributes": attributes,      # attributes to embed (street, city)
             "nested": nested,              # nested objects
-            "source_fk": source_fk,        # source FK column (address.person_id)
-            "target_pk": target_pk,        # target PK column (person.person_id)
+            "source_fk": source_fk,        # first join condition left (address.person_id)
+            "target_pk": target_pk,        # first join condition right (person.person_id)
+            "join_conditions": join_conditions,  # all join conditions
             "with_deletion": with_deletion # delete source after embedding
         }, original_keyword="NEST"))
 
@@ -436,15 +377,6 @@ class SMELSpecificListener(SMEL_SpecificListener, BaseSMELListener):
             "target": target_name,
             "carry_fields": carry_fields  # List of fields to copy from source to new table
         }, original_keyword="UNNEST"))
-
-    def enterExtract(self, ctx):
-        attrs = [id.getText() for id in ctx.identifierList().identifier()]
-        self.operations.append(Operation("EXTRACT", {
-            "attributes": attrs,
-            "source_entity": ctx.identifier(0).getText(),
-            "target_entity": ctx.identifier(1).getText(),
-            "clauses": self._parse_flatten_clauses(ctx.extractClause())  # Reuse flatten clause parsing
-        }))
 
     # ADD operations - each has its own method
     def enterAdd_attribute(self, ctx):
@@ -704,13 +636,13 @@ class SMELSpecificListener(SMEL_SpecificListener, BaseSMELListener):
         }))
 
     # RENAME operations
-    def enterRename_feature(self, ctx):
+    def enterRename_attribute(self, ctx):
         identifiers = ctx.identifier() if isinstance(ctx.identifier(), list) else [ctx.identifier()]
         self.operations.append(Operation("RENAME", {
             "old_name": identifiers[0].getText(),
             "new_name": identifiers[1].getText() if len(identifiers) > 1 else None,
             "entity": identifiers[2].getText() if len(identifiers) > 2 else None
-        }, original_keyword="RENAME_FEATURE"))
+        }, original_keyword="RENAME_ATTRIBUTE"))
 
     def enterRename_entity(self, ctx):
         identifiers = ctx.identifier() if isinstance(ctx.identifier(), list) else [ctx.identifier()]
@@ -852,50 +784,26 @@ class SMELPauschalisiertListener(SMEL_PauschalisiertListener, BaseSMELListener):
             }, original_keyword="UNWIND_PS"))
 
     def enterWind_ps(self, ctx):
-        # WIND_PS - Collect multiple rows into array field (reverse of UNWIND)
-        # Two modes (symmetric with UNWIND_PS):
-        #   Mode 1 (in-place): WIND_PS person_tag.tags → scalar to array in same entity
-        #   Mode 2 (cross-entity): WIND_PS person_tag INTO person.tags WHERE ... [WITH DELETION]
-        qualified_names = ctx.qualifiedName()
-
-        if ctx.INTO():
-            # Mode 2: Cross-entity - WIND_PS person_tag INTO person.tags WHERE ...
-            source_entity = qualified_names[0].getText()  # person_tag
-            target_location = qualified_names[1].getText()  # person.tags
-            condition = ctx.condition()
-            source_fk = condition.qualifiedName(0).getText()
-            target_pk = condition.qualifiedName(1).getText()
-            with_deletion = ctx.DELETION() is not None
-
-            target_parts = target_location.split(".")
-            target_entity = target_parts[0] if target_parts else target_location
-            array_name = target_parts[1] if len(target_parts) > 1 else "items"
-
-            self.operations.append(Operation("WIND", {
-                "mode": "cross_entity",
-                "source": source_entity,
-                "target": target_entity,
-                "array_name": array_name,
-                "source_fk": source_fk,
-                "target_pk": target_pk,
-                "with_deletion": with_deletion
-            }, original_keyword="WIND_PS"))
-        else:
-            # Mode 1: In-place - WIND_PS person_tag.tags (reverse of UNWIND_PS person_tag.tags)
-            source = qualified_names[0].getText()  # person_tag.tags
-            self.operations.append(Operation("WIND", {
-                "mode": "collect_in_place",
-                "source": source
-            }, original_keyword="WIND_PS"))
+        # WIND_PS - Convert scalar attribute back to array (reverse of UNWIND)
+        # Syntax: WIND_PS person_tag.tags
+        # Cross-entity movement is handled by MERGE_PS, not WIND_PS.
+        source = ctx.qualifiedName().getText()  # person_tag.tags
+        self.operations.append(Operation("WIND", {
+            "source": source
+        }, original_keyword="WIND_PS"))
 
     def enterNest_ps(self, ctx):
-        # New syntax: NEST_PS identifier COLON unnestFieldList IN qualifiedName WHERE qualifiedName EQUALS qualifiedName (WITH DELETION)?
+        # Syntax: NEST_PS identifier COLON unnestFieldList IN qualifiedName WHERE condition (WITH DELETION)?
         # Example: NEST_PS address:street,city IN person.address WHERE address.person_id = person.person_id WITH DELETION
+        # Example: NEST_PS address:street,city IN person.address WHERE address.person_id = person.person_id AND address.dept_id = person.dept_id
         source_entity = ctx.identifier().getText()  # address
-        target_location = ctx.qualifiedName(0).getText()  # person.address
-        source_fk = ctx.qualifiedName(1).getText()  # address.person_id
-        target_pk = ctx.qualifiedName(2).getText()  # person.person_id
+        target_location = ctx.qualifiedName().getText()  # person.address (single qualifiedName in rule)
         with_deletion = ctx.DELETION() is not None  # WITH DELETION option
+
+        # Parse WHERE condition(s): supports single or AND-chained conditions
+        join_conditions = self._parse_condition_pairs(ctx.condition())
+        source_fk = join_conditions[0]["left"] if join_conditions else ""
+        target_pk = join_conditions[0]["right"] if join_conditions else ""
 
         # Parse target location: person.address -> target_entity=person, embedded_name=address
         target_parts = target_location.split(".")
@@ -912,8 +820,9 @@ class SMELPauschalisiertListener(SMEL_PauschalisiertListener, BaseSMELListener):
             "alias": embedded_name,        # embedded field name (address)
             "attributes": attributes,      # attributes to embed (street, city)
             "nested": nested,              # nested objects
-            "source_fk": source_fk,        # source FK column (address.person_id)
-            "target_pk": target_pk,        # target PK column (person.person_id)
+            "source_fk": source_fk,        # first join condition left (address.person_id)
+            "target_pk": target_pk,        # first join condition right (person.person_id)
+            "join_conditions": join_conditions,  # all join conditions
             "with_deletion": with_deletion # delete source after embedding
         }, original_keyword="NEST_PS"))
 
@@ -954,15 +863,6 @@ class SMELPauschalisiertListener(SMEL_PauschalisiertListener, BaseSMELListener):
             "target": target_name,
             "carry_fields": carry_fields  # List of fields to copy from source to new table
         }, original_keyword="UNNEST_PS"))
-
-    def enterExtract_ps(self, ctx):
-        attrs = [id.getText() for id in ctx.identifierList().identifier()]
-        self.operations.append(Operation("EXTRACT", {
-            "attributes": attrs,
-            "source_entity": ctx.identifier(0).getText(),
-            "target_entity": ctx.identifier(1).getText(),
-            "clauses": self._parse_flatten_clauses(ctx.extractClause())
-        }))
 
     # ADD_PS operations - same internal structure as original SMEL
     def enterAttributeAdd(self, ctx):
@@ -1150,13 +1050,13 @@ class SMELPauschalisiertListener(SMEL_PauschalisiertListener, BaseSMELListener):
         }))
 
     # RENAME_PS operations
-    def enterFeatureRename(self, ctx):
+    def enterAttributeRename(self, ctx):
         identifiers = ctx.identifier() if isinstance(ctx.identifier(), list) else [ctx.identifier()]
         self.operations.append(Operation("RENAME", {
             "old_name": identifiers[0].getText(),
             "new_name": identifiers[1].getText() if len(identifiers) > 1 else None,
             "entity": identifiers[2].getText() if len(identifiers) > 2 else None
-        }, original_keyword="RENAME_PS FEATURE"))
+        }, original_keyword="RENAME_PS ATTRIBUTE"))
 
     def enterEntityRename(self, ctx):
         identifiers = ctx.identifier() if isinstance(ctx.identifier(), list) else [ctx.identifier()]

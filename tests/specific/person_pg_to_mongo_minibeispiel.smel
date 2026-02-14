@@ -80,15 +80,15 @@ NEST address:street,city IN person.address WHERE address.person_id = person.pers
 -- Reverse of (forward Step 5):
 --   SPLIT person INTO person(person_id, name, age, knows), person_tag(person_id, tags)
 --   UNWIND person_tag.tags
---   RENAME_FEATURE tags TO tag_value IN person_tag
+--   RENAME_ATTRIBUTE tags TO tag_value IN person_tag
 --   ADD_PRIMARY_KEY person_tag.person_tag_id AS String
 --   ADD_REFERENCE person_tag.person_id REFERENCES person(person_id) WITH CARDINALITY ONE_TO_MANY
--- Reverse (strict reverse order):
+-- Reverse (reordered: data transformation first, then constraint cleanup):
+RENAME_ATTRIBUTE tag_value TO tags IN person_tag
+WIND person_tag.tags
 DELETE_REFERENCE person_tag.person_id
 DELETE_PRIMARY_KEY person_tag_id FROM person_tag
 DELETE_ATTRIBUTE person_tag.person_tag_id
-RENAME_FEATURE tag_value TO tags IN person_tag
-WIND person_tag.tags
 MERGE person, person_tag INTO person
 -- Result:
 -- person: { person_id, vorname, nachname, age, address{...}, employment{...}, tags[] }
@@ -99,15 +99,15 @@ MERGE person, person_tag INTO person
 -- Reverse of (forward Step 6):
 --   SPLIT person INTO person(person_id, name, age), person_knows(person_id, knows)
 --   UNWIND person_knows.knows
---   RENAME_FEATURE knows TO knows_person_id IN person_knows
+--   RENAME_ATTRIBUTE knows TO knows_person_id IN person_knows
 --   ADD_REFERENCE person_knows.person_id REFERENCES person(person_id) WITH CARDINALITY ONE_TO_MANY
 --   ADD_REFERENCE person_knows.knows_person_id REFERENCES person(person_id) WITH CARDINALITY ONE_TO_MANY
 --   ADD_PRIMARY_KEY (person_id, knows_person_id) TO person_knows
--- Reverse (strict reverse order):
+-- Reverse (reordered: cleanup constraints that reference old names first, then transform):
 DELETE_PRIMARY_KEY (person_id, knows_person_id) FROM person_knows
 DELETE_REFERENCE person_knows.knows_person_id
 DELETE_REFERENCE person_knows.person_id
-RENAME_FEATURE knows_person_id TO knows IN person_knows
+RENAME_ATTRIBUTE knows_person_id TO knows IN person_knows
 WIND person_knows.knows
 MERGE person, person_knows INTO person
 -- Result:
@@ -128,7 +128,7 @@ UNFLATTEN person(vorname, nachname) AS name
 -- ============================================
 -- Reverse of: RENAME _id TO person_id
 --             CAST age TO Integer
-RENAME_FEATURE person_id TO _id IN person
+RENAME_ATTRIBUTE person_id TO _id IN person
 CAST person.age TO String
 -- Final Result:
 -- person: {

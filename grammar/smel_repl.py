@@ -119,7 +119,7 @@ SMEL_COMMANDS = {
     # ========================================================================
     # RENAME - Rename schema elements
     # ========================================================================
-    # Grammar: rename: RENAME (featureRename | entityRename | relTypeRename);
+    # Grammar: rename: RENAME (attributeRename | entityRename | relTypeRename);
     "RENAME": {
         "ENTITY": {"TO": None},             # RENAME ENTITY OldName TO NewName
         "RELTYPE": {"TO": None},            # RENAME RELTYPE OLD TO NEW (Graph)

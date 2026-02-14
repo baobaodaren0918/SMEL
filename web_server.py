@@ -849,6 +849,10 @@ def get_html():
                     <option value="person_d2r_pauschalisiert" selected>Person: MongoDB &rarr; PostgreSQL (Pauschalisiert)</option>
                     <option value="person_r2d_specific">Person: PostgreSQL &rarr; MongoDB (Specific)</option>
                     <option value="person_r2d_pauschalisiert">Person: PostgreSQL &rarr; MongoDB (Pauschalisiert)</option>
+                    <option value="person_r2r_specific">Person: PostgreSQL &rarr; PostgreSQL V2 (Specific)</option>
+                    <option value="person_r2r_pauschalisiert">Person: PostgreSQL &rarr; PostgreSQL V2 (Pauschalisiert)</option>
+                    <option value="person_d2d_specific">Person: MongoDB &rarr; MongoDB V2 (Specific)</option>
+                    <option value="person_d2d_pauschalisiert">Person: MongoDB &rarr; MongoDB V2 (Pauschalisiert)</option>
                 </select>
             </div>
         </div>
@@ -1078,20 +1082,23 @@ def get_html():
             result = result.replace(/(--[^\\n]*)/g, '<span class="smel-comment">$1</span>');
 
             // Keywords
-            const keywords = ['MIGRATION', 'FROM', 'TO', 'USING', 'AS', 'INTO', 'WITH', 'WHERE', 'IN', 'KEY', 'AND', 'FEATURE', 'GENERATE', 'PREFIX', 'SERIAL',
+            const keywords = ['MIGRATION', 'FROM', 'TO', 'USING', 'AS', 'INTO', 'WITH', 'WHERE', 'IN', 'KEY', 'AND', 'GENERATE', 'PREFIX', 'SERIAL',
                 'RELATIONAL', 'DOCUMENT', 'GRAPH', 'COLUMNAR',
-                'NEST', 'UNNEST', 'FLATTEN', 'DELETE', 'ADD', 'RENAME', 'COPY', 'MOVE', 'MERGE', 'SPLIT', 'CAST', 'DROP', 'EXTRACT',
+                'NEST', 'UNNEST', 'FLATTEN', 'UNFLATTEN', 'UNWIND', 'WIND',
+                'DELETE', 'ADD', 'RENAME', 'COPY', 'COPY_KEY', 'MOVE', 'MERGE', 'SPLIT', 'CAST', 'LINKING',
                 'REFERENCE', 'ATTRIBUTE', 'EMBEDDED', 'ENTITY', 'VARIATION', 'RELTYPE',
                 'CARDINALITY', 'ONE_TO_ONE', 'ONE_TO_MANY', 'ZERO_TO_ONE', 'ZERO_TO_MANY',
                 'PRIMARY', 'UNIQUE', 'FOREIGN', 'PARTITION', 'CLUSTERING',
                 // Specific grammar keywords
                 'ADD_ATTRIBUTE', 'ADD_REFERENCE', 'ADD_EMBEDDED', 'ADD_ENTITY', 'ADD_PRIMARY_KEY', 'ADD_FOREIGN_KEY', 'ADD_UNIQUE_KEY',
                 'DELETE_ATTRIBUTE', 'DELETE_REFERENCE', 'DELETE_EMBEDDED', 'DELETE_ENTITY',
-                'DROP_PRIMARY_KEY', 'DROP_UNIQUE_KEY', 'DROP_FOREIGN_KEY', 'DROP_VARIATION', 'DROP_RELTYPE',
-                'RENAME_FEATURE', 'RENAME_ENTITY', 'RENAME_RELTYPE',
+                'DELETE_PRIMARY_KEY', 'DELETE_UNIQUE_KEY', 'DELETE_FOREIGN_KEY', 'DELETE_VARIATION', 'DELETE_RELTYPE',
+                'REMOVE_VARIATION', 'REMOVE_FOREIGN_KEY', 'REMOVE_UNIQUE_KEY',
+                'RENAME_ATTRIBUTE', 'RENAME_ENTITY', 'RENAME_RELTYPE',
                 // Pauschalisiert grammar keywords
-                'ADD_PS', 'DELETE_PS', 'DROP_PS', 'RENAME_PS', 'FLATTEN_PS', 'NEST_PS', 'UNNEST_PS', 'EXTRACT_PS',
-                'COPY_PS', 'MOVE_PS', 'MERGE_PS', 'SPLIT_PS', 'CAST_PS', 'LINKING_PS'];
+                'ADD_PS', 'DELETE_PS', 'REMOVE_PS', 'RENAME_PS',
+                'FLATTEN_PS', 'UNFLATTEN_PS', 'NEST_PS', 'UNNEST_PS', 'UNWIND_PS', 'WIND_PS',
+                'COPY_PS', 'COPY_KEY_PS', 'MOVE_PS', 'MERGE_PS', 'SPLIT_PS', 'CAST_PS', 'LINKING_PS'];
             keywords.forEach(kw => {
                 result = result.replace(new RegExp('\\\\b' + kw + '\\\\b', 'g'), '<span class="smel-keyword">' + kw + '</span>');
             });
@@ -1292,19 +1299,11 @@ def get_html():
                     html += ' <span class="param-key">AS</span> <span class="param-value">' + params.nested_name + '</span>';
                     break;
                 case 'WIND':
-                    // WIND: Collect multiple rows into array (reverse of UNWIND)
-                    if (params.mode === 'collect_in_place') {
-                        // Mode 1: In-place - WIND person_tag.tags (scalar → array in same entity)
-                        html = '<span class="param-value">' + params.source + '</span>';
-                        html += ' <span class="param-key">(in-place: scalar → array)</span>';
-                    } else {
-                        // Mode 2: Cross-entity - WIND source INTO target.field WHERE ...
-                        html = '<span class="param-value">' + params.source + '</span>';
-                        html += ' <span class="param-key">INTO</span> <span class="param-value">' + params.target + '.' + params.array_name + '</span>';
-                        if (params.with_deletion) {
-                            html += ' <span class="param-key">WITH DELETION</span>';
-                        }
-                    }
+                    // WIND: Convert scalar attribute back to array (reverse of UNWIND)
+                    // Only in-place mode: WIND person_tag.tags (scalar → array)
+                    // Cross-entity movement is handled by MERGE, not WIND.
+                    html = '<span class="param-value">' + params.source + '</span>';
+                    html += ' <span class="param-key">(scalar → array)</span>';
                     break;
                 case 'SPLIT':
                     // SPLIT: Vertical partitioning of same-level fields
@@ -1323,7 +1322,7 @@ def get_html():
                     if (params.data_type) html += ' <span class="param-key">AS</span> <span class="param-value">' + params.data_type + '</span>';
                     if (params.entity) html += ' <span class="param-key">TO</span> <span class="param-value">' + params.entity + '</span>';
                     break;
-                case 'DROP_KEY':
+                case 'DELETE_KEY':
                     html = '<span class="param-key">key_type:</span> <span class="param-value">' + params.key_type + '</span> ';
                     if (params.key_columns) {
                         const cols = params.key_columns.length > 1 ? '(' + params.key_columns.join(', ') + ')' : params.key_columns[0];
@@ -1495,12 +1494,9 @@ def get_html():
             html += '<div class="independent-column source-column">';
             html += '<div class="column-header"><h3>Source</h3><div class="subtitle">' + migrationData.source_type + '</div></div>';
             html += '<div class="column-content">';
-            console.log('original_source:', migrationData.original_source);
-            console.log('source:', migrationData.source);
             const sourceData = migrationData.original_source && Object.keys(migrationData.original_source).length > 0
                 ? migrationData.original_source
                 : migrationData.source;
-            console.log('Using sourceData:', sourceData);
             Object.values(sourceData).forEach(entity => {
                 html += renderNestedEntityCard(entity);
             });

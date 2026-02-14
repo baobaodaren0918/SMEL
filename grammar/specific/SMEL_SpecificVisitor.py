@@ -269,8 +269,8 @@ class SMEL_SpecificVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
-    # Visit a parse tree produced by SMEL_SpecificParser#rename_feature.
-    def visitRename_feature(self, ctx:SMEL_SpecificParser.Rename_featureContext):
+    # Visit a parse tree produced by SMEL_SpecificParser#rename_attribute.
+    def visitRename_attribute(self, ctx:SMEL_SpecificParser.Rename_attributeContext):
         return self.visitChildren(ctx)
 
 
@@ -336,11 +336,6 @@ class SMEL_SpecificVisitor(ParseTreeVisitor):
 
     # Visit a parse tree produced by SMEL_SpecificParser#nest.
     def visitNest(self, ctx:SMEL_SpecificParser.NestContext):
-        return self.visitChildren(ctx)
-
-
-    # Visit a parse tree produced by SMEL_SpecificParser#extract.
-    def visitExtract(self, ctx:SMEL_SpecificParser.ExtractContext):
         return self.visitChildren(ctx)
 
 

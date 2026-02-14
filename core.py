@@ -11,13 +11,9 @@ both SMEL_Specific (.smel) and SMEL_Pauschalisiert (.smel_ps) grammars.
 import sys
 import copy
 from pathlib import Path
-from dataclasses import dataclass, field
 from typing import Dict, List, Any, Optional
 
 sys.path.insert(0, str(Path(__file__).parent))
-
-from antlr4 import FileStream, CommonTokenStream, ParseTreeWalker
-from antlr4.error.ErrorListener import ErrorListener
 from Schema.unified_meta_schema import (
     Database, DatabaseType, EntityType, Attribute,
     UniqueConstraint, ForeignKeyConstraint, UniqueProperty, ForeignKeyProperty, PKTypeEnum,
@@ -25,33 +21,8 @@ from Schema.unified_meta_schema import (
     StructuralVariation, RelationshipType, TypeMappings
 )
 from Schema.adapters import PostgreSQLAdapter, MongoDBAdapter
-from config import SCHEMA_DIR, TESTS_DIR, EQUIVALENT_ATTRS, MIGRATION_CONFIGS
-
-
-@dataclass
-class MigrationContext:
-    """Context information from SMEL migration declaration."""
-    name: str = ""
-    version: str = ""
-    source_db_type: str = ""
-    target_db_type: str = ""
-
-
-@dataclass
-class Operation:
-    """Represents a single SMEL operation."""
-    op_type: str
-    params: Dict[str, Any] = field(default_factory=dict)
-
-
-class SyntaxErrorListener(ErrorListener):
-    """Custom error listener to collect syntax errors."""
-    def __init__(self):
-        super().__init__()
-        self.errors = []
-
-    def syntaxError(self, recognizer, offendingSymbol, line, column, msg, e):
-        self.errors.append(f"Line {line}:{column} - {msg}")
+from config import MIGRATION_CONFIGS
+from smel_listeners import MigrationContext, Operation
 
 
 class SchemaTransformer:
@@ -71,6 +42,17 @@ class SchemaTransformer:
         "FOREIGN": "foreign",
         "PARTITION": PKTypeEnum.PARTITION,
         "CLUSTERING": PKTypeEnum.CLUSTERING,
+    }
+
+    # Data type string -> PrimitiveType mapping (used by ADD_ATTRIBUTE, ADD_KEY, CAST)
+    TYPE_STR_MAP = {
+        "STRING": PrimitiveType.STRING, "TEXT": PrimitiveType.TEXT,
+        "INT": PrimitiveType.INTEGER, "INTEGER": PrimitiveType.INTEGER,
+        "LONG": PrimitiveType.LONG, "DOUBLE": PrimitiveType.DOUBLE,
+        "FLOAT": PrimitiveType.FLOAT, "DECIMAL": PrimitiveType.DECIMAL,
+        "BOOLEAN": PrimitiveType.BOOLEAN, "DATE": PrimitiveType.DATE,
+        "TIMESTAMP": PrimitiveType.TIMESTAMP,
+        "UUID": PrimitiveType.UUID, "BINARY": PrimitiveType.BINARY
     }
 
     def __init__(self, database: Database):
@@ -93,24 +75,6 @@ class SchemaTransformer:
                         "prefix": None,
                         "generated": False
                     }
-
-    def _auto_prefix(self, entity_name: str) -> str:
-        """
-        Generate automatic prefix from entity name: first 3 chars + last char.
-        Examples: employment -> empt, company -> comy, address -> adds
-        """
-        name = entity_name.lower().replace("_", "")
-        if len(name) <= 4:
-            return name
-        return name[:3] + name[-1]
-
-    def execute(self, operations: List[Operation]) -> Database:
-        """Execute all operations and return transformed database."""
-        for op in operations:
-            handler = getattr(self, f"_handle_{op.op_type.lower()}", None)
-            if handler:
-                handler(op.params)
-        return self.database
 
     def _handle_nest(self, params: Dict) -> None:
         """
@@ -138,11 +102,6 @@ class SchemaTransformer:
         attributes = params.get("attributes", [])
         with_deletion = params.get("with_deletion", False)
         cardinality = Cardinality.ONE_TO_ONE
-
-        # Backward compatibility: support old "clauses" format
-        for c in params.get("clauses", []):
-            if c["type"] == "CARDINALITY":
-                cardinality = self.CARDINALITY_MAP.get(c["value"], Cardinality.ONE_TO_ONE)
 
         source_entity = self.database.get_entity_type(source_name)
         target_entity = self.database.get_entity_type(target_name)
@@ -511,7 +470,7 @@ class SchemaTransformer:
             # e.g., tags: ListDataType(STRING) -> tags: STRING
             parts = source_path.split(".")
             if len(parts) >= 2:
-                entity_name = parts[0]
+                entity_name = ".".join(parts[:-1])
                 attr_name = parts[-1]
                 entity = self.database.get_entity_type(entity_name)
                 if entity:
@@ -563,82 +522,34 @@ class SchemaTransformer:
 
     def _handle_wind(self, params: Dict) -> None:
         """
-        WIND: Collect multiple rows into array field (reverse of UNWIND).
+        WIND: Convert scalar attribute back to array (reverse of UNWIND).
 
-        Two modes (symmetric with UNWIND):
-          Mode 1 (in-place): WIND person_tag.tags
-            Before: person_tag { person_id, tags } (multiple rows, scalar)
-            After:  person_tag { person_id, tags[] } (single row, array)
-            Reverse of: UNWIND person_tag.tags
+        Syntax: WIND person_tag.tags
+          Before: person_tag { person_id, tags } (multiple rows, scalar)
+          After:  person_tag { person_id, tags[] } (single row, array)
+          Reverse of: UNWIND person_tag.tags
 
-          Mode 2 (cross-entity): WIND person_tag INTO person.tags WHERE ...
-            Before: person_tag { person_id, tag_value } (multiple rows)
-            After:  person { tags: ["value1", "value2", ...] }
+        Note: Cross-entity movement is handled by MERGE, not WIND.
         """
-        mode = params.get("mode", "cross_entity")
-
-        if mode == "collect_in_place":
-            # Mode 1: In-place - convert scalar attribute to array (reverse of UNWIND in-place)
-            source_path = params.get("source", "")
-            parts = source_path.split(".")
-            if len(parts) >= 2:
-                entity_name = parts[0]
-                attr_name = parts[-1]
-                entity = self.database.get_entity_type(entity_name)
-                if entity:
-                    attr = entity.get_attribute(attr_name)
-                    if attr:
-                        # Convert scalar type to ListDataType (reverse of UNWIND which does List -> scalar)
-                        attr.data_type = ListDataType(element_type=attr.data_type)
-                        self.changes.append(f"WIND_INPLACE:{entity_name}.{attr_name}")
-            return
-
-        # Mode 2: Cross-entity (existing behavior)
-        source_entity_name = params["source"]  # person_tag
-        target_entity_name = params["target"]  # person
-        array_name = params["array_name"]      # tags
-        with_deletion = params.get("with_deletion", False)
-
-        source_entity = self.database.get_entity_type(source_entity_name)
-        target_entity = self.database.get_entity_type(target_entity_name)
-
-        if not source_entity or not target_entity:
-            return
-
-        # Find the value attribute in source entity (the field to collect into array)
-        # Usually it's a non-key, non-FK field
-        value_attr = None
-        for attr in source_entity.attributes:
-            if not attr.is_key and attr.attr_name not in [r.ref_name for r in source_entity.get_references()]:
-                value_attr = attr
-                break
-
-        if not value_attr:
-            # Fallback: use first non-key attribute
-            for attr in source_entity.attributes:
-                if not attr.is_key:
-                    value_attr = attr
-                    break
-
-        # Create array attribute in target entity
-        if value_attr:
-            array_type = ListDataType(element_type=value_attr.data_type)
-        else:
-            array_type = ListDataType(element_type=PrimitiveDataType(PrimitiveType.STRING))
-
-        target_entity.add_attribute(Attribute(array_name, array_type, False, True))
-
-        # Optionally delete source entity
-        if with_deletion:
-            self.database.remove_entity_type(source_entity_name)
-
-        self.changes.append(f"WIND:{source_entity_name}->{target_entity_name}.{array_name}")
+        source_path = params.get("source", "")
+        parts = source_path.split(".")
+        if len(parts) >= 2:
+            entity_name = ".".join(parts[:-1])
+            attr_name = parts[-1]
+            entity = self.database.get_entity_type(entity_name)
+            if entity:
+                attr = entity.get_attribute(attr_name)
+                if attr:
+                    # Convert scalar type to ListDataType (reverse of UNWIND which does List -> scalar)
+                    attr.data_type = ListDataType(element_type=attr.data_type)
+                    self.changes.append(f"WIND:{entity_name}.{attr_name}")
 
     def _handle_delete_reference(self, params: Dict) -> None:
         parts = params["reference"].split(".")
-        if len(parts) != 2:
+        if len(parts) < 2:
             return
-        entity_name, ref_name = parts[0], parts[1]
+        entity_name = ".".join(parts[:-1])
+        ref_name = parts[-1]
         entity = self.database.get_entity_type(entity_name)
         if entity:
             entity.remove_relationship(ref_name)
@@ -648,9 +559,10 @@ class SchemaTransformer:
 
     def _handle_delete_embedded(self, params: Dict) -> None:
         parts = params["embedded"].split(".")
-        if len(parts) != 2:
+        if len(parts) < 2:
             return
-        parent_name, embedded_name = parts[0], parts[1].replace("[]", "")
+        parent_name = ".".join(parts[:-1])
+        embedded_name = parts[-1].replace("[]", "")
         parent_entity = self.database.get_entity_type(parent_name)
         if parent_entity:
             parent_entity.remove_relationship(embedded_name)
@@ -698,21 +610,11 @@ class SchemaTransformer:
         if not entity.get_attribute(field_name):
             entity.add_attribute(Attribute(field_name, fk_type, False, True))
 
-        # Parse cardinality from clauses
-        # clauses can be a dict (from _parse_reference_clauses) or a list
-        cardinality = Cardinality.ONE_TO_ONE  # Default
+        # Parse cardinality from clauses (dict format from _parse_reference_clauses)
+        cardinality = Cardinality.ONE_TO_ONE
         clauses = params.get("clauses", {})
-        if isinstance(clauses, dict):
-            # Dict format: {'cardinality': 'ONE_TO_MANY', ...}
-            if 'cardinality' in clauses:
-                cardinality = self.CARDINALITY_MAP.get(clauses['cardinality'], Cardinality.ONE_TO_ONE)
-        else:
-            # List format: [{'type': 'CARDINALITY', 'value': 'ONE_TO_MANY'}, ...]
-            for clause in clauses:
-                if isinstance(clause, dict) and clause.get("type") == "CARDINALITY":
-                    cardinality = self.CARDINALITY_MAP.get(clause.get("value"), Cardinality.ONE_TO_ONE)
-                elif isinstance(clause, str) and clause in self.CARDINALITY_MAP:
-                    cardinality = self.CARDINALITY_MAP.get(clause, Cardinality.ONE_TO_ONE)
+        if 'cardinality' in clauses:
+            cardinality = self.CARDINALITY_MAP.get(clauses['cardinality'], Cardinality.ONE_TO_ONE)
 
         entity.add_relationship(Reference(ref_name=field_name, refs_to=target_table,
                                           cardinality=cardinality, is_optional=True))
@@ -731,16 +633,7 @@ class SchemaTransformer:
         for c in clauses:
             if c["type"] == "TYPE":
                 type_str = c["data_type"].upper()
-                type_map = {
-                    "STRING": PrimitiveType.STRING, "TEXT": PrimitiveType.TEXT,
-                    "INT": PrimitiveType.INTEGER, "INTEGER": PrimitiveType.INTEGER,
-                    "LONG": PrimitiveType.LONG, "DOUBLE": PrimitiveType.DOUBLE,
-                    "FLOAT": PrimitiveType.FLOAT, "DECIMAL": PrimitiveType.DECIMAL,
-                    "BOOLEAN": PrimitiveType.BOOLEAN, "DATE": PrimitiveType.DATE,
-                    "TIMESTAMP": PrimitiveType.TIMESTAMP,
-                    "UUID": PrimitiveType.UUID, "BINARY": PrimitiveType.BINARY
-                }
-                data_type = PrimitiveDataType(type_map.get(type_str, PrimitiveType.STRING))
+                data_type = PrimitiveDataType(self.TYPE_STR_MAP.get(type_str, PrimitiveType.STRING))
             elif c["type"] == "NOT_NULL":
                 is_optional = False
 
@@ -802,16 +695,25 @@ class SchemaTransformer:
         """DELETE ATTRIBUTE Customer.email"""
         target = params["target"]
         parts = target.split(".")
-        if len(parts) == 2:
-            entity = self.database.get_entity_type(parts[0])
+        if len(parts) >= 2:
+            entity_name = ".".join(parts[:-1])
+            attr_name = parts[-1]
+            entity = self.database.get_entity_type(entity_name)
             if entity:
-                entity.remove_attribute(parts[1])
+                entity.remove_attribute(attr_name)
                 self.changes.append(f"DELETE_ATTR:{target}")
 
     def _handle_delete_entity(self, params: Dict) -> None:
         """DELETE ENTITY Customer"""
         name = params["name"]
         self.database.remove_entity_type(name)
+        # Clean up cross-references in other entities (both Reference and Embedded)
+        for other_entity in self.database.entity_types.values():
+            other_entity.relationships = [
+                rel for rel in other_entity.relationships
+                if not (hasattr(rel, 'refs_to') and rel.refs_to == name)
+                and not (hasattr(rel, 'aggregates') and rel.aggregates == name)
+            ]
         self.changes.append(f"DELETE_ENTITY:{name}")
 
     def _handle_delete_key(self, params: Dict) -> None:
@@ -830,12 +732,6 @@ class SchemaTransformer:
         # Remove the variation
         entity.variations = [v for v in entity.variations if v.variation_id != variation_id]
         self.changes.append(f"DELETE_VARIATION:{entity_name}.{variation_id}")
-
-    def _handle_delete_reltype(self, params: Dict) -> None:
-        """DELETE RELTYPE ACTED_IN (graph database)"""
-        reltype_name = params["name"]
-        # In a full implementation, this would remove the relationship type from graph schema
-        self.changes.append(f"DELETE_RELTYPE:{reltype_name}")
 
     def _handle_delete_index(self, params: Dict) -> None:
         """DELETE INDEX idx_name FROM Customer"""
@@ -897,16 +793,7 @@ class SchemaTransformer:
 
         # Parse data type if specified
         if data_type_str:
-            type_map = {
-                "STRING": PrimitiveType.STRING, "TEXT": PrimitiveType.TEXT,
-                "INT": PrimitiveType.INTEGER, "INTEGER": PrimitiveType.INTEGER,
-                "LONG": PrimitiveType.LONG, "DOUBLE": PrimitiveType.DOUBLE,
-                "FLOAT": PrimitiveType.FLOAT, "DECIMAL": PrimitiveType.DECIMAL,
-                "BOOLEAN": PrimitiveType.BOOLEAN, "DATE": PrimitiveType.DATE,
-                "TIMESTAMP": PrimitiveType.TIMESTAMP,
-                "UUID": PrimitiveType.UUID, "BINARY": PrimitiveType.BINARY
-            }
-            key_data_type = PrimitiveDataType(type_map.get(data_type_str.upper(), PrimitiveType.STRING))
+            key_data_type = PrimitiveDataType(self.TYPE_STR_MAP.get(data_type_str.upper(), PrimitiveType.STRING))
         else:
             key_data_type = PrimitiveDataType(PrimitiveType.INTEGER)
 
@@ -948,10 +835,10 @@ class SchemaTransformer:
             fk_props = []
             ref_entity_name = None
             ref_attrs = []
-            for c in params.get("clauses", []):
-                if c["type"] == "REFERENCES":
-                    ref_entity_name = c["target"]
-                    ref_attrs = c["columns"]
+            clauses = params.get("clauses", {})
+            if "references" in clauses:
+                ref_entity_name = clauses["references"]["table"]
+                ref_attrs = clauses["references"]["columns"]
             for i, attr in enumerate(key_attrs):
                 target_attr = ref_attrs[i] if i < len(ref_attrs) else (ref_attrs[0] if ref_attrs else "")
                 target_up_id = self._get_target_unique_property_id(ref_entity_name, target_attr)
@@ -1056,7 +943,7 @@ class SchemaTransformer:
                             if up_attr:
                                 up_attr.is_key = False
                         key_names_str = ", ".join(key_columns)
-                        self.changes.append(f"DROP_KEY:{entity_name}.({key_names_str})")
+                        self.changes.append(f"{operation}_KEY:{entity_name}.({key_names_str})")
                         return
 
     def _handle_add_variation(self, params: Dict) -> None:
@@ -1068,20 +955,18 @@ class SchemaTransformer:
             return
 
         attributes, relationships, count = [], [], 0
-        for c in params.get("clauses", []):
-            if c["type"] == "ATTRIBUTES":
-                for attr_name in c["attributes"]:
-                    attr = entity.get_attribute(attr_name)
-                    if attr:
-                        attributes.append(attr)
-            elif c["type"] == "RELATIONSHIPS":
-                for rel_name in c["relationships"]:
-                    for rel in entity.relationships:
-                        if (hasattr(rel, 'ref_name') and rel.ref_name == rel_name) or \
-                           (hasattr(rel, 'aggr_name') and rel.aggr_name == rel_name):
-                            relationships.append(rel)
-            elif c["type"] == "COUNT":
-                count = c["count"]
+        clauses = params.get("clauses", {})
+        for attr_name in clauses.get("attributes", []):
+            attr = entity.get_attribute(attr_name)
+            if attr:
+                attributes.append(attr)
+        for rel_name in clauses.get("relationships", []):
+            for rel in entity.relationships:
+                if (hasattr(rel, 'ref_name') and rel.ref_name == rel_name) or \
+                   (hasattr(rel, 'aggr_name') and rel.aggr_name == rel_name):
+                    relationships.append(rel)
+        if "count" in clauses:
+            count = clauses["count"]
 
         variation = StructuralVariation(variation_id=variation_id, attributes=attributes,
                                         relationships=relationships, count=count)
@@ -1128,28 +1013,21 @@ class SchemaTransformer:
         self.changes.append(f"REMOVE_LABEL:{entity_name}.{label}")
 
     def _handle_rename(self, params: Dict) -> None:
-        """RENAME: Rename an attribute (feature) within an entity."""
+        """RENAME: Rename an attribute within an entity."""
         old_name = params["old_name"]
         new_name = params["new_name"]
         entity_name = params.get("entity")
 
-        if entity_name:
-            # Rename attribute within entity
-            entity = self.database.get_entity_type(entity_name)
-            if entity:
-                attr = entity.get_attribute(old_name)
-                if attr:
-                    attr.attr_name = new_name
-                    self.changes.append(f"RENAME:{entity_name}.{old_name}->{new_name}")
-        else:
-            # Fallback: Rename entity itself (for backward compatibility)
-            entity = self.database.get_entity_type(old_name)
-            if entity:
-                self.database.remove_entity_type(old_name)
-                # Update object_name: keep parent path, change last element
-                entity.object_name = entity.parent_path + [new_name]
-                self.database.add_entity_type(entity)
-                self.changes.append(f"RENAME:{old_name}->{new_name}")
+        if not entity_name:
+            # RENAME_ATTRIBUTE requires IN entity clause
+            return
+
+        entity = self.database.get_entity_type(entity_name)
+        if entity:
+            attr = entity.get_attribute(old_name)
+            if attr:
+                attr.attr_name = new_name
+                self.changes.append(f"RENAME:{entity_name}.{old_name}->{new_name}")
 
     def _handle_rename_entity(self, params: Dict) -> None:
         """RENAME ENTITY: Rename an entity."""
@@ -1162,6 +1040,13 @@ class SchemaTransformer:
             # Update object_name: keep parent path, change last element
             entity.object_name = entity.parent_path + [new_name]
             self.database.add_entity_type(entity)
+            # Update cross-references in other entities
+            for other_entity in self.database.entity_types.values():
+                for rel in other_entity.relationships:
+                    if hasattr(rel, 'refs_to') and rel.refs_to == old_name:
+                        rel.refs_to = new_name
+                    if hasattr(rel, 'aggregates') and rel.aggregates == old_name:
+                        rel.aggregates = new_name
             self.changes.append(f"RENAME_ENTITY:{old_name}->{new_name}")
 
     def _handle_copy(self, params: Dict) -> None:
@@ -1213,18 +1098,22 @@ class SchemaTransformer:
         source_parts = source_path.split(".")
         target_parts = target_path.split(".")
 
-        if len(source_parts) == 2 and len(target_parts) == 2:
-            # Move attribute
-            src_entity = self.database.get_entity_type(source_parts[0])
-            tgt_entity = self.database.get_entity_type(target_parts[0])
+        if len(source_parts) >= 2 and len(target_parts) >= 2:
+            # Move attribute - support nested paths like person.address.street
+            src_entity_name = ".".join(source_parts[:-1])
+            src_attr_name = source_parts[-1]
+            tgt_entity_name = ".".join(target_parts[:-1])
+            tgt_attr_name = target_parts[-1]
+            src_entity = self.database.get_entity_type(src_entity_name)
+            tgt_entity = self.database.get_entity_type(tgt_entity_name)
             if src_entity and tgt_entity:
-                src_attr = src_entity.get_attribute(source_parts[1])
+                src_attr = src_entity.get_attribute(src_attr_name)
                 if src_attr:
                     # Add to target
-                    new_attr = Attribute(target_parts[1], src_attr.data_type, False, src_attr.is_optional)
+                    new_attr = Attribute(tgt_attr_name, src_attr.data_type, False, src_attr.is_optional)
                     tgt_entity.add_attribute(new_attr)
                     # Remove from source
-                    src_entity.remove_attribute(source_parts[1])
+                    src_entity.remove_attribute(src_attr_name)
                     self.changes.append(f"MOVE:{source_path}->{target_path}")
 
     def _handle_merge(self, params: Dict) -> None:
@@ -1366,120 +1255,26 @@ class SchemaTransformer:
         parts_str = ",".join(created_entities)
         self.changes.append(f"SPLIT:{source_name}->{parts_str}")
 
-    def _handle_add(self, params: Dict) -> None:
-        """ADD: Add attribute, reference, embedded, entity, or variation."""
-        feature_type = params["feature_type"].upper()
-        name = params["name"]
-        entity_name = params.get("entity")
-        clauses = params.get("clauses", [])
-
-        # Parse data type from clauses
-        data_type = PrimitiveDataType(PrimitiveType.STRING)
-        is_optional = True
-        cardinality = Cardinality.ONE_TO_ONE
-
-        for c in clauses:
-            if c["type"] == "TYPE":
-                type_str = c["data_type"].upper()
-                type_map = {
-                    "STRING": PrimitiveType.STRING, "TEXT": PrimitiveType.TEXT,
-                    "INT": PrimitiveType.INTEGER, "INTEGER": PrimitiveType.INTEGER,
-                    "LONG": PrimitiveType.LONG, "DOUBLE": PrimitiveType.DOUBLE,
-                    "FLOAT": PrimitiveType.FLOAT, "DECIMAL": PrimitiveType.DECIMAL,
-                    "BOOLEAN": PrimitiveType.BOOLEAN, "DATE": PrimitiveType.DATE,
-                    "TIMESTAMP": PrimitiveType.TIMESTAMP,
-                    "UUID": PrimitiveType.UUID, "BINARY": PrimitiveType.BINARY
-                }
-                data_type = PrimitiveDataType(type_map.get(type_str, PrimitiveType.STRING))
-            elif c["type"] == "NOT_NULL":
-                is_optional = False
-            elif c["type"] == "CARDINALITY":
-                cardinality = self.CARDINALITY_MAP.get(c["value"], Cardinality.ONE_TO_ONE)
-
-        if feature_type == "ATTRIBUTE":
-            entity = self.database.get_entity_type(entity_name) if entity_name else None
-            if entity:
-                entity.add_attribute(Attribute(name, data_type, False, is_optional))
-                self.changes.append(f"ADD_ATTR:{entity_name}.{name}")
-
-        elif feature_type == "ENTITY":
-            new_entity = EntityType(object_name=[name])
-            self.database.add_entity_type(new_entity)
-            self.changes.append(f"ADD_ENTITY:{name}")
-
-        elif feature_type == "REFERENCE":
-            entity = self.database.get_entity_type(entity_name) if entity_name else None
-            if entity:
-                entity.add_attribute(Attribute(name, PrimitiveDataType(PrimitiveType.INTEGER), False, is_optional))
-                entity.add_relationship(Reference(ref_name=name, refs_to="", cardinality=cardinality, is_optional=is_optional))
-                self.changes.append(f"ADD_REF:{entity_name}.{name}")
-
-        elif feature_type == "EMBEDDED":
-            entity = self.database.get_entity_type(entity_name) if entity_name else None
-            if entity:
-                entity.add_relationship(Embedded(aggr_name=name, aggregates=name, cardinality=cardinality, is_optional=is_optional))
-                self.changes.append(f"ADD_EMBEDDED:{entity_name}.{name}")
-
-    def _handle_delete(self, params: Dict) -> None:
-        """DELETE: Delete attribute, reference, embedded, entity, or variation."""
-        feature_type = params["feature_type"].upper()
-        target = params["target"]
-
-        parts = target.split(".")
-
-        if feature_type == "ATTRIBUTE":
-            if len(parts) == 2:
-                entity = self.database.get_entity_type(parts[0])
-                if entity:
-                    entity.remove_attribute(parts[1])
-                    self.changes.append(f"DELETE_ATTR:{target}")
-
-        elif feature_type == "ENTITY":
-            self.database.remove_entity_type(parts[0])
-            self.changes.append(f"DELETE_ENTITY:{parts[0]}")
-
-        elif feature_type == "REFERENCE":
-            if len(parts) == 2:
-                entity = self.database.get_entity_type(parts[0])
-                if entity:
-                    entity.remove_relationship(parts[1])
-                    entity.remove_attribute(parts[1])
-                    self.changes.append(f"DELETE_REF:{target}")
-
-        elif feature_type == "EMBEDDED":
-            if len(parts) == 2:
-                entity = self.database.get_entity_type(parts[0])
-                if entity:
-                    entity.remove_relationship(parts[1])
-                    self.changes.append(f"DELETE_EMBEDDED:{target}")
-
     def _handle_cast(self, params: Dict) -> None:
         """CAST: Change attribute data type."""
         target = params["target"]
         new_type_str = params.get("data_type", params.get("type", "STRING")).upper()
 
         parts = target.split(".")
-        if len(parts) != 2:
+        if len(parts) < 2:
             return
 
-        entity = self.database.get_entity_type(parts[0])
+        entity_name = ".".join(parts[:-1])
+        attr_name = parts[-1]
+        entity = self.database.get_entity_type(entity_name)
         if not entity:
             return
 
-        attr = entity.get_attribute(parts[1])
+        attr = entity.get_attribute(attr_name)
         if not attr:
             return
 
-        type_map = {
-            "STRING": PrimitiveType.STRING, "TEXT": PrimitiveType.TEXT,
-            "INT": PrimitiveType.INTEGER, "INTEGER": PrimitiveType.INTEGER,
-            "LONG": PrimitiveType.LONG, "DOUBLE": PrimitiveType.DOUBLE,
-            "FLOAT": PrimitiveType.FLOAT, "DECIMAL": PrimitiveType.DECIMAL,
-            "BOOLEAN": PrimitiveType.BOOLEAN, "DATE": PrimitiveType.DATE,
-            "TIMESTAMP": PrimitiveType.TIMESTAMP,
-            "UUID": PrimitiveType.UUID, "BINARY": PrimitiveType.BINARY
-        }
-        new_type = type_map.get(new_type_str, PrimitiveType.STRING)
+        new_type = self.TYPE_STR_MAP.get(new_type_str, PrimitiveType.STRING)
         attr.data_type = PrimitiveDataType(new_type)
         self.changes.append(f"CAST:{target}->{new_type_str}")
 
@@ -1489,85 +1284,47 @@ class SchemaTransformer:
         target = params["target"]
 
         parts = source.split(".")
-        if len(parts) != 2:
+        if len(parts) < 2:
             return
 
-        entity = self.database.get_entity_type(parts[0])
+        entity_name = ".".join(parts[:-1])
+        attr_name = parts[-1]
+        entity = self.database.get_entity_type(entity_name)
         if not entity:
             return
 
-        # Add reference attribute if not exists
-        if not entity.get_attribute(parts[1]):
-            entity.add_attribute(Attribute(parts[1], PrimitiveDataType(PrimitiveType.INTEGER), False, True))
+        # Get target entity's primary key type for FK attribute
+        target_entity = self.database.get_entity_type(target)
+        fk_type = PrimitiveDataType(PrimitiveType.INTEGER)
+        if target_entity:
+            target_pk = target_entity.get_primary_key()
+            if target_pk and target_pk.unique_properties:
+                pk_attr = target_entity.get_attribute_by_id(target_pk.unique_properties[0].property_id)
+                if pk_attr:
+                    fk_type = pk_attr.data_type
 
-        entity.add_relationship(Reference(ref_name=parts[1], refs_to=target,
+        # Add reference attribute if not exists
+        if not entity.get_attribute(attr_name):
+            entity.add_attribute(Attribute(attr_name, fk_type, False, True))
+
+        entity.add_relationship(Reference(ref_name=attr_name, refs_to=target,
                                           cardinality=Cardinality.ONE_TO_ONE, is_optional=True))
         self.changes.append(f"LINKING:{source}->{target}")
-
-    def _handle_extract(self, params: Dict) -> None:
-        """EXTRACT: Extract attributes from entity to create new entity."""
-        attributes = params["attributes"]
-        source_name = params["source"]
-        target_name = params["target"]
-        clauses = params.get("clauses", [])
-
-        source = self.database.get_entity_type(source_name)
-        if not source:
-            return
-
-        # Create new entity with extracted attributes
-        new_entity = EntityType(object_name=[target_name])
-
-        # Process clauses for key generation
-        pk_name = None
-        ref_clauses = []
-        for c in clauses:
-            if c["type"] == "GENERATE_KEY":
-                pk_name = c["key_name"]
-                pk_type = PrimitiveDataType(PrimitiveType.INTEGER)
-                pk_attr = Attribute(pk_name, pk_type, True, False)
-                new_entity.add_attribute(pk_attr)
-                constraint = UniqueConstraint(
-                    is_primary_key=True,
-                    is_managed=True,
-                    unique_properties=[UniqueProperty(primary_key_type=PKTypeEnum.SIMPLE, property_id=pk_attr.meta_id)]
-                )
-                new_entity.add_constraint(constraint)
-            elif c["type"] == "ADD_REFERENCE":
-                ref_clauses.append(c)
-
-        # Copy specified attributes
-        for attr_name in attributes:
-            attr = source.get_attribute(attr_name)
-            if attr and attr_name != pk_name:
-                new_entity.add_attribute(Attribute(attr.attr_name, attr.data_type, False, attr.is_optional))
-                # Remove from source
-                source.remove_attribute(attr_name)
-
-        # Add references
-        for c in ref_clauses:
-            new_entity.add_attribute(Attribute(c["ref_name"], PrimitiveDataType(PrimitiveType.INTEGER), False, False))
-            new_entity.add_relationship(Reference(ref_name=c["ref_name"], refs_to=c["target"],
-                                                  cardinality=Cardinality.ONE_TO_ONE, is_optional=False))
-
-        self.database.add_entity_type(new_entity)
-        self.changes.append(f"EXTRACT:{source_name}->{target_name}")
 
     def _handle_add_reltype(self, params: Dict) -> None:
         """ADD RELTYPE: Add a graph relationship type (Neo4j)."""
         name = params["name"]
         source = params["source"]
         target = params["target"]
-        clauses = params.get("clauses", [])
+        clauses = params.get("clauses", {})
 
         cardinality = Cardinality.ZERO_TO_MANY
         properties = []
 
-        for c in clauses:
-            if c["type"] == "CARDINALITY":
-                cardinality = self.CARDINALITY_MAP.get(c["value"], Cardinality.ZERO_TO_MANY)
-            elif c["type"] == "PROPERTIES":
-                properties = c["properties"]
+        if "cardinality" in clauses:
+            cardinality = self.CARDINALITY_MAP.get(clauses["cardinality"], Cardinality.ZERO_TO_MANY)
+        if "properties" in clauses:
+            properties = clauses["properties"]
 
         rel_type = RelationshipType(rel_name=name, source_entity=source, target_entity=target, cardinality=cardinality)
 
@@ -1579,16 +1336,10 @@ class SchemaTransformer:
         self.changes.append(f"ADD_RELTYPE:{name}")
 
     def _handle_delete_reltype(self, params: Dict) -> None:
-        """DELETE RELTYPE: Remove a graph relationship type (deprecated, use DROP)."""
+        """DELETE RELTYPE: Remove a graph relationship type."""
         name = params["name"]
         self.database.remove_relationship_type(name)
         self.changes.append(f"DELETE_RELTYPE:{name}")
-
-    def _handle_drop_reltype(self, params: Dict) -> None:
-        """DROP RELTYPE: Remove a graph relationship type."""
-        name = params["name"]
-        self.database.remove_relationship_type(name)
-        self.changes.append(f"DROP_RELTYPE:{name}")
 
     def _handle_rename_reltype(self, params: Dict) -> None:
         """RENAME RELTYPE: Rename a graph relationship type."""
@@ -1619,9 +1370,16 @@ def db_to_dict(db: Database) -> Dict[str, Any]:
             """Convert data type to string representation."""
             if hasattr(data_type, 'primitive_type'):
                 return data_type.primitive_type.value
+            elif hasattr(data_type, 'key_type'):
+                # MapDataType - check before element_type since Map may also have it
+                key = get_type_str(data_type.key_type)
+                val = get_type_str(data_type.value_type)
+                return f"map[{key},{val}]"
             elif hasattr(data_type, 'element_type'):
-                # ListDataType - show as array[element_type]
+                # ListDataType / SetDataType
                 element = get_type_str(data_type.element_type)
+                if type(data_type).__name__ == 'SetDataType':
+                    return f"set[{element}]"
                 return f"array[{element}]"
             return 'unknown'
 
@@ -1661,7 +1419,15 @@ def db_to_dict(db: Database) -> Dict[str, Any]:
 
 def _get_source_type_str(attr: Attribute, source_type: str) -> str:
     """Get the original type string for an attribute based on source database type."""
-    primitive = attr.data_type.primitive_type if hasattr(attr.data_type, 'primitive_type') else PrimitiveType.STRING
+    # Handle complex types first
+    if not hasattr(attr.data_type, 'primitive_type'):
+        if hasattr(attr.data_type, 'key_type'):
+            return "JSONB" if source_type == "Relational" else "object"
+        elif hasattr(attr.data_type, 'element_type'):
+            return "JSONB" if source_type == "Relational" else "array"
+        return "VARCHAR" if source_type == "Relational" else "string"
+
+    primitive = attr.data_type.primitive_type
 
     if source_type == "Relational":
         # PostgreSQL format (using centralized TypeMappings)
@@ -1914,78 +1680,6 @@ def _calculate_changes(prev: Dict, after: Dict, op) -> Dict:
     return changes
 
 
-def sort_by_dependency(operations: List, initial_entities: set) -> List:
-    """
-    Sort operations by dependency order using multi-pass scanning.
-
-    Args:
-        operations: List of Operation objects
-        initial_entities: Set of entity names that already exist (source entities)
-
-    Returns:
-        List of operations sorted by dependency order
-
-    Raises:
-        ValueError: If circular dependency is detected
-    """
-    # Separate FLATTEN operations from others
-    flatten_ops = []
-    other_ops = []
-
-    for op in operations:
-        if op.op_type == "FLATTEN":
-            flatten_ops.append(op)
-        else:
-            other_ops.append(op)
-
-    # Build dependency info for FLATTEN operations
-    # Each FLATTEN creates a new entity and may reference other entities
-    op_dependencies = {}
-    for op in flatten_ops:
-        target = op.params.get("target")
-        refs = []
-        for clause in op.params.get("clauses", []):
-            if clause.get("type") == "ADD_REFERENCE":
-                ref_target = clause.get("target")
-                if ref_target:
-                    refs.append(ref_target)
-        op_dependencies[target] = {
-            "op": op,
-            "refs": refs
-        }
-
-    # Sort FLATTEN operations by dependency
-    sorted_flatten = []
-    resolved = set(initial_entities)
-    remaining = list(flatten_ops)
-    max_iterations = len(flatten_ops) + 1
-    iterations = 0
-
-    while remaining and iterations < max_iterations:
-        iterations += 1
-        progress = False
-
-        for op in remaining[:]:
-            target = op.params.get("target")
-            deps = op_dependencies.get(target, {}).get("refs", [])
-
-            # Check if all dependencies are resolved
-            if all(dep in resolved for dep in deps):
-                sorted_flatten.append(op)
-                remaining.remove(op)
-                resolved.add(target)
-                progress = True
-
-        if not progress and remaining:
-            # No progress made - circular dependency detected
-            unresolved = [op.params.get("target") for op in remaining]
-            raise ValueError(f"Circular dependency detected among: {unresolved}")
-
-    # Return: other ops first (CAST, COPY, RENAME etc.), then sorted FLATTEN ops
-    # Actually, FLATTEN should come first to create entities, then other operations modify them
-    return sorted_flatten + other_ops
-
-
 def _cleanup_flattened_entities(db: Database, changes: List[str]) -> None:
     """
     Clean up embedded entities that have been flattened/split to standalone tables.
@@ -2014,14 +1708,13 @@ def _cleanup_flattened_entities(db: Database, changes: List[str]) -> None:
         return
 
     # Find embedded entities to remove (entities with "." in name are embedded paths)
+    # Only remove if the short name matches a flattened target
     entities_to_remove = []
     for entity_name in list(db.entity_types.keys()):
         if "." in entity_name:
-            # This is an embedded entity path like "person.address"
-            # Check if a flattened table was created for this path's last component
             short_name = entity_name.split(".")[-1]
-            # Also check if any flattened target matches this entity
-            entities_to_remove.append(entity_name)
+            if short_name in flattened_targets:
+                entities_to_remove.append(entity_name)
 
     for entity_name in entities_to_remove:
         db.remove_entity_type(entity_name)
@@ -2099,6 +1792,8 @@ def run_migration(direction: str) -> Dict[str, Any]:
         handler = getattr(transformer, f"_handle_{op.op_type.lower()}", None)
         if handler:
             handler(op.params)
+        else:
+            print(f"[WARNING] Unknown operation type: {op.op_type}")
 
         new_count = len(transformer.database.entity_types)
         after_snapshot = db_to_dict(transformer.database)

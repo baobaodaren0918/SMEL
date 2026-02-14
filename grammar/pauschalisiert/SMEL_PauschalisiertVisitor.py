@@ -234,8 +234,8 @@ class SMEL_PauschalisiertVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
-    # Visit a parse tree produced by SMEL_PauschalisiertParser#featureRename.
-    def visitFeatureRename(self, ctx:SMEL_PauschalisiertParser.FeatureRenameContext):
+    # Visit a parse tree produced by SMEL_PauschalisiertParser#attributeRename.
+    def visitAttributeRename(self, ctx:SMEL_PauschalisiertParser.AttributeRenameContext):
         return self.visitChildren(ctx)
 
 
@@ -356,11 +356,6 @@ class SMEL_PauschalisiertVisitor(ParseTreeVisitor):
 
     # Visit a parse tree produced by SMEL_PauschalisiertParser#nest_ps.
     def visitNest_ps(self, ctx:SMEL_PauschalisiertParser.Nest_psContext):
-        return self.visitChildren(ctx)
-
-
-    # Visit a parse tree produced by SMEL_PauschalisiertParser#extract_ps.
-    def visitExtract_ps(self, ctx:SMEL_PauschalisiertParser.Extract_psContext):
         return self.visitChildren(ctx)
 
 

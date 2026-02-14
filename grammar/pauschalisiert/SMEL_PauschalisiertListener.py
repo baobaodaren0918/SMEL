@@ -413,12 +413,12 @@ class SMEL_PauschalisiertListener(ParseTreeListener):
         pass
 
 
-    # Enter a parse tree produced by SMEL_PauschalisiertParser#featureRename.
-    def enterFeatureRename(self, ctx:SMEL_PauschalisiertParser.FeatureRenameContext):
+    # Enter a parse tree produced by SMEL_PauschalisiertParser#attributeRename.
+    def enterAttributeRename(self, ctx:SMEL_PauschalisiertParser.AttributeRenameContext):
         pass
 
-    # Exit a parse tree produced by SMEL_PauschalisiertParser#featureRename.
-    def exitFeatureRename(self, ctx:SMEL_PauschalisiertParser.FeatureRenameContext):
+    # Exit a parse tree produced by SMEL_PauschalisiertParser#attributeRename.
+    def exitAttributeRename(self, ctx:SMEL_PauschalisiertParser.AttributeRenameContext):
         pass
 
 
@@ -635,15 +635,6 @@ class SMEL_PauschalisiertListener(ParseTreeListener):
 
     # Exit a parse tree produced by SMEL_PauschalisiertParser#nest_ps.
     def exitNest_ps(self, ctx:SMEL_PauschalisiertParser.Nest_psContext):
-        pass
-
-
-    # Enter a parse tree produced by SMEL_PauschalisiertParser#extract_ps.
-    def enterExtract_ps(self, ctx:SMEL_PauschalisiertParser.Extract_psContext):
-        pass
-
-    # Exit a parse tree produced by SMEL_PauschalisiertParser#extract_ps.
-    def exitExtract_ps(self, ctx:SMEL_PauschalisiertParser.Extract_psContext):
         pass
 
 

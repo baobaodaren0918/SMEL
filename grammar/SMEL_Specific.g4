@@ -59,8 +59,8 @@ operation: add_attribute | add_reference | add_embedded | add_entity
          | delete_variation | delete_reltype | delete_index | delete_label
          | remove_index | remove_unique_key | remove_foreign_key
          | remove_label | remove_variation
-         | rename_feature | rename_entity | rename_reltype
-         | flatten | unflatten | unwind | wind | nest | unnest | extract
+         | rename_attribute | rename_entity | rename_reltype
+         | flatten | unflatten | unwind | wind | nest | unnest
          | copy | copy_key | move | merge | split | cast | linking
 ;
 
@@ -228,9 +228,9 @@ remove_variation: REMOVE_VARIATION identifier FROM identifier;
 // RENAME OPERATIONS - Specific keywords for each type
 // ============================================================================
 
-// RENAME_FEATURE: Rename attribute or relationship
-// Example: RENAME_FEATURE email TO contact_email IN Customer
-rename_feature: RENAME_FEATURE identifier TO identifier (IN identifier)?;
+// RENAME_ATTRIBUTE: Rename attribute within an entity
+// Example: RENAME_ATTRIBUTE email TO contact_email IN Customer
+rename_attribute: RENAME_ATTRIBUTE identifier TO identifier (IN identifier)?;
 
 // RENAME_ENTITY: Rename entity/table
 // Example: RENAME_ENTITY Customer TO Client
@@ -289,15 +289,13 @@ unnestField: identifier                                    # AttributeField
 // Supports two modes:
 //   1. Expand in place: UNWIND person_tag.tags (expands array within existing table)
 //   2. Create new table: UNWIND person.tags[] INTO person_tag (legacy, creates new table)
-// Note: Use separate ADD_PRIMARY_KEY, ADD_FOREIGN_KEY, RENAME_FEATURE for constraints
+// Note: Use separate ADD_PRIMARY_KEY, ADD_FOREIGN_KEY, RENAME_ATTRIBUTE for constraints
 unwind: UNWIND qualifiedName (INTO identifier)?;
 
-// WIND - Collect multiple rows into array field (reverse of UNWIND)
-// Supports two modes (symmetric with UNWIND):
-//   1. Collect in place: WIND person_tag.tags (collects rows back into array in same entity)
-//   2. Cross-entity:     WIND person_tag INTO person.tags WHERE person_tag.person_id = person.person_id [WITH DELETION]
-// Note: Use mode 1 with MERGE for clean reverse of UNWIND + SPLIT
-wind: WIND qualifiedName (INTO qualifiedName WHERE condition (WITH DELETION)?)?;
+// WIND - Convert scalar attribute back to array (reverse of UNWIND)
+// Syntax: WIND person_tag.tags
+// Cross-entity movement is handled by MERGE, not WIND.
+wind: WIND qualifiedName;
 
 // NEST - Merge separate table into embedded document (PostgreSQL -> MongoDB)
 // Example: NEST address:street,city IN person.address WHERE address.person_id = person.person_id
@@ -307,12 +305,7 @@ wind: WIND qualifiedName (INTO qualifiedName WHERE condition (WITH DELETION)?)?;
 //   - 'IN person.address' specifies target (person entity, address field)
 //   - WHERE clause specifies join condition
 //   - WITH DELETION optionally removes source entity after embedding
-nest: NEST identifier COLON unnestFieldList IN qualifiedName WHERE qualifiedName EQUALS qualifiedName (WITH DELETION)?;
-
-// EXTRACT - Extract attributes from entity to create new entity
-// Example: EXTRACT (a, b, c) FROM Entity INTO NewEntity
-// Note: Use separate ADD_PRIMARY_KEY, ADD_FOREIGN_KEY operations for constraints
-extract: EXTRACT LPAREN identifierList RPAREN FROM identifier INTO identifier;
+nest: NEST identifier COLON unnestFieldList IN qualifiedName WHERE condition (WITH DELETION)?;
 
 // ============================================================================
 // SIMPLE OPERATIONS
@@ -416,7 +409,7 @@ RELATIONAL: 'RELATIONAL'; DOCUMENT: 'DOCUMENT'; GRAPH: 'GRAPH'; COLUMNAR: 'COLUM
 
 // Structure operations
 NEST: 'NEST'; UNNEST: 'UNNEST'; FLATTEN: 'FLATTEN'; UNFLATTEN: 'UNFLATTEN';
-EXTRACT: 'EXTRACT'; UNWIND: 'UNWIND'; WIND: 'WIND';
+UNWIND: 'UNWIND'; WIND: 'WIND';
 
 // Simple operations
 COPY: 'COPY'; COPY_KEY: 'COPY_KEY'; MOVE: 'MOVE'; MERGE: 'MERGE'; SPLIT: 'SPLIT'; CAST: 'CAST'; LINKING: 'LINKING';
@@ -459,7 +452,7 @@ REMOVE_LABEL: 'REMOVE_LABEL';
 REMOVE_VARIATION: 'REMOVE_VARIATION';
 
 // RENAME operations - specific keywords
-RENAME_FEATURE: 'RENAME_FEATURE';
+RENAME_ATTRIBUTE: 'RENAME_ATTRIBUTE';
 RENAME_ENTITY: 'RENAME_ENTITY';
 RENAME_RELTYPE: 'RENAME_RELTYPE';
 

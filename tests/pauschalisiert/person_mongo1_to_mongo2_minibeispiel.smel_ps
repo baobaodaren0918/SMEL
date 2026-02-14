@@ -1,0 +1,116 @@
+-- SMEL Mini-Example: MongoDB V1 -> MongoDB V2 (Pauschalisiert Operations Version)
+-- Same-model Schema Evolution: Document -> Document
+-- Direction: person_mongodb.json (V1) -> Evolved Schema (V2)
+--
+-- Pipeline: Source Mongo V1 -> Reverse Engineering -> Meta V1
+--           -> SMEL Operations (this script) -> Meta V2
+--           -> Forward Engineering -> Target Mongo V2
+--
+-- Operation Semantics:
+--   FLATTEN_PS:  Reduce nesting depth by 1 (merge child into parent)
+--   RENAME_PS:   Rename a field within an entity
+--   CAST_PS:     Change field data type
+--   ADD_PS:      Add new field to entity
+
+MIGRATION person_mongo1_to_mongo2:1.0
+FROM DOCUMENT TO DOCUMENT
+USING person_schema:1
+
+-- ============================================
+-- Meta V1 (after Reverse Engineering of person_mongodb.json)
+-- ============================================
+-- person { _id [PK], age(String), tags[], knows[] }
+--   embedded: name { vorname, nachname }
+--   embedded: address { street, city }
+--   embedded: employment { position }
+--     embedded: company { name }
+--       embedded: address { street, city }          <- 3-level nesting!
+--
+-- Entity full paths in Meta V1:
+--   person, person.name, person.address,
+--   person.employment, person.employment.company,
+--   person.employment.company.address
+
+-- ============================================
+-- Target Meta V2 (will be Forward Engineered to MongoDB V2)
+-- ============================================
+-- person { _id [PK], age(Integer), email, tags[], knows[] }
+--   embedded: name { first_name, last_name }
+--   embedded: address { street, city, country }
+--   embedded: employment { role, start_date }
+--     embedded: company { company_name, street, city }  <- 2-level (flattened!)
+
+-- ============================================
+-- Phase 1: Reduce nesting depth (3-level -> 2-level)
+-- FLATTEN company.address into company
+-- ============================================
+-- Before: company { name, address { street, city } }
+-- After:  company { name, address_street, address_city }
+FLATTEN_PS person.employment.company.address
+-- Rename prefixed attributes back to clean names
+RENAME_PS ATTRIBUTE address_street TO street IN company
+RENAME_PS ATTRIBUTE address_city TO city IN company
+-- Result: company { name, street, city }
+
+-- ============================================
+-- Phase 2: Internationalize — rename name sub-fields
+-- ============================================
+RENAME_PS ATTRIBUTE vorname TO first_name IN name
+RENAME_PS ATTRIBUTE nachname TO last_name IN name
+-- Result: name { first_name, last_name }
+
+-- ============================================
+-- Phase 3: Type correction
+-- age was stored as String in MongoDB V1, now Integer
+-- ============================================
+CAST_PS person.age TO Integer
+
+-- ============================================
+-- Phase 4: Add new fields
+-- ============================================
+ADD_PS ATTRIBUTE email TO person WITH TYPE String
+ADD_PS ATTRIBUTE country TO address WITH TYPE String
+ADD_PS ATTRIBUTE start_date TO employment WITH TYPE String
+
+-- ============================================
+-- Phase 5: Business field renames
+-- ============================================
+RENAME_PS ATTRIBUTE position TO role IN employment
+RENAME_PS ATTRIBUTE name TO company_name IN company
+
+-- ============================================
+-- Final Meta V2 (6 entities, max 2-level nesting):
+-- person:     { _id [PK], age(Integer), email, tags[], knows[] }
+-- name:       { first_name, last_name }             (embedded in person)
+-- address:    { street, city, country }              (embedded in person)
+-- employment: { role, start_date }                   (embedded in person)
+-- company:    { company_name, street, city }         (embedded in employment)
+-- ============================================
+-- MongoDB V2 output document:
+-- {
+--   "_id": "p001",
+--   "name": { "first_name": "Lu", "last_name": "Li" },
+--   "age": 28,
+--   "email": null,
+--   "address": { "street": "Hauptstrasse 10", "city": "Berlin", "country": null },
+--   "employment": {
+--     "role": "Software Engineer",
+--     "start_date": null,
+--     "company": {
+--       "company_name": "Tech Corp",
+--       "street": "Business Str 5",
+--       "city": "Munich"
+--     }
+--   },
+--   "tags": ["student", "developer"],
+--   "knows": ["p002", "p003"]
+-- }
+-- ============================================
+
+-- ============================================
+-- Operation Summary (11 steps):
+--   FLATTEN_PS:          1
+--   RENAME_PS ATTRIBUTE: 6
+--   CAST_PS:             1
+--   ADD_PS ATTRIBUTE:    3
+-- ============================================

@@ -19,7 +19,8 @@ from typing import Dict, Any, Optional, List
 from ..unified_meta_schema import (
     Database, DatabaseType, EntityType, Attribute,
     UniqueConstraint, UniqueProperty, PKTypeEnum,
-    Embedded, Cardinality, PrimitiveDataType, PrimitiveType, ListDataType,
+    Embedded, Cardinality, PrimitiveDataType, PrimitiveType,
+    ListDataType, SetDataType, MapDataType,
     TypeMappings
 )
 
@@ -354,11 +355,33 @@ class MongoDBAdapter:
                     "items": {"bsonType": element_bson_type}
                 }
             else:
-                # Default to string array if element type is unknown
                 return {
                     "bsonType": "array",
                     "items": {"bsonType": "string"}
                 }
+
+        # Handle SetDataType (unique arrays)
+        # Example: SetDataType(STRING) -> {"bsonType": "array", "uniqueItems": true}
+        if isinstance(data_type, SetDataType):
+            element_type = data_type.element_type
+            if isinstance(element_type, PrimitiveDataType):
+                element_bson_type = cls.REVERSE_TYPE_MAP.get(element_type.primitive_type, 'string')
+                return {
+                    "bsonType": "array",
+                    "uniqueItems": True,
+                    "items": {"bsonType": element_bson_type}
+                }
+            else:
+                return {
+                    "bsonType": "array",
+                    "uniqueItems": True,
+                    "items": {"bsonType": "string"}
+                }
+
+        # Handle MapDataType (key-value objects)
+        # Example: MapDataType(STRING, INTEGER) -> {"bsonType": "object"}
+        if isinstance(data_type, MapDataType):
+            return {"bsonType": "object"}
 
         # Handle PrimitiveDataType
         if isinstance(data_type, PrimitiveDataType):

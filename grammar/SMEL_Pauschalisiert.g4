@@ -50,7 +50,7 @@ version: VERSION_NUMBER | INTEGER_LITERAL;                          // 1 | 1.0 |
 // CRUD:       ADD_PS, DELETE_PS, REMOVE_PS, RENAME_PS
 
 operation: nest_ps | unnest_ps | flatten_ps | unflatten_ps | unwind_ps | wind_ps
-         | copy_ps | copy_key_ps | move_ps | merge_ps | split_ps | cast_ps | linking_ps | extract_ps
+         | copy_ps | copy_key_ps | move_ps | merge_ps | split_ps | cast_ps | linking_ps
          | add_ps | delete_ps | remove_ps | rename_ps;
 
 // ============================================================================
@@ -201,16 +201,16 @@ variationRemove: VARIATION identifier FROM identifier;
 // RENAME_PS - Generalized RENAME operation with type parameter
 // ============================================================================
 // Supports renaming:
-//   - Feature (attribute/relationship): RENAME_PS FEATURE oldName TO newName IN Entity
+//   - Attribute: RENAME_PS ATTRIBUTE oldName TO newName IN Entity
 //   - Entity:  RENAME_PS ENTITY OldName TO NewName
 //   - RelType: RENAME_PS RELTYPE oldName TO newName (Graph database)
 //
-// Example: RENAME_PS FEATURE email TO contact_email IN Customer
+// Example: RENAME_PS ATTRIBUTE email TO contact_email IN Customer
 
-rename_ps: RENAME_PS (featureRename | entityRename | relTypeRename);
+rename_ps: RENAME_PS (attributeRename | entityRename | relTypeRename);
 
-// Rename feature: RENAME_PS FEATURE oldName TO newName IN Entity
-featureRename: FEATURE identifier TO identifier (IN identifier)?;
+// Rename attribute: RENAME_PS ATTRIBUTE oldName TO newName IN Entity
+attributeRename: ATTRIBUTE identifier TO identifier (IN identifier)?;
 
 // Rename entity: RENAME_PS ENTITY OldName TO NewName
 entityRename: ENTITY identifier TO identifier;
@@ -294,15 +294,13 @@ unnestField: identifier                                    # AttributeField
 // Supports two modes:
 //   1. Expand in place: UNWIND_PS person_tag.tags (expands array within existing table)
 //   2. Create new table: UNWIND_PS person.tags[] INTO person_tag (legacy, creates new table)
-// Note: Use separate ADD_PS KEY, ADD_PS REFERENCE, RENAME_PS FEATURE for constraints
+// Note: Use separate ADD_PS KEY, ADD_PS REFERENCE, RENAME_PS ATTRIBUTE for constraints
 unwind_ps: UNWIND_PS qualifiedName (INTO identifier)?;
 
-// WIND_PS - Collect multiple rows into array field (reverse of UNWIND)
-// Supports two modes (symmetric with UNWIND_PS):
-//   1. Collect in place: WIND_PS person_tag.tags (collects rows back into array in same entity)
-//   2. Cross-entity:     WIND_PS person_tag INTO person.tags WHERE person_tag.person_id = person.person_id [WITH DELETION]
-// Note: Use mode 1 with MERGE_PS for clean reverse of UNWIND_PS + SPLIT_PS
-wind_ps: WIND_PS qualifiedName (INTO qualifiedName WHERE condition (WITH DELETION)?)?;
+// WIND_PS - Convert scalar attribute back to array (reverse of UNWIND_PS)
+// Syntax: WIND_PS person_tag.tags
+// Cross-entity movement is handled by MERGE_PS, not WIND_PS.
+wind_ps: WIND_PS qualifiedName;
 
 // NEST_PS - Merge separate table into embedded document (PostgreSQL -> MongoDB)
 // Example: NEST_PS address:street,city IN person.address WHERE address.person_id = person.person_id
@@ -312,12 +310,7 @@ wind_ps: WIND_PS qualifiedName (INTO qualifiedName WHERE condition (WITH DELETIO
 //   - 'IN person.address' specifies target (person entity, address field)
 //   - WHERE clause specifies join condition
 //   - WITH DELETION optionally removes source entity after embedding
-nest_ps: NEST_PS identifier COLON unnestFieldList IN qualifiedName WHERE qualifiedName EQUALS qualifiedName (WITH DELETION)?;
-
-// EXTRACT_PS - Extract attributes from entity to create new entity
-// Example: EXTRACT_PS (a, b, c) FROM Entity INTO NewEntity
-// Note: Use separate ADD_PS PRIMARY KEY, ADD_PS FOREIGN KEY operations for constraints
-extract_ps: EXTRACT_PS LPAREN identifierList RPAREN FROM identifier INTO identifier;
+nest_ps: NEST_PS identifier COLON unnestFieldList IN qualifiedName WHERE condition (WITH DELETION)?;
 
 // ============================================================================
 // SIMPLE OPERATIONS - All with _PS suffix
@@ -408,7 +401,7 @@ RELATIONAL: 'RELATIONAL'; DOCUMENT: 'DOCUMENT'; GRAPH: 'GRAPH'; COLUMNAR: 'COLUM
 
 // Generalized operations with _PS suffix
 NEST_PS: 'NEST_PS'; UNNEST_PS: 'UNNEST_PS'; FLATTEN_PS: 'FLATTEN_PS'; UNFLATTEN_PS: 'UNFLATTEN_PS';
-EXTRACT_PS: 'EXTRACT_PS'; UNWIND_PS: 'UNWIND_PS'; WIND_PS: 'WIND_PS';
+UNWIND_PS: 'UNWIND_PS'; WIND_PS: 'WIND_PS';
 ADD_PS: 'ADD_PS'; DELETE_PS: 'DELETE_PS'; REMOVE_PS: 'REMOVE_PS'; RENAME_PS: 'RENAME_PS';
 COPY_PS: 'COPY_PS'; COPY_KEY_PS: 'COPY_KEY_PS'; MOVE_PS: 'MOVE_PS'; MERGE_PS: 'MERGE_PS'; SPLIT_PS: 'SPLIT_PS';
 CAST_PS: 'CAST_PS'; LINKING_PS: 'LINKING_PS';
@@ -418,7 +411,7 @@ RENAME: 'RENAME';
 
 // Type parameters for generalized operations
 ATTRIBUTE: 'ATTRIBUTE'; EMBEDDED: 'EMBEDDED'; ENTITY: 'ENTITY';
-VARIATION: 'VARIATION'; RELTYPE: 'RELTYPE'; FEATURE: 'FEATURE';
+VARIATION: 'VARIATION'; RELTYPE: 'RELTYPE';
 INDEX: 'INDEX'; LABEL: 'LABEL';
 
 // Key types

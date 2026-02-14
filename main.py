@@ -1,17 +1,11 @@
 """SMEL CLI - Command Line Interface for Schema Migration & Evolution Language"""
 import sys
-import copy
 from pathlib import Path
-from typing import Dict, List, Set
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from Schema.unified_meta_schema import Database, DatabaseType, EntityType, Reference, TypeMappings
-from Schema.adapters import PostgreSQLAdapter, MongoDBAdapter
-from core import (
-    SCHEMA_DIR, TESTS_DIR, EQUIVALENT_ATTRS,
-    SchemaTransformer
-)
+from core import run_migration
+from config import MIGRATION_CONFIGS
 
 # ANSI Colors
 GREEN = "\033[92m"
@@ -21,114 +15,38 @@ RED = "\033[91m"
 BOLD = "\033[1m"
 RESET = "\033[0m"
 
-
-def _get_source_type_str(attr, source_type: str) -> str:
-    """Get the original type string for an attribute based on source database type."""
-    from Schema.unified_meta_schema import PrimitiveType
-    primitive = attr.data_type.primitive_type if hasattr(attr.data_type, 'primitive_type') else PrimitiveType.STRING
-
-    if source_type == "Relational":
-        base_type = TypeMappings.PRIMITIVE_TO_POSTGRESQL.get(primitive, 'VARCHAR')
-        if base_type == 'INTEGER' and attr.is_key:
-            return 'SERIAL'
-        if base_type == 'VARCHAR':
-            max_len = attr.data_type.max_length if hasattr(attr.data_type, 'max_length') and attr.data_type.max_length else 255
-            return f"VARCHAR({max_len})"
-        if base_type == 'DECIMAL':
-            precision = attr.data_type.precision if hasattr(attr.data_type, 'precision') and attr.data_type.precision else 13
-            scale = attr.data_type.scale if hasattr(attr.data_type, 'scale') and attr.data_type.scale else 2
-            return f"DECIMAL({precision},{scale})"
-        return base_type
-    else:
-        return TypeMappings.PRIMITIVE_TO_MONGODB.get(primitive, 'string')
+# Menu choice -> config key mapping
+CHOICE_MAP = {
+    "1": "person_d2r_specific",
+    "2": "person_d2r_pauschalisiert",
+    "3": "person_r2d_specific",
+    "4": "person_r2d_pauschalisiert",
+}
 
 
-def get_source_entity_lines(entity: EntityType, width: int, source_type: str) -> List[str]:
-    """Format entity as lines with original source format types."""
-    lines = []
-    lines.append(f"  {entity.en_name}".ljust(width))
-
-    # Get reference names for FK display
-    ref_targets = {r.ref_name: r.get_target_entity_name() for r in entity.relationships if hasattr(r, 'refs_to')}
-
-    for attr in entity.attributes:
-        marker = "[PK]" if attr.is_key else ("?" if attr.is_optional else "")
-        type_str = _get_source_type_str(attr, source_type)
-
-        # Check if this attribute is a FK
-        if attr.attr_name in ref_targets:
-            line = f"    {attr.attr_name}: {type_str} -> {ref_targets[attr.attr_name]} {marker}"
+def print_operations(operations_detail):
+    """Print operation execution results."""
+    for op in operations_detail:
+        keyword = op.get("original_keyword", op["type"])
+        if op["status"] == "success":
+            print(f"         {GREEN}[OK]{RESET} {keyword}")
         else:
-            line = f"    {attr.attr_name}: {type_str} {marker}"
-        lines.append(line.ljust(width))
-
-    # Show embedded relationships (for MongoDB source)
-    for rel in entity.relationships:
-        if hasattr(rel, 'aggregates'):
-            lines.append(f"    <> {rel.aggr_name} [{rel.cardinality.value}]".ljust(width))
-
-    return lines
+            print(f"         {YELLOW}[SKIP]{RESET} {keyword} (no effect)")
 
 
-def _get_type_str(data_type) -> str:
-    """Get type string from any DataType (handles ListDataType, etc.)."""
-    if hasattr(data_type, 'primitive_type'):
-        return data_type.primitive_type.value
-    elif hasattr(data_type, 'element_type'):
-        # ListDataType or SetDataType
-        elem_str = _get_type_str(data_type.element_type)
-        return f"{elem_str}[]"
-    elif hasattr(data_type, 'key_type'):
-        # MapDataType
-        return "map"
-    return "unknown"
-
-
-def get_entity_lines(entity: EntityType, width: int, highlights: Set[str] = None) -> List[str]:
-    """Format entity as lines with Unified Meta Schema format, with optional highlighting."""
-    highlights = highlights or set()
-    lines = []
-
-    name = entity.en_name
-    if name in highlights:
-        lines.append(f"{GREEN}{BOLD}  {name}{RESET}".ljust(width + len(GREEN) + len(BOLD) + len(RESET)))
-    else:
-        lines.append(f"  {name}".ljust(width))
-
-    for attr in entity.attributes:
-        marker = "[PK]" if attr.is_key else ("?" if attr.is_optional else "")
-        type_str = _get_type_str(attr.data_type)
-        line = f"    {attr.attr_name}: {type_str} {marker}"
-        lines.append(line.ljust(width))
-
-    for rel in entity.relationships:
-        if hasattr(rel, 'refs_to'):
-            rel_key = f"{entity.en_name}.{rel.ref_name}"
-            if rel_key in highlights:
-                line = f"{CYAN}    -> {rel.ref_name} -> {rel.refs_to}{RESET}"
-                lines.append(line.ljust(width + len(CYAN) + len(RESET)))
-            else:
-                lines.append(f"    -> {rel.ref_name} -> {rel.refs_to}".ljust(width))
-        elif hasattr(rel, 'aggregates'):
-            emb_key = f"{entity.en_name}.{rel.aggr_name}"
-            if emb_key in highlights:
-                line = f"{GREEN}{BOLD}    <> {rel.aggr_name} [{rel.cardinality.value}]{RESET}"
-                lines.append(line.ljust(width + len(GREEN) + len(BOLD) + len(RESET)))
-            else:
-                lines.append(f"    <> {rel.aggr_name} [{rel.cardinality.value}]".ljust(width))
-
-    return lines
-
-
-def print_three_meta_schemas(source_db: Database, meta_v1_db: Database, meta_v2_db: Database,
-                             source_type: str, target_type: str, changes: List[str]):
-    """Print 3 schemas side by side: Source (original format), Meta V1, Meta V2 (with highlighting)."""
+def print_schema_comparison(result):
+    """Print source and result schema side by side."""
+    source_type = result["source_type"]
+    target_type = result["target_type"]
+    meta_v1 = result["meta_v1"]
+    meta_v2 = result["result"]
+    changes = result["changes"]
     col_width = 38
 
+    # Collect highlights from changes
     nest_highlights = set()
     ref_highlights = set()
     new_entities = set()
-
     for change in changes:
         if change.startswith("NEST:"):
             nest_highlights.add(change[5:])
@@ -137,61 +55,69 @@ def print_three_meta_schemas(source_db: Database, meta_v1_db: Database, meta_v2_
         elif change.startswith("FLATTEN:"):
             new_entities.add(change.split(":")[1])
 
-    headers = [f"Source ({source_type})", "Meta V1 (Unified)", "Meta V2 (Result)"]
-    databases = [source_db, meta_v1_db, meta_v2_db]
-
-    total_width = col_width * 3 + 6
+    total_width = col_width * 2 + 3
     print("\n" + "=" * total_width)
     print(f"{BOLD} SCHEMA TRANSFORMATION: {source_type} -> {target_type}{RESET}")
     print("=" * total_width)
 
-    print(f"\n  {GREEN}{BOLD}[EMBED]{RESET} = Embedded structure   {CYAN}[REF]{RESET} = Reference/FK")
+    print(f"\n  {GREEN}{BOLD}[EMBED]{RESET} = Embedded   {CYAN}[REF]{RESET} = Reference/FK")
     print()
 
+    headers = ["Meta V1 (Source)", "Meta V2 (Result)"]
     print("-" * total_width)
-    header_line = " | ".join(h.center(col_width) for h in headers)
-    print(header_line)
+    print(" | ".join(h.center(col_width) for h in headers))
     print("-" * total_width)
 
-    all_entities = set()
-    for db in databases:
-        all_entities.update(db.entity_types.keys())
-
+    all_entities = set(list(meta_v1.keys()) + list(meta_v2.keys()))
     for entity_name in sorted(all_entities):
-        entity_lines = []
+        columns = []
         max_lines = 0
 
-        for i, db in enumerate(databases):
-            entity = db.get_entity_type(entity_name)
+        for i, schema in enumerate([meta_v1, meta_v2]):
+            entity = schema.get(entity_name)
             if entity:
-                if i == 0:
-                    # First column: Source with original format types
-                    lines = get_source_entity_lines(entity, col_width, source_type)
-                else:
-                    # Second and third columns: Unified Meta Schema format
-                    highlights = set()
-                    if i == 2:
-                        highlights.update(nest_highlights)
-                        highlights.update(ref_highlights)
-                        highlights.update(new_entities)
-                    lines = get_entity_lines(entity, col_width, highlights)
+                lines = [f"  {entity['name']}".ljust(col_width)]
+                for attr in entity.get("attributes", []):
+                    marker = "[PK]" if attr["is_key"] else ("?" if attr["is_optional"] else "")
+                    is_highlighted = (i == 1 and entity_name in new_entities)
+                    prefix = f"{GREEN}" if is_highlighted else ""
+                    suffix = f"{RESET}" if is_highlighted else ""
+                    line = f"    {attr['name']}: {attr['type']} {marker}"
+                    lines.append(f"{prefix}{line}{suffix}".ljust(col_width + (len(prefix) + len(suffix) if is_highlighted else 0)))
+                for ref in entity.get("references", []):
+                    ref_key = f"{entity_name}.{ref['name']}"
+                    is_highlighted = (i == 1 and ref_key in ref_highlights)
+                    prefix = f"{CYAN}" if is_highlighted else ""
+                    suffix = f"{RESET}" if is_highlighted else ""
+                    line = f"    -> {ref['name']} -> {ref['target']}"
+                    lines.append(f"{prefix}{line}{suffix}".ljust(col_width + (len(prefix) + len(suffix) if is_highlighted else 0)))
+                for emb in entity.get("embedded", []):
+                    emb_key = f"{entity_name}.{emb['name']}"
+                    is_highlighted = (i == 1 and emb_key in nest_highlights)
+                    prefix = f"{GREEN}{BOLD}" if is_highlighted else ""
+                    suffix = f"{RESET}" if is_highlighted else ""
+                    line = f"    <> {emb['name']} [{emb['cardinality']}]"
+                    lines.append(f"{prefix}{line}{suffix}".ljust(col_width + (len(prefix) + len(suffix) if is_highlighted else 0)))
             else:
                 lines = [f"  {YELLOW}({entity_name} --){RESET}".ljust(col_width + len(YELLOW) + len(RESET))]
 
-            entity_lines.append(lines)
+            columns.append(lines)
             max_lines = max(max_lines, len(lines))
 
-        for lines in entity_lines:
-            while len(lines) < max_lines:
-                lines.append(" " * col_width)
+        for col_lines in columns:
+            while len(col_lines) < max_lines:
+                col_lines.append(" " * col_width)
 
         for row in range(max_lines):
-            print(" | ".join(entity_lines[j][row] for j in range(3)))
+            print(" | ".join(columns[j][row] for j in range(2)))
         print("-" * total_width)
 
 
-def print_exported_target(result_db: Database, target_type: str):
+def print_exported_target(result):
     """Print the exported Target Schema in native format."""
+    target_type = result["target_type"]
+    exported = result["exported_target"]
+
     print()
     print("=" * 80)
     print(f"{BOLD} EXPORTED TARGET SCHEMA ({target_type}){RESET}")
@@ -199,73 +125,24 @@ def print_exported_target(result_db: Database, target_type: str):
     print()
 
     if target_type == "Document":
-        exported = MongoDBAdapter.export_to_json_string(result_db)
         print(f"{CYAN}MongoDB JSON Schema:{RESET}")
-        print("-" * 80)
-        print(exported)
     else:
-        exported = PostgreSQLAdapter.export_to_sql(result_db)
         print(f"{CYAN}PostgreSQL DDL:{RESET}")
-        print("-" * 80)
-        print(exported)
-
     print("-" * 80)
-
-
-def validate_schemas(generated_db: Database, target_db: Database) -> tuple:
-    """Compare generated schema with hand-written target schema."""
-    details = []
-
-    gen_entities = set(generated_db.entity_types.keys())
-    tgt_entities = set(target_db.entity_types.keys())
-
-    common = gen_entities & tgt_entities
-    only_in_gen = gen_entities - tgt_entities
-    only_in_tgt = tgt_entities - gen_entities
-
-    details.append(f"    Entities in Generated: {len(gen_entities)}")
-    details.append(f"    Entities in Target:    {len(tgt_entities)}")
-    details.append(f"    Common entities:       {len(common)}")
-
-    if only_in_gen:
-        details.append(f"    {YELLOW}Extra in Generated: {', '.join(sorted(only_in_gen))}{RESET}")
-    if only_in_tgt:
-        details.append(f"    {RED}Missing (in Target but not Generated): {', '.join(sorted(only_in_tgt))}{RESET}")
-
-    attr_mismatches = []
-    for name in common:
-        gen_entity = generated_db.get_entity_type(name)
-        tgt_entity = target_db.get_entity_type(name)
-
-        gen_attrs = {a.attr_name for a in gen_entity.attributes}
-        tgt_attrs = {a.attr_name for a in tgt_entity.attributes}
-
-        missing_attrs = tgt_attrs - gen_attrs
-        if missing_attrs:
-            attr_mismatches.append(f"{name}: missing {missing_attrs}")
-
-    if attr_mismatches:
-        details.append(f"    {YELLOW}Attribute differences:{RESET}")
-        for m in attr_mismatches[:5]:
-            details.append(f"      - {m}")
-
-    passed = len(only_in_tgt) == 0
-    return passed, details
+    print(exported)
+    print("-" * 80)
 
 
 def main():
     print(f"\n{BOLD}{'=' * 60}")
     print(" SMEL - Schema Migration & Evolution Language")
     print(f"{'=' * 60}{RESET}")
-    print(f"\n  {CYAN}Cross-Model Migration:{RESET}")
-    print("  [1] Relational -> Document")
-    print("  [2] Document -> Relational")
-    print(f"\n  {CYAN}Schema Evolution (Same Model):{RESET}")
-    print("  [3] Relational -> Relational (SQL v1 -> v2)")
-    print("  [4] Document -> Document (MongoDB v1 -> v2)")
-    print(f"\n  {CYAN}Grammar Variants:{RESET}")
-    print("  [6] Person: MongoDB -> PostgreSQL (Specific Operations)")
-    print("  [7] Person: MongoDB -> PostgreSQL (Pauschalisiert Operations)")
+    print(f"\n  {CYAN}Document -> Relational:{RESET}")
+    print("  [1] Person: MongoDB -> PostgreSQL (Specific)")
+    print("  [2] Person: MongoDB -> PostgreSQL (Pauschalisiert)")
+    print(f"\n  {CYAN}Relational -> Document:{RESET}")
+    print("  [3] Person: PostgreSQL -> MongoDB (Specific)")
+    print("  [4] Person: PostgreSQL -> MongoDB (Pauschalisiert)")
     print("\n  [0] Exit")
 
     try:
@@ -275,153 +152,64 @@ def main():
 
     if choice == "0":
         return 0
-    if choice not in ("1", "2", "3", "4", "6", "7"):
+
+    direction = CHOICE_MAP.get(choice)
+    if not direction:
         print("Invalid choice")
         return 1
 
-    # Setup paths
-    if choice == "1":
-        source_file = SCHEMA_DIR / "pain001_postgresql.sql"
-        target_file = SCHEMA_DIR / "pain001_mongodb.json"
-        smel_file = TESTS_DIR / "pg_to_mongo.smel"
-        source_type, target_type = "Relational", "Document"
-        source_adapter = PostgreSQLAdapter
-        target_adapter = MongoDBAdapter
-    elif choice == "2":
-        source_file = SCHEMA_DIR / "pain001_mongodb.json"
-        target_file = SCHEMA_DIR / "pain001_postgresql.sql"
-        smel_file = TESTS_DIR / "mongo_to_pg.smel"
-        source_type, target_type = "Document", "Relational"
-        source_adapter = MongoDBAdapter
-        target_adapter = PostgreSQLAdapter
-    elif choice == "3":
-        source_file = SCHEMA_DIR / "pain001_postgresql.sql"
-        target_file = SCHEMA_DIR / "pain001_postgresql_v2.sql"
-        smel_file = TESTS_DIR / "sql_v1_to_v2.smel"
-        source_type, target_type = "Relational", "Relational"
-        source_adapter = PostgreSQLAdapter
-        target_adapter = PostgreSQLAdapter
-    elif choice == "4":
-        source_file = SCHEMA_DIR / "pain001_mongodb.json"
-        target_file = SCHEMA_DIR / "pain001_mongodb_v2.json"
-        smel_file = TESTS_DIR / "mongo_v1_to_v2.smel"
-        source_type, target_type = "Document", "Document"
-        source_adapter = MongoDBAdapter
-        target_adapter = MongoDBAdapter
-    elif choice == "6":
-        # Specific Operations version
-        source_file = TESTS_DIR / "person_mongodb.json"
-        target_file = TESTS_DIR / "person_postgresql.sql"
-        smel_file = TESTS_DIR / "specific" / "person_mongo_to_pg_minibeispiel.smel"
-        source_type, target_type = "Document", "Relational"
-        source_adapter = MongoDBAdapter
-        target_adapter = PostgreSQLAdapter
-    else:  # choice == "7"
-        # Pauschalisiert Operations version
-        source_file = TESTS_DIR / "person_mongodb.json"
-        target_file = TESTS_DIR / "person_postgresql.sql"
-        smel_file = TESTS_DIR / "pauschalisiert" / "person_mongo_to_pg_minibeispiel.smel_ps"
-        source_type, target_type = "Document", "Relational"
-        source_adapter = MongoDBAdapter
-        target_adapter = PostgreSQLAdapter
+    config = MIGRATION_CONFIGS[direction]
+    source_type = config["source_type"]
+    target_type = config["target_type"]
+    smel_file = config["smel_file"]
 
     # Check files exist
-    for f in [source_file, target_file, smel_file]:
+    for f in [config["source_file"], config["smel_file"]]:
         if not f.exists():
             print(f"{RED}[ERROR] File not found: {f}{RESET}")
             return 1
 
-    # Step 1: Reverse Engineering
-    print(f"\n{CYAN}[Step 1] Reverse Engineering: {source_file.name} -> Meta V1{RESET}")
-    source_db = source_adapter.load_from_file(str(source_file), "source")
-    meta_v1_db = copy.deepcopy(source_db)
-    print(f"         Loaded {len(source_db.entity_types)} entities")
-
-    # Step 2: Transformation
+    # Run migration via core.run_migration()
+    print(f"\n{CYAN}[Step 1] Reverse Engineering -> Meta V1{RESET}")
     print(f"\n{CYAN}[Step 2] Transformation: Meta V1 + {smel_file.name} -> Meta V2{RESET}")
 
-    # Parse SMEL file (auto-detects grammar from file extension)
-    from parser_factory import parse_smel_auto
-    context, operations, errors = parse_smel_auto(str(smel_file))
+    result = run_migration(direction)
 
-    if errors:
-        print(f"{RED}[ERROR] Parse errors: {errors}{RESET}")
+    if result.get("error"):
+        print(f"{RED}[ERROR] {result['error']}{RESET}")
         return 1
 
-    # Execute operations with status tracking
-    transformer = SchemaTransformer(source_db)
-    success_count = 0
-    skipped_count = 0
+    # Print operation execution results
+    operations_detail = result.get("operations_detail", [])
+    print_operations(operations_detail)
 
-    for i, op in enumerate(operations):
-        prev_changes_len = len(transformer.changes)
-        handler = getattr(transformer, f"_handle_{op.op_type.lower()}", None)
-        if handler:
-            handler(op.params)
-        new_changes_len = len(transformer.changes)
-
-        # Get operation keyword for display
-        keyword = op.original_keyword if hasattr(op, 'original_keyword') and op.original_keyword else op.op_type
-
-        # Check if operation was executed (new change recorded)
-        if new_changes_len > prev_changes_len:
-            print(f"         {GREEN}[OK]{RESET} {keyword}")
-            success_count += 1
-        else:
-            print(f"         {YELLOW}[SKIP]{RESET} {keyword} (no effect)")
-            skipped_count += 1
-
-    result_db = transformer.database
-    result_db.db_type = DatabaseType.DOCUMENT if target_type == "Document" else DatabaseType.RELATIONAL
-
-    # Print execution summary
+    exec_stats = result.get("execution_stats", {})
+    success_count = exec_stats.get("success", 0)
+    skipped_count = exec_stats.get("skipped", 0)
     if skipped_count == 0:
         print(f"         {GREEN}{BOLD}All {success_count} operations executed successfully{RESET}")
     else:
         print(f"         {YELLOW}Executed: {success_count}, Skipped: {skipped_count}{RESET}")
-    print(f"         Result has {len(result_db.entity_types)} entities")
+    print(f"         Result has {result['stats']['result_count']} entities")
 
-    # Step 3: Forward Engineering
     print(f"\n{CYAN}[Step 3] Forward Engineering: Meta V2 -> Generated {target_type} DDL{RESET}")
-    if target_type == "Document":
-        generated_ddl = MongoDBAdapter.export_to_json_string(result_db)
-    else:
-        generated_ddl = PostgreSQLAdapter.export_to_sql(result_db)
-    print(f"         Generated {len(generated_ddl)} characters")
-
-    # Step 4: Validation
-    print(f"\n{CYAN}[Step 4] Validation: Generated DDL vs {target_file.name}{RESET}")
-    target_db = target_adapter.load_from_file(str(target_file), "target")
-    validation_passed, validation_details = validate_schemas(result_db, target_db)
+    print(f"         Generated {len(result['exported_target'])} characters")
 
     # Display results
-    print_three_meta_schemas(source_db, meta_v1_db, result_db, source_type, target_type, transformer.changes)
-    print_exported_target(result_db, target_type)
-
-    print(f"\n{BOLD}{'=' * 60}")
-    print(" VALIDATION: Generated vs Hand-written Target")
-    print(f"{'=' * 60}{RESET}")
-    for detail in validation_details:
-        print(f"  {detail}")
-
-    print(f"\n  {'=' * 40}")
-    if validation_passed:
-        print(f"  {GREEN}{BOLD}[PASS] Schema structures match!{RESET}")
-    else:
-        print(f"  {YELLOW}{BOLD}[WARN] Schema differences detected{RESET}")
-    print(f"  {'=' * 40}")
+    print_schema_comparison(result)
+    print_exported_target(result)
 
     # Summary
     print(f"\n{BOLD}{'=' * 50}")
     print(" SUMMARY")
     print(f"{'=' * 50}{RESET}")
-    print(f"\n  Source: {source_file.name} ({len(source_db.entity_types)} entities)")
-    print(f"  Target: {target_file.name} ({len(target_db.entity_types)} entities)")
-    print(f"  Result: {len(result_db.entity_types)} entities after {len(operations)} operations")
+    print(f"\n  Source: {result['stats']['source_count']} entities ({source_type})")
+    print(f"  Result: {result['stats']['result_count']} entities after {result['operations_count']} operations")
+    print(f"  Direction: {source_type} -> {target_type}")
     print(f"\n  {GREEN}{BOLD}[OK] TRANSFORMATION COMPLETE{RESET}")
     print(f"  {'=' * 30}\n")
 
-    return 0 if validation_passed else 1
+    return 0
 
 
 if __name__ == "__main__":
