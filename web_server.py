@@ -1085,7 +1085,7 @@ def get_html():
             const keywords = ['MIGRATION', 'FROM', 'TO', 'USING', 'AS', 'INTO', 'WITH', 'WHERE', 'IN', 'KEY', 'AND', 'GENERATE', 'PREFIX', 'SERIAL',
                 'RELATIONAL', 'DOCUMENT', 'GRAPH', 'COLUMNAR',
                 'NEST', 'UNNEST', 'FLATTEN', 'UNFLATTEN', 'UNWIND', 'WIND',
-                'DELETE', 'ADD', 'RENAME', 'COPY', 'COPY_KEY', 'MOVE', 'MERGE', 'SPLIT', 'CAST', 'LINKING',
+                'DELETE', 'ADD', 'RENAME', 'COPY', 'MOVE', 'MERGE', 'SPLIT', 'CAST', 'LINKING',
                 'REFERENCE', 'ATTRIBUTE', 'EMBEDDED', 'ENTITY', 'VARIATION', 'RELTYPE',
                 'CARDINALITY', 'ONE_TO_ONE', 'ONE_TO_MANY', 'ZERO_TO_ONE', 'ZERO_TO_MANY',
                 'PRIMARY', 'UNIQUE', 'FOREIGN', 'PARTITION', 'CLUSTERING',
@@ -1098,7 +1098,7 @@ def get_html():
                 // Pauschalisiert grammar keywords
                 'ADD_PS', 'DELETE_PS', 'REMOVE_PS', 'RENAME_PS',
                 'FLATTEN_PS', 'UNFLATTEN_PS', 'NEST_PS', 'UNNEST_PS', 'UNWIND_PS', 'WIND_PS',
-                'COPY_PS', 'COPY_KEY_PS', 'MOVE_PS', 'MERGE_PS', 'SPLIT_PS', 'CAST_PS', 'LINKING_PS'];
+                'COPY_PS', 'MOVE_PS', 'MERGE_PS', 'SPLIT_PS', 'CAST_PS', 'LINKING_PS'];
             keywords.forEach(kw => {
                 result = result.replace(new RegExp('\\\\b' + kw + '\\\\b', 'g'), '<span class="smel-keyword">' + kw + '</span>');
             });

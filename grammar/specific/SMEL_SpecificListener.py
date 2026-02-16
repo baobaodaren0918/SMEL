@@ -611,24 +611,6 @@ class SMEL_SpecificListener(ParseTreeListener):
         pass
 
 
-    # Enter a parse tree produced by SMEL_SpecificParser#copy_key.
-    def enterCopy_key(self, ctx:SMEL_SpecificParser.Copy_keyContext):
-        pass
-
-    # Exit a parse tree produced by SMEL_SpecificParser#copy_key.
-    def exitCopy_key(self, ctx:SMEL_SpecificParser.Copy_keyContext):
-        pass
-
-
-    # Enter a parse tree produced by SMEL_SpecificParser#copyKeyClause.
-    def enterCopyKeyClause(self, ctx:SMEL_SpecificParser.CopyKeyClauseContext):
-        pass
-
-    # Exit a parse tree produced by SMEL_SpecificParser#copyKeyClause.
-    def exitCopyKeyClause(self, ctx:SMEL_SpecificParser.CopyKeyClauseContext):
-        pass
-
-
     # Enter a parse tree produced by SMEL_SpecificParser#move.
     def enterMove(self, ctx:SMEL_SpecificParser.MoveContext):
         pass

@@ -45,12 +45,12 @@ version: VERSION_NUMBER | INTEGER_LITERAL;                          // 1 | 1.0 |
 // OPERATIONS - Generalized operations with parameters
 // ============================================================================
 // Structure:  NEST_PS, UNNEST_PS, FLATTEN_PS, UNWIND_PS, EXTRACT_PS
-// Movement:   COPY_PS, COPY_KEY_PS, MOVE_PS, MERGE_PS, SPLIT_PS
+// Movement:   COPY_PS, MOVE_PS, MERGE_PS, SPLIT_PS
 // Type:       CAST_PS, LINKING_PS
 // CRUD:       ADD_PS, DELETE_PS, REMOVE_PS, RENAME_PS
 
 operation: nest_ps | unnest_ps | flatten_ps | unflatten_ps | unwind_ps | wind_ps
-         | copy_ps | copy_key_ps | move_ps | merge_ps | split_ps | cast_ps | linking_ps
+         | copy_ps | move_ps | merge_ps | split_ps | cast_ps | linking_ps
          | add_ps | delete_ps | remove_ps | rename_ps;
 
 // ============================================================================
@@ -320,12 +320,6 @@ nest_ps: NEST_PS identifier COLON unnestFieldList IN qualifiedName WHERE conditi
 // Example: COPY_PS source TO target
 copy_ps: COPY_PS qualifiedName TO qualifiedName;
 
-// COPY_KEY_PS: Copy primary key value to another table (optionally as foreign key)
-// Example: COPY_KEY_PS person.id TO person_tag.person_id
-// Example: COPY_KEY_PS person.id TO person_tag.person_id AS FOREIGN KEY
-copy_key_ps: COPY_KEY_PS qualifiedName TO qualifiedName copyKeyClause?;
-copyKeyClause: AS FOREIGN KEY;
-
 // MOVE_PS: Relocate an attribute to another location (removes original)
 // Example: MOVE_PS source TO target
 move_ps: MOVE_PS qualifiedName TO qualifiedName;
@@ -403,7 +397,7 @@ RELATIONAL: 'RELATIONAL'; DOCUMENT: 'DOCUMENT'; GRAPH: 'GRAPH'; COLUMNAR: 'COLUM
 NEST_PS: 'NEST_PS'; UNNEST_PS: 'UNNEST_PS'; FLATTEN_PS: 'FLATTEN_PS'; UNFLATTEN_PS: 'UNFLATTEN_PS';
 UNWIND_PS: 'UNWIND_PS'; WIND_PS: 'WIND_PS';
 ADD_PS: 'ADD_PS'; DELETE_PS: 'DELETE_PS'; REMOVE_PS: 'REMOVE_PS'; RENAME_PS: 'RENAME_PS';
-COPY_PS: 'COPY_PS'; COPY_KEY_PS: 'COPY_KEY_PS'; MOVE_PS: 'MOVE_PS'; MERGE_PS: 'MERGE_PS'; SPLIT_PS: 'SPLIT_PS';
+COPY_PS: 'COPY_PS'; MOVE_PS: 'MOVE_PS'; MERGE_PS: 'MERGE_PS'; SPLIT_PS: 'SPLIT_PS';
 CAST_PS: 'CAST_PS'; LINKING_PS: 'LINKING_PS';
 
 // Shared keywords

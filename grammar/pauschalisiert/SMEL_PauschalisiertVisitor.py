@@ -364,16 +364,6 @@ class SMEL_PauschalisiertVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
-    # Visit a parse tree produced by SMEL_PauschalisiertParser#copy_key_ps.
-    def visitCopy_key_ps(self, ctx:SMEL_PauschalisiertParser.Copy_key_psContext):
-        return self.visitChildren(ctx)
-
-
-    # Visit a parse tree produced by SMEL_PauschalisiertParser#copyKeyClause.
-    def visitCopyKeyClause(self, ctx:SMEL_PauschalisiertParser.CopyKeyClauseContext):
-        return self.visitChildren(ctx)
-
-
     # Visit a parse tree produced by SMEL_PauschalisiertParser#move_ps.
     def visitMove_ps(self, ctx:SMEL_PauschalisiertParser.Move_psContext):
         return self.visitChildren(ctx)

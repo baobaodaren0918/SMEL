@@ -45,7 +45,7 @@ version: VERSION_NUMBER | INTEGER_LITERAL;                          // 1 | 1.0 |
 // OPERATIONS - Each operation is a separate, specific keyword
 // ============================================================================
 // Structure:  NEST, UNNEST, FLATTEN, UNWIND, EXTRACT
-// Movement:   COPY, COPY_KEY, MOVE, MERGE, SPLIT
+// Movement:   COPY, MOVE, MERGE, SPLIT
 // Type:       CAST, LINKING
 // CRUD:       ADD_*, DELETE_*, REMOVE_*, RENAME_*
 
@@ -61,7 +61,7 @@ operation: add_attribute | add_reference | add_embedded | add_entity
          | remove_label | remove_variation
          | rename_attribute | rename_entity | rename_reltype
          | flatten | unflatten | unwind | wind | nest | unnest
-         | copy | copy_key | move | merge | split | cast | linking
+         | copy | move | merge | split | cast | linking
 ;
 
 // ============================================================================
@@ -315,12 +315,6 @@ nest: NEST identifier COLON unnestFieldList IN qualifiedName WHERE condition (WI
 // Example: COPY source TO target
 copy: COPY qualifiedName TO qualifiedName;
 
-// COPY_KEY: Copy primary key value to another table (optionally as foreign key)
-// Example: COPY_KEY person.id TO person_tag.person_id
-// Example: COPY_KEY person.id TO person_tag.person_id AS FOREIGN KEY
-copy_key: COPY_KEY qualifiedName TO qualifiedName copyKeyClause?;
-copyKeyClause: AS FOREIGN KEY;
-
 // MOVE: Relocate an attribute to another location (removes original)
 // Example: MOVE source TO target
 move: MOVE qualifiedName TO qualifiedName;
@@ -412,7 +406,7 @@ NEST: 'NEST'; UNNEST: 'UNNEST'; FLATTEN: 'FLATTEN'; UNFLATTEN: 'UNFLATTEN';
 UNWIND: 'UNWIND'; WIND: 'WIND';
 
 // Simple operations
-COPY: 'COPY'; COPY_KEY: 'COPY_KEY'; MOVE: 'MOVE'; MERGE: 'MERGE'; SPLIT: 'SPLIT'; CAST: 'CAST'; LINKING: 'LINKING';
+COPY: 'COPY'; MOVE: 'MOVE'; MERGE: 'MERGE'; SPLIT: 'SPLIT'; CAST: 'CAST'; LINKING: 'LINKING';
 
 // ADD operations - specific keywords
 ADD_ATTRIBUTE: 'ADD_ATTRIBUTE';

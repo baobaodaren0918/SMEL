@@ -344,16 +344,6 @@ class SMEL_SpecificVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
-    # Visit a parse tree produced by SMEL_SpecificParser#copy_key.
-    def visitCopy_key(self, ctx:SMEL_SpecificParser.Copy_keyContext):
-        return self.visitChildren(ctx)
-
-
-    # Visit a parse tree produced by SMEL_SpecificParser#copyKeyClause.
-    def visitCopyKeyClause(self, ctx:SMEL_SpecificParser.CopyKeyClauseContext):
-        return self.visitChildren(ctx)
-
-
     # Visit a parse tree produced by SMEL_SpecificParser#move.
     def visitMove(self, ctx:SMEL_SpecificParser.MoveContext):
         return self.visitChildren(ctx)

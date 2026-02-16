@@ -647,24 +647,6 @@ class SMEL_PauschalisiertListener(ParseTreeListener):
         pass
 
 
-    # Enter a parse tree produced by SMEL_PauschalisiertParser#copy_key_ps.
-    def enterCopy_key_ps(self, ctx:SMEL_PauschalisiertParser.Copy_key_psContext):
-        pass
-
-    # Exit a parse tree produced by SMEL_PauschalisiertParser#copy_key_ps.
-    def exitCopy_key_ps(self, ctx:SMEL_PauschalisiertParser.Copy_key_psContext):
-        pass
-
-
-    # Enter a parse tree produced by SMEL_PauschalisiertParser#copyKeyClause.
-    def enterCopyKeyClause(self, ctx:SMEL_PauschalisiertParser.CopyKeyClauseContext):
-        pass
-
-    # Exit a parse tree produced by SMEL_PauschalisiertParser#copyKeyClause.
-    def exitCopyKeyClause(self, ctx:SMEL_PauschalisiertParser.CopyKeyClauseContext):
-        pass
-
-
     # Enter a parse tree produced by SMEL_PauschalisiertParser#move_ps.
     def enterMove_ps(self, ctx:SMEL_PauschalisiertParser.Move_psContext):
         pass
