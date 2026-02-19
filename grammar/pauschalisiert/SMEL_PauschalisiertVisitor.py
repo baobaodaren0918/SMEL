@@ -1,4 +1,4 @@
-# Generated from SMEL_Pauschalisiert.g4 by ANTLR 4.13.2
+# Generated from grammar/SMEL_Pauschalisiert.g4 by ANTLR 4.13.2
 from antlr4 import *
 if "." in __name__:
     from .SMEL_PauschalisiertParser import SMEL_PauschalisiertParser

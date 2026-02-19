@@ -28,7 +28,7 @@ USING person_schema:1
 --     }
 --   },
 --   tags: ["student", "developer"],
---   knows: ["p002", "p003"]
+--   knows: ["p002", "p003"]  hier think about how to add constraints that hier is foreign key to person_id
 -- }
 
 -- ============================================
@@ -104,7 +104,7 @@ ADD_PS REFERENCE company_address.company_id REFERENCES company(company_id) WITH 
 -- ============================================
 -- Step 5: Extract person_tag table (array 1:N)
 -- ============================================
-SPLIT_PS person INTO person(person_id, name, age, knows), person_tag(person_id, tags)
+SPLIT_PS person INTO person:person_id, name, age, knows; person_tag:person_id, tags
 UNWIND_PS person_tag.tags
 RENAME_PS ATTRIBUTE tags TO tag_value IN person_tag
 ADD_PS KEY person_tag.person_tag_id AS String
@@ -117,7 +117,7 @@ ADD_PS REFERENCE person_tag.person_id REFERENCES person(person_id) WITH CARDINAL
 -- ============================================
 -- Step 6: Extract person_knows table (array M:N)
 -- ============================================
-SPLIT_PS person INTO person(person_id, name, age), person_knows(person_id, knows)
+SPLIT_PS person INTO person:person_id, name, age; person_knows:person_id, knows
 UNWIND_PS person_knows.knows
 RENAME_PS ATTRIBUTE knows TO knows_person_id IN person_knows
 ADD_PS REFERENCE person_knows.person_id REFERENCES person(person_id) WITH CARDINALITY ONE_TO_MANY

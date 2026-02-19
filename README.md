@@ -115,36 +115,136 @@ SMEL/
 │   │   └── person_mongo1_to_mongo2_minibeispiel.smel_ps # D2D
 │   └── test_full_flow.py          # Full flow verification (8 directions)
 ├── config.py                      # Configuration & migration registry
-├── core.py                        # Migration engine
-├── smel_listeners.py              # SMEL listeners for both grammars
-├── parser_factory.py              # Parser factory (auto grammar selection)
+├── core.py                        # Migration engine (SchemaTransformer)
+├── smel_listeners.py              # ANTLR listeners for both grammars
+├── parser_factory.py              # Parser factory (auto grammar detection)
+├── main.py                        # CLI entry point
 └── web_server.py                  # Web interface
 ```
 
 ## Architecture
 
-### 3-Step Pipeline
+### End-to-End Pipeline
+
+The complete processing pipeline consists of 4 stages. Below is the full logic chain from source schema to target schema, showing which files and functions are involved at each step.
 
 ```
-┌─────────────┐     Reverse Eng      ┌─────────────┐      SMEL         ┌─────────────┐     Forward Eng     ┌─────────────┐
-│   Source     │ ──────────────────► │   Meta V1   │ ──────────────► │   Meta V2   │ ──────────────────► │   Target     │
-│   Schema     │                      │  (Unified)  │                  │  (Unified)  │                      │   Schema     │
-│ (DDL/JSON)   │                      │             │                  │             │                      │ (DDL/JSON)   │
-└─────────────┘                      └─────────────┘                  └─────────────┘                      └─────────────┘
-     │                                     │                                │                                    │
-     │                                     │                                │                                    │
-     ▼                                     ▼                                ▼                                    ▼
- PostgreSQL                           Unified                          Unified                             PostgreSQL
- MongoDB                              Meta-Schema                      Meta-Schema                         MongoDB
- Neo4j                                (Database                        (Database                           Neo4j
- Cassandra                            Agnostic)                        Agnostic)                           Cassandra
+ Source Schema          SMEL Script             Unified Meta-Schema              Target Schema
+ (DDL / JSON)          (.smel / .smel_ps)       (M-Model)                        (DDL / JSON)
+ ─────────────         ─────────────────        ───────────────────              ─────────────
+      │                       │                        │                               ▲
+      │                       │                        │                               │
+      ▼                       ▼                        ▼                               │
+ ┌──────────┐          ┌──────────────┐         ┌──────────┐    ┌──────────┐    ┌──────────┐
+ │ Step 1   │          │   Step 2     │         │  Step 3  │    │  Step 3  │    │  Step 4  │
+ │ Reverse  │────────►│   SMEL       │────────►│  Meta V1 │───►│  Meta V2 │───►│ Forward  │
+ │ Engineer │          │   Parsing    │         │          │    │          │    │ Engineer │
+ └──────────┘          └──────────────┘         └──────────┘    └──────────┘    └──────────┘
 ```
 
-1. **Reverse Engineering**: Source schema (DDL/JSON) is parsed into the Unified Meta Schema (M-Model)
-2. **SMEL Operations**: Meta V1 is transformed into Meta V2 via SMEL script operations
-3. **Forward Engineering**: Meta V2 is exported to the target format (DDL/JSON)
+#### Step 1: Reverse Engineering — Source Schema to Meta V1
 
-The M-Model (Unified Meta Schema) serves as a database-agnostic intermediate representation, enabling any source/target combination.
+Converts a database-specific schema file into the **Unified Meta-Schema (M-Model)**, a database-agnostic intermediate representation.
+
+| Component | File | Function |
+|-----------|------|----------|
+| Entry point | `core.py` | `run_migration()` line 1768 |
+| PostgreSQL adapter | `Schema/adapters/postgresql_adapter.py` | `PostgreSQLAdapter.load_from_file()` → `parse()` |
+| MongoDB adapter | `Schema/adapters/mongodb_adapter.py` | `MongoDBAdapter.load_from_file()` → `parse()` |
+| Type mapping | `Schema/unified_meta_schema.py` | `TypeMappings.POSTGRESQL_TO_PRIMITIVE` / `MONGODB_TO_PRIMITIVE` |
+
+**What happens:**
+- PostgreSQL: DDL is parsed with regex to extract `CREATE TABLE` statements, column types are mapped to `PrimitiveType` enums (e.g., `VARCHAR(255)` → `STRING`), `REFERENCES` clauses become `Reference` relationships
+- MongoDB: JSON Schema is parsed recursively, nested `bsonType: "object"` becomes `Embedded` relationships, arrays with primitive items become `ListDataType` attributes
+
+**Output:** A `Database` object containing `EntityType`s with `Attribute`s, `Relationship`s (Reference/Embedded), and `Constraint`s (PK/FK/Unique)
+
+#### Step 2: SMEL Parsing — Script to Operation List
+
+Parses a `.smel` or `.smel_ps` file into a list of executable `Operation` objects.
+
+| Component | File | Function |
+|-----------|------|----------|
+| Entry point | `core.py` | `run_migration()` line 1772-1773 |
+| Grammar detection | `parser_factory.py` | `detect_grammar_type()` — selects grammar by file extension |
+| ANTLR parsing | `parser_factory.py` | `parse_smel_auto()` — lexer → tokens → parse tree |
+| Specific listener | `smel_listeners.py` | `SMELSpecificListener` — walks parse tree, creates Operations |
+| Pauschalisiert listener | `smel_listeners.py` | `SMELPauschalisiertListener` — same role, different keyword set |
+
+**What happens:**
+1. File extension determines grammar: `.smel` → `SMEL_Specific.g4`, `.smel_ps` → `SMEL_Pauschalisiert.g4`
+2. ANTLR4 lexer tokenizes the SMEL script, parser builds a parse tree
+3. A custom listener walks the tree, calling `enterXxx()` methods for each grammar rule
+4. Each listener method creates an `Operation(op_type, params)` and appends to `self.operations`
+
+**Output:** A tuple of `(MigrationContext, List[Operation], List[errors])`
+
+#### Step 3: Transformation — Meta V1 to Meta V2
+
+Applies each parsed `Operation` to the meta-schema, transforming it step by step.
+
+| Component | File | Function |
+|-----------|------|----------|
+| Entry point | `core.py` | `run_migration()` line 1778-1823 |
+| Transformer | `core.py` | `SchemaTransformer.__init__()` — deep-copies Meta V1 as working copy |
+| Operation dispatch | `core.py` | `SchemaTransformer.apply()` → `_handle_{op_type}()` |
+
+**What happens:**
+- `SchemaTransformer` creates a deep copy of Meta V1 as its working `Database`
+- For each `Operation`, the transformer calls the corresponding handler (e.g., `_handle_unnest()`, `_handle_split()`, `_handle_rename()`)
+- Each handler mutates the internal `Database` object: adding/removing `EntityType`s, `Attribute`s, `Relationship`s, `Constraint`s
+- Changes are tracked for audit (`self.changes`)
+
+**Output:** The transformed `Database` object (Meta V2) and a list of operation results
+
+#### Step 4: Forward Engineering — Meta V2 to Target Schema
+
+Converts the transformed M-Model back into a database-specific schema format.
+
+| Component | File | Function |
+|-----------|------|----------|
+| Entry point | `core.py` | `run_migration()` line 1832-1836 |
+| PostgreSQL export | `Schema/adapters/postgresql_adapter.py` | `PostgreSQLAdapter.export_to_sql()` |
+| MongoDB export | `Schema/adapters/mongodb_adapter.py` | `MongoDBAdapter.export_to_json_string()` |
+| Type mapping | `Schema/unified_meta_schema.py` | `TypeMappings.PRIMITIVE_TO_POSTGRESQL` / `PRIMITIVE_TO_MONGODB` |
+
+**What happens:**
+- PostgreSQL: Topologically sorts entities by FK dependencies, generates `CREATE TABLE` DDL with columns, primary keys, and `REFERENCES` clauses
+- MongoDB: Recursively builds JSON Schema with nested objects for `Embedded` relationships, arrays for `ONE_TO_MANY` cardinality
+
+**Output:** A string containing the target schema (SQL DDL or JSON Schema)
+
+### The Unified Meta-Schema (M-Model)
+
+The M-Model (`Schema/unified_meta_schema.py`) is the central abstraction that makes cross-model migration possible. All adapters convert to/from this single representation.
+
+```
+                        ┌────────────────────────────────┐
+                        │        Database                │
+                        │  - entity_types: Dict          │
+                        │  - relationship_types: Dict    │
+                        │  - db_type: DatabaseType       │
+                        └────────────┬───────────────────┘
+                                     │
+                          ┌──────────┴──────────┐
+                          ▼                     ▼
+                   ┌─────────────┐      ┌────────────────┐
+                   │ EntityType  │      │RelationshipType│
+                   │ (Table/Doc) │      │  (Neo4j only)  │
+                   └──────┬──────┘      └────────────────┘
+                          │
+            ┌─────────────┼─────────────┐
+            ▼             ▼             ▼
+      ┌───────────┐ ┌────────────┐ ┌────────────┐
+      │ Attribute │ │Relationship│ │ Constraint │
+      │           │ │            │ │            │
+      │ - name    │ │ - Reference│ │ - Unique   │
+      │ - type    │ │ - Embedded │ │ - FK       │
+      │ - is_key  │ │ - card.    │ │            │
+      └───────────┘ └────────────┘ └────────────┘
+```
+
+Key design: `EntityType.object_name` is a `List[str]` representing the hierarchical path. A top-level table like `person` has `["person"]`, while a nested object like `person.address` has `["person", "address"]`. This enables the M-Model to represent both flat relational tables and deeply nested document structures.
 
 ### Key Generation & Dependency Resolution
 
@@ -230,22 +330,58 @@ SMEL provides two grammar variants:
 
 Both grammars are functionally equivalent and generate the same internal operations. See `grammar/README.md` for detailed comparison.
 
-## Example: Cross-Model Migration (D2R)
+## SMEL Script Examples
+
+### SMEL Script Location & Application
+
+All SMEL test scripts are located under the `tests/` directory, organized by grammar variant:
+
+```
+tests/
+├── person_mongodb.json                          # MongoDB source schema
+├── person_postgresql.sql                        # PostgreSQL source schema
+├── specific/                                    # Scripts using Specific grammar
+│   ├── person_mongo_to_pg_minibeispiel.smel     # D2R: MongoDB -> PostgreSQL
+│   ├── person_pg_to_mongo_minibeispiel.smel     # R2D: PostgreSQL -> MongoDB
+│   ├── person_pg1_to_pg2_minibeispiel.smel      # R2R: PostgreSQL V1 -> V2
+│   └── person_mongo1_to_mongo2_minibeispiel.smel # D2D: MongoDB V1 -> V2
+└── pauschalisiert/                              # Scripts using Pauschalisiert grammar
+    ├── person_mongo_to_pg_minibeispiel.smel_ps
+    ├── person_pg_to_mongo_minibeispiel.smel_ps
+    ├── person_pg1_to_pg2_minibeispiel.smel_ps
+    └── person_mongo1_to_mongo2_minibeispiel.smel_ps
+```
+
+Each script is registered in `config.py` under `MIGRATION_CONFIGS`, which maps a config key (e.g., `"person_d2r_specific"`) to its source file, SMEL script, source type, and target type. The `run_migration()` function in `core.py` reads this config to wire everything together.
+
+### Example: Cross-Model Migration (D2R)
+
+MongoDB document with 3-level nesting and arrays -> 7 normalized PostgreSQL tables:
 
 ```smel
-MIGRATION person_migration:1.0
+MIGRATION person_mongo_to_pg:1.0
 FROM DOCUMENT TO RELATIONAL
 USING person_schema:1
 
-NEST person.name AS name
-NEST person.address AS address
-NEST person.employment AS employment
-UNNEST person.employment.company:name AS company
-    WITH employment.employment_id TO company.employment_id
-UNWIND person.tags[] INTO person_tag
+-- Extract nested objects (UNNEST)
+UNNEST person.address:street,city AS address WITH person.person_id TO address.person_id
+UNNEST person.employment:position, company{name, address{street, city}} AS employment WITH person.person_id TO employment.person_id
+UNNEST employment.company:name, address{street, city} AS company WITH employment.employment_id TO company.employment_id
+UNNEST company.address:street,city AS company_address WITH company.company_id TO company_address.company_id
+
+-- Extract arrays (SPLIT + UNWIND)
+SPLIT person INTO person:person_id, name, age, knows; person_tag:person_id, tags
+UNWIND person_tag.tags
+
+SPLIT person INTO person:person_id, name, age; person_knows:person_id, knows
+UNWIND person_knows.knows
+
+-- Finalize
+FLATTEN person.name
+CAST person.age TO Integer
 ```
 
-## Example: Same-Model Evolution (R2R)
+### Example: Same-Model Evolution (R2R)
 
 ```smel
 MIGRATION person_pg1_to_pg2:1.0
@@ -253,12 +389,12 @@ FROM RELATIONAL TO RELATIONAL
 USING person_schema:1
 
 MERGE company, company_address INTO company
-SPLIT person INTO person(person_id, vorname, nachname), person_detail(person_id, age, email)
+SPLIT person INTO person:person_id, vorname, nachname; person_detail:person_id, age, email, phone
 RENAME_ATTRIBUTE vorname TO first_name IN person
 CAST person_detail.age TO String
 ```
 
-## Example: Same-Model Evolution (D2D)
+### Example: Same-Model Evolution (D2D)
 
 ```smel
 MIGRATION person_mongo1_to_mongo2:1.0
@@ -269,6 +405,15 @@ FLATTEN person.employment.company.address
 RENAME_ATTRIBUTE vorname TO first_name IN name
 CAST person.age TO Integer
 ADD_ATTRIBUTE email TO person WITH TYPE String
+```
+
+## Regenerating Parsers
+
+After modifying `.g4` grammar files, regenerate the ANTLR parsers:
+
+```bash
+java -jar grammar/antlr-4.13.2-complete.jar -Dlanguage=Python3 -visitor -listener -o grammar/specific grammar/SMEL_Specific.g4
+java -jar grammar/antlr-4.13.2-complete.jar -Dlanguage=Python3 -visitor -listener -o grammar/pauschalisiert grammar/SMEL_Pauschalisiert.g4
 ```
 
 ## License

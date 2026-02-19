@@ -680,9 +680,9 @@ class SMELSpecificListener(SMEL_SpecificListener, BaseSMELListener):
         }))
 
     def enterSplit(self, ctx):
-        # New syntax: SPLIT identifier INTO splitPart (COMMA splitPart)+
+        # New syntax: SPLIT identifier INTO splitPart (SEMICOLON splitPart)+
         # Vertical partitioning - divides one entity into multiple separate entities
-        # Example: SPLIT person INTO person(person_id, vorname, nachname, age), person_tag(person_id, tags)
+        # Example: SPLIT person INTO person:person_id, vorname, nachname, age; person_tag:person_id, tags
         #   Before: person { person_id, vorname, nachname, age, tags[] }
         #   After:  person { person_id, vorname, nachname, age }
         #          person_tag { person_id, tags[] }
@@ -1094,9 +1094,9 @@ class SMELPauschalisiertListener(SMEL_PauschalisiertListener, BaseSMELListener):
         }))
 
     def enterSplit_ps(self, ctx):
-        # New syntax: SPLIT_PS identifier INTO splitPartPs (COMMA splitPartPs)+
+        # New syntax: SPLIT_PS identifier INTO splitPartPs (SEMICOLON splitPartPs)+
         # Vertical partitioning - divides one entity into multiple separate entities
-        # Example: SPLIT_PS person INTO person(person_id, vorname, nachname, age), person_tag(person_id, tags)
+        # Example: SPLIT_PS person INTO person:person_id, vorname, nachname, age; person_tag:person_id, tags
         #   Before: person { person_id, vorname, nachname, age, tags[] }
         #   After:  person { person_id, vorname, nachname, age }
         #          person_tag { person_id, tags[] }

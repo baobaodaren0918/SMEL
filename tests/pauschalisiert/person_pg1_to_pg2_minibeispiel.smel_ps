@@ -67,7 +67,7 @@ ADD_PS ATTRIBUTE start_date TO employment WITH TYPE String
 -- Before: person(person_id, vorname, nachname, age, email, phone)
 -- After:  person(person_id, vorname, nachname)
 --         person_detail(person_id, age, email, phone)
-SPLIT_PS person INTO person(person_id, vorname, nachname), person_detail(person_id, age, email, phone)
+SPLIT_PS person INTO person:person_id, vorname, nachname; person_detail:person_id, age, email, phone
 ADD_PS KEY person_id TO person
 ADD_PS KEY person_detail.detail_id AS String
 ADD_PS REFERENCE person_detail.person_id REFERENCES person(person_id) WITH CARDINALITY ONE_TO_ONE

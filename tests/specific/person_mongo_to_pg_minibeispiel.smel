@@ -104,7 +104,7 @@ ADD_REFERENCE company_address.company_id REFERENCES company(company_id) WITH CAR
 -- ============================================
 -- Step 5: Extract person_tag table (array 1:N)
 -- ============================================
-SPLIT person INTO person(person_id, name, age, knows), person_tag(person_id, tags)
+SPLIT person INTO person:person_id, name, age, knows; person_tag:person_id, tags
 UNWIND person_tag.tags
 RENAME_ATTRIBUTE tags TO tag_value IN person_tag
 ADD_PRIMARY_KEY person_tag.person_tag_id AS String
@@ -117,7 +117,7 @@ ADD_REFERENCE person_tag.person_id REFERENCES person(person_id) WITH CARDINALITY
 -- ============================================
 -- Step 6: Extract person_knows table (array M:N)
 -- ============================================
-SPLIT person INTO person(person_id, name, age), person_knows(person_id, knows)
+SPLIT person INTO person:person_id, name, age; person_knows:person_id, knows
 UNWIND person_knows.knows
 RENAME_ATTRIBUTE knows TO knows_person_id IN person_knows
 ADD_REFERENCE person_knows.person_id REFERENCES person(person_id) WITH CARDINALITY ONE_TO_MANY

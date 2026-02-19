@@ -325,13 +325,13 @@ merge: MERGE identifier COMMA identifier INTO identifier (AS identifier)?;
 
 // SPLIT: Divide one entity into multiple separate entities (vertical partitioning)
 // Reference: André Conrad - "SPLIT Person into Person:id, firstname, lastname AND knows:id, knows"
-// Example: SPLIT person INTO person(person_id, vorname, nachname, age), person_tag(person_id, tags)
+// Example: SPLIT person INTO person:person_id, vorname, nachname, age; person_tag:person_id, tags
 //   Before: person { person_id, vorname, nachname, age, tags[] }
 //   After:  person { person_id, vorname, nachname, age }
 //          person_tag { person_id, tags[] }
 // Note: Fields can be duplicated across parts (e.g., person_id in both parts)
-split: SPLIT identifier INTO splitPart (COMMA splitPart)+;
-splitPart: identifier LPAREN identifierList RPAREN;
+split: SPLIT identifier INTO splitPart (SEMICOLON splitPart)+;
+splitPart: identifier COLON identifierList;
 
 // CAST: Change the data type of an attribute
 // Example: CAST Entity.field TO Integer
@@ -487,7 +487,7 @@ NOT_NULL: 'NOT NULL';
 TRUE: 'true' | 'TRUE'; FALSE: 'false' | 'FALSE'; NULL: 'null' | 'NULL';
 
 // Symbols
-COLON: ':'; COMMA: ','; DOT: '.'; LPAREN: '('; RPAREN: ')'; LBRACKET: '['; RBRACKET: ']';
+COLON: ':'; SEMICOLON: ';'; COMMA: ','; DOT: '.'; LPAREN: '('; RPAREN: ')'; LBRACKET: '['; RBRACKET: ']';
 LBRACE: '{'; RBRACE: '}';
 EQUALS: '=';
 

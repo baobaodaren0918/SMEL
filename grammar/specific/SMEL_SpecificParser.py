@@ -1,4 +1,4 @@
-# Generated from SMEL_Specific.g4 by ANTLR 4.13.2
+# Generated from grammar/SMEL_Specific.g4 by ANTLR 4.13.2
 # encoding: utf-8
 from antlr4 import *
 from io import StringIO
@@ -10,7 +10,7 @@ else:
 
 def serializedATN():
     return [
-        4,1,130,786,2,0,7,0,2,1,7,1,2,2,7,2,2,3,7,3,2,4,7,4,2,5,7,5,2,6,
+        4,1,131,785,2,0,7,0,2,1,7,1,2,2,7,2,2,3,7,3,2,4,7,4,2,5,7,5,2,6,
         7,6,2,7,7,7,2,8,7,8,2,9,7,9,2,10,7,10,2,11,7,11,2,12,7,12,2,13,7,
         13,2,14,7,14,2,15,7,15,2,16,7,16,2,17,7,17,2,18,7,18,2,19,7,19,2,
         20,7,20,2,21,7,21,2,22,7,22,2,23,7,23,2,24,7,24,2,25,7,25,2,26,7,
@@ -63,27 +63,27 @@ def serializedATN():
         1,64,1,64,1,64,1,64,1,64,1,64,1,64,1,64,1,64,1,64,3,64,634,8,64,
         1,65,1,65,1,65,1,65,1,65,1,66,1,66,1,66,1,66,1,66,1,67,1,67,1,67,
         1,67,1,67,1,67,1,67,1,67,3,67,654,8,67,1,68,1,68,1,68,1,68,1,68,
-        1,68,4,68,662,8,68,11,68,12,68,663,1,69,1,69,1,69,1,69,1,69,1,70,
-        1,70,1,70,1,70,1,70,1,71,1,71,1,71,1,71,1,71,1,72,1,72,1,72,1,72,
-        1,73,1,73,1,73,1,73,1,74,1,74,1,74,1,75,1,75,1,75,3,75,695,8,75,
-        1,76,1,76,1,76,1,76,1,76,1,76,1,77,1,77,1,77,1,77,1,77,1,77,1,78,
-        1,78,1,78,1,78,1,79,1,79,3,79,715,8,79,1,80,1,80,1,80,1,80,1,80,
-        1,80,1,81,1,81,1,81,5,81,726,8,81,10,81,12,81,729,9,81,1,82,1,82,
+        1,68,4,68,662,8,68,11,68,12,68,663,1,69,1,69,1,69,1,69,1,70,1,70,
+        1,70,1,70,1,70,1,71,1,71,1,71,1,71,1,71,1,72,1,72,1,72,1,72,1,73,
+        1,73,1,73,1,73,1,74,1,74,1,74,1,75,1,75,1,75,3,75,694,8,75,1,76,
+        1,76,1,76,1,76,1,76,1,76,1,77,1,77,1,77,1,77,1,77,1,77,1,78,1,78,
+        1,78,1,78,1,79,1,79,3,79,714,8,79,1,80,1,80,1,80,1,80,1,80,1,80,
+        1,81,1,81,1,81,5,81,725,8,81,10,81,12,81,728,9,81,1,82,1,82,1,83,
         1,83,1,83,1,83,1,83,1,83,1,83,1,83,1,83,1,83,1,83,1,83,1,83,1,83,
-        1,83,1,83,3,83,748,8,83,1,84,1,84,1,84,5,84,753,8,84,10,84,12,84,
-        756,9,84,1,85,1,85,1,85,3,85,761,8,85,1,86,1,86,1,87,1,87,1,87,1,
-        87,1,87,1,87,1,87,1,87,1,87,3,87,774,8,87,1,87,1,87,1,87,5,87,779,
-        8,87,10,87,12,87,782,9,87,1,88,1,88,1,88,0,1,174,89,0,2,4,6,8,10,
-        12,14,16,18,20,22,24,26,28,30,32,34,36,38,40,42,44,46,48,50,52,54,
-        56,58,60,62,64,66,68,70,72,74,76,78,80,82,84,86,88,90,92,94,96,98,
-        100,102,104,106,108,110,112,114,116,118,120,122,124,126,128,130,
-        132,134,136,138,140,142,144,146,148,150,152,154,156,158,160,162,
-        164,166,168,170,172,174,176,0,4,1,0,15,18,1,0,123,124,1,0,87,90,
-        2,0,110,112,124,126,805,0,178,1,0,0,0,2,187,1,0,0,0,4,191,1,0,0,
-        0,6,196,1,0,0,0,8,201,1,0,0,0,10,206,1,0,0,0,12,208,1,0,0,0,14,256,
-        1,0,0,0,16,258,1,0,0,0,18,273,1,0,0,0,20,275,1,0,0,0,22,279,1,0,
-        0,0,24,283,1,0,0,0,26,285,1,0,0,0,28,301,1,0,0,0,30,303,1,0,0,0,
-        32,315,1,0,0,0,34,317,1,0,0,0,36,323,1,0,0,0,38,333,1,0,0,0,40,335,
+        1,83,3,83,747,8,83,1,84,1,84,1,84,5,84,752,8,84,10,84,12,84,755,
+        9,84,1,85,1,85,1,85,3,85,760,8,85,1,86,1,86,1,87,1,87,1,87,1,87,
+        1,87,1,87,1,87,1,87,1,87,3,87,773,8,87,1,87,1,87,1,87,5,87,778,8,
+        87,10,87,12,87,781,9,87,1,88,1,88,1,88,0,1,174,89,0,2,4,6,8,10,12,
+        14,16,18,20,22,24,26,28,30,32,34,36,38,40,42,44,46,48,50,52,54,56,
+        58,60,62,64,66,68,70,72,74,76,78,80,82,84,86,88,90,92,94,96,98,100,
+        102,104,106,108,110,112,114,116,118,120,122,124,126,128,130,132,
+        134,136,138,140,142,144,146,148,150,152,154,156,158,160,162,164,
+        166,168,170,172,174,176,0,4,1,0,15,18,1,0,124,125,1,0,87,90,2,0,
+        110,112,125,127,804,0,178,1,0,0,0,2,187,1,0,0,0,4,191,1,0,0,0,6,
+        196,1,0,0,0,8,201,1,0,0,0,10,206,1,0,0,0,12,208,1,0,0,0,14,256,1,
+        0,0,0,16,258,1,0,0,0,18,273,1,0,0,0,20,275,1,0,0,0,22,279,1,0,0,
+        0,24,283,1,0,0,0,26,285,1,0,0,0,28,301,1,0,0,0,30,303,1,0,0,0,32,
+        315,1,0,0,0,34,317,1,0,0,0,36,323,1,0,0,0,38,333,1,0,0,0,40,335,
         1,0,0,0,42,339,1,0,0,0,44,355,1,0,0,0,46,367,1,0,0,0,48,379,1,0,
         0,0,50,391,1,0,0,0,52,403,1,0,0,0,54,413,1,0,0,0,56,425,1,0,0,0,
         58,433,1,0,0,0,60,443,1,0,0,0,62,448,1,0,0,0,64,450,1,0,0,0,66,456,
@@ -95,12 +95,12 @@ def serializedATN():
         0,0,110,565,1,0,0,0,112,568,1,0,0,0,114,576,1,0,0,0,116,586,1,0,
         0,0,118,594,1,0,0,0,120,598,1,0,0,0,122,612,1,0,0,0,124,614,1,0,
         0,0,126,620,1,0,0,0,128,623,1,0,0,0,130,635,1,0,0,0,132,640,1,0,
-        0,0,134,645,1,0,0,0,136,655,1,0,0,0,138,665,1,0,0,0,140,670,1,0,
-        0,0,142,675,1,0,0,0,144,680,1,0,0,0,146,684,1,0,0,0,148,688,1,0,
-        0,0,150,694,1,0,0,0,152,696,1,0,0,0,154,702,1,0,0,0,156,708,1,0,
-        0,0,158,714,1,0,0,0,160,716,1,0,0,0,162,722,1,0,0,0,164,730,1,0,
-        0,0,166,747,1,0,0,0,168,749,1,0,0,0,170,757,1,0,0,0,172,762,1,0,
-        0,0,174,773,1,0,0,0,176,783,1,0,0,0,178,182,3,2,1,0,179,181,3,14,
+        0,0,134,645,1,0,0,0,136,655,1,0,0,0,138,665,1,0,0,0,140,669,1,0,
+        0,0,142,674,1,0,0,0,144,679,1,0,0,0,146,683,1,0,0,0,148,687,1,0,
+        0,0,150,693,1,0,0,0,152,695,1,0,0,0,154,701,1,0,0,0,156,707,1,0,
+        0,0,158,713,1,0,0,0,160,715,1,0,0,0,162,721,1,0,0,0,164,729,1,0,
+        0,0,166,746,1,0,0,0,168,748,1,0,0,0,170,756,1,0,0,0,172,761,1,0,
+        0,0,174,772,1,0,0,0,176,782,1,0,0,0,178,182,3,2,1,0,179,181,3,14,
         7,0,180,179,1,0,0,0,181,184,1,0,0,0,182,180,1,0,0,0,182,183,1,0,
         0,0,183,185,1,0,0,0,184,182,1,0,0,0,185,186,5,0,0,1,186,1,1,0,0,
         0,187,188,3,4,2,0,188,189,3,6,3,0,189,190,3,8,4,0,190,3,1,0,0,0,
@@ -142,8 +142,8 @@ def serializedATN():
         5,105,0,0,277,278,3,166,83,0,278,21,1,0,0,0,279,280,5,7,0,0,280,
         281,5,106,0,0,281,282,3,176,88,0,282,23,1,0,0,0,283,284,5,109,0,
         0,284,25,1,0,0,0,285,286,5,32,0,0,286,287,3,168,84,0,287,288,5,82,
-        0,0,288,289,3,172,86,0,289,290,5,116,0,0,290,291,3,172,86,0,291,
-        295,5,117,0,0,292,294,3,28,14,0,293,292,1,0,0,0,294,297,1,0,0,0,
+        0,0,288,289,3,172,86,0,289,290,5,117,0,0,290,291,3,172,86,0,291,
+        295,5,118,0,0,292,294,3,28,14,0,293,292,1,0,0,0,294,297,1,0,0,0,
         295,293,1,0,0,0,295,296,1,0,0,0,296,27,1,0,0,0,297,295,1,0,0,0,298,
         302,3,144,72,0,299,302,3,146,73,0,300,302,3,148,74,0,301,298,1,0,
         0,0,301,299,1,0,0,0,301,300,1,0,0,0,302,29,1,0,0,0,303,304,5,33,
@@ -151,8 +151,8 @@ def serializedATN():
         3,32,16,0,308,307,1,0,0,0,309,312,1,0,0,0,310,308,1,0,0,0,310,311,
         1,0,0,0,311,31,1,0,0,0,312,310,1,0,0,0,313,316,3,144,72,0,314,316,
         3,34,17,0,315,313,1,0,0,0,315,314,1,0,0,0,316,33,1,0,0,0,317,318,
-        5,7,0,0,318,319,5,68,0,0,319,320,5,116,0,0,320,321,3,162,81,0,321,
-        322,5,117,0,0,322,35,1,0,0,0,323,324,5,34,0,0,324,328,3,172,86,0,
+        5,7,0,0,318,319,5,68,0,0,319,320,5,117,0,0,320,321,3,162,81,0,321,
+        322,5,118,0,0,322,35,1,0,0,0,323,324,5,34,0,0,324,328,3,172,86,0,
         325,327,3,38,19,0,326,325,1,0,0,0,327,330,1,0,0,0,328,326,1,0,0,
         0,328,329,1,0,0,0,329,37,1,0,0,0,330,328,1,0,0,0,331,334,3,152,76,
         0,332,334,3,40,20,0,333,331,1,0,0,0,333,332,1,0,0,0,334,39,1,0,0,
@@ -183,16 +183,16 @@ def serializedATN():
         0,418,422,3,172,86,0,419,421,3,158,79,0,420,419,1,0,0,0,421,424,
         1,0,0,0,422,420,1,0,0,0,422,423,1,0,0,0,423,55,1,0,0,0,424,422,1,
         0,0,0,425,426,5,42,0,0,426,427,3,172,86,0,427,428,5,14,0,0,428,429,
-        3,172,86,0,429,430,5,116,0,0,430,431,3,162,81,0,431,432,5,117,0,
+        3,172,86,0,429,430,5,117,0,0,430,431,3,162,81,0,431,432,5,118,0,
         0,432,57,1,0,0,0,433,434,5,43,0,0,434,435,3,172,86,0,435,436,5,3,
         0,0,436,437,3,172,86,0,437,59,1,0,0,0,438,444,3,168,84,0,439,440,
-        5,116,0,0,440,441,3,162,81,0,441,442,5,117,0,0,442,444,1,0,0,0,443,
+        5,117,0,0,440,441,3,162,81,0,441,442,5,118,0,0,442,444,1,0,0,0,443,
         438,1,0,0,0,443,439,1,0,0,0,444,61,1,0,0,0,445,449,3,64,32,0,446,
         449,3,66,33,0,447,449,3,20,10,0,448,445,1,0,0,0,448,446,1,0,0,0,
         448,447,1,0,0,0,449,63,1,0,0,0,450,451,5,82,0,0,451,452,3,172,86,
-        0,452,453,5,116,0,0,453,454,3,162,81,0,454,455,5,117,0,0,455,65,
-        1,0,0,0,456,457,5,7,0,0,457,458,5,83,0,0,458,459,5,116,0,0,459,460,
-        3,162,81,0,460,461,5,117,0,0,461,67,1,0,0,0,462,463,5,44,0,0,463,
+        0,452,453,5,117,0,0,453,454,3,162,81,0,454,455,5,118,0,0,455,65,
+        1,0,0,0,456,457,5,7,0,0,457,458,5,83,0,0,458,459,5,117,0,0,459,460,
+        3,162,81,0,460,461,5,118,0,0,461,67,1,0,0,0,462,463,5,44,0,0,463,
         464,3,168,84,0,464,69,1,0,0,0,465,466,5,45,0,0,466,467,3,168,84,
         0,467,71,1,0,0,0,468,469,5,46,0,0,469,470,3,168,84,0,470,73,1,0,
         0,0,471,472,5,47,0,0,472,473,3,172,86,0,473,75,1,0,0,0,474,475,5,
@@ -222,19 +222,19 @@ def serializedATN():
         86,0,557,558,5,3,0,0,558,559,3,172,86,0,559,107,1,0,0,0,560,561,
         5,64,0,0,561,562,3,172,86,0,562,563,5,3,0,0,563,564,3,172,86,0,564,
         109,1,0,0,0,565,566,5,21,0,0,566,567,3,168,84,0,567,111,1,0,0,0,
-        568,569,5,22,0,0,569,570,3,172,86,0,570,571,5,116,0,0,571,572,3,
-        162,81,0,572,573,5,117,0,0,573,574,5,5,0,0,574,575,3,172,86,0,575,
+        568,569,5,22,0,0,569,570,3,172,86,0,570,571,5,117,0,0,571,572,3,
+        162,81,0,572,573,5,118,0,0,573,574,5,5,0,0,574,575,3,172,86,0,575,
         113,1,0,0,0,576,577,5,20,0,0,577,578,3,168,84,0,578,579,5,113,0,
         0,579,580,3,120,60,0,580,581,5,5,0,0,581,584,3,172,86,0,582,583,
         5,7,0,0,583,585,3,116,58,0,584,582,1,0,0,0,584,585,1,0,0,0,585,115,
-        1,0,0,0,586,591,3,118,59,0,587,588,5,114,0,0,588,590,3,118,59,0,
+        1,0,0,0,586,591,3,118,59,0,587,588,5,115,0,0,588,590,3,118,59,0,
         589,587,1,0,0,0,590,593,1,0,0,0,591,589,1,0,0,0,591,592,1,0,0,0,
         592,117,1,0,0,0,593,591,1,0,0,0,594,595,3,168,84,0,595,596,5,3,0,
         0,596,597,3,168,84,0,597,119,1,0,0,0,598,603,3,122,61,0,599,600,
-        5,114,0,0,600,602,3,122,61,0,601,599,1,0,0,0,602,605,1,0,0,0,603,
+        5,115,0,0,600,602,3,122,61,0,601,599,1,0,0,0,602,605,1,0,0,0,603,
         601,1,0,0,0,603,604,1,0,0,0,604,121,1,0,0,0,605,603,1,0,0,0,606,
-        613,3,172,86,0,607,608,3,172,86,0,608,609,5,120,0,0,609,610,3,120,
-        60,0,610,611,5,121,0,0,611,613,1,0,0,0,612,606,1,0,0,0,612,607,1,
+        613,3,172,86,0,607,608,3,172,86,0,608,609,5,121,0,0,609,610,3,120,
+        60,0,610,611,5,122,0,0,611,613,1,0,0,0,612,606,1,0,0,0,612,607,1,
         0,0,0,613,123,1,0,0,0,614,615,5,23,0,0,615,618,3,168,84,0,616,617,
         5,6,0,0,617,619,3,172,86,0,618,616,1,0,0,0,618,619,1,0,0,0,619,125,
         1,0,0,0,620,621,5,24,0,0,621,622,3,168,84,0,622,127,1,0,0,0,623,
@@ -244,53 +244,53 @@ def serializedATN():
         634,1,0,0,0,634,129,1,0,0,0,635,636,5,25,0,0,636,637,3,168,84,0,
         637,638,5,3,0,0,638,639,3,168,84,0,639,131,1,0,0,0,640,641,5,26,
         0,0,641,642,3,168,84,0,642,643,5,3,0,0,643,644,3,168,84,0,644,133,
-        1,0,0,0,645,646,5,27,0,0,646,647,3,172,86,0,647,648,5,114,0,0,648,
+        1,0,0,0,645,646,5,27,0,0,646,647,3,172,86,0,647,648,5,115,0,0,648,
         649,3,172,86,0,649,650,5,6,0,0,650,653,3,172,86,0,651,652,5,5,0,
         0,652,654,3,172,86,0,653,651,1,0,0,0,653,654,1,0,0,0,654,135,1,0,
         0,0,655,656,5,28,0,0,656,657,3,172,86,0,657,658,5,6,0,0,658,661,
         3,138,69,0,659,660,5,114,0,0,660,662,3,138,69,0,661,659,1,0,0,0,
         662,663,1,0,0,0,663,661,1,0,0,0,663,664,1,0,0,0,664,137,1,0,0,0,
-        665,666,3,172,86,0,666,667,5,116,0,0,667,668,3,162,81,0,668,669,
-        5,117,0,0,669,139,1,0,0,0,670,671,5,29,0,0,671,672,3,168,84,0,672,
-        673,5,3,0,0,673,674,3,166,83,0,674,141,1,0,0,0,675,676,5,30,0,0,
-        676,677,3,168,84,0,677,678,5,3,0,0,678,679,3,172,86,0,679,143,1,
-        0,0,0,680,681,5,7,0,0,681,682,5,86,0,0,682,683,3,164,82,0,683,145,
-        1,0,0,0,684,685,5,4,0,0,685,686,5,10,0,0,686,687,3,172,86,0,687,
-        147,1,0,0,0,688,689,5,8,0,0,689,690,3,174,87,0,690,149,1,0,0,0,691,
-        695,3,152,76,0,692,695,3,154,77,0,693,695,3,156,78,0,694,691,1,0,
-        0,0,694,692,1,0,0,0,694,693,1,0,0,0,695,151,1,0,0,0,696,697,5,7,
-        0,0,697,698,5,84,0,0,698,699,5,116,0,0,699,700,3,162,81,0,700,701,
-        5,117,0,0,701,153,1,0,0,0,702,703,5,7,0,0,703,704,5,85,0,0,704,705,
-        5,116,0,0,705,706,3,162,81,0,706,707,5,117,0,0,707,155,1,0,0,0,708,
-        709,5,7,0,0,709,710,5,13,0,0,710,711,5,124,0,0,711,157,1,0,0,0,712,
-        715,3,160,80,0,713,715,3,144,72,0,714,712,1,0,0,0,714,713,1,0,0,
-        0,715,159,1,0,0,0,716,717,5,7,0,0,717,718,5,67,0,0,718,719,5,116,
-        0,0,719,720,3,162,81,0,720,721,5,117,0,0,721,161,1,0,0,0,722,727,
-        3,172,86,0,723,724,5,114,0,0,724,726,3,172,86,0,725,723,1,0,0,0,
-        726,729,1,0,0,0,727,725,1,0,0,0,727,728,1,0,0,0,728,163,1,0,0,0,
-        729,727,1,0,0,0,730,731,7,2,0,0,731,165,1,0,0,0,732,748,5,91,0,0,
-        733,748,5,92,0,0,734,748,5,93,0,0,735,748,5,94,0,0,736,748,5,95,
-        0,0,737,748,5,96,0,0,738,748,5,97,0,0,739,748,5,98,0,0,740,748,5,
-        99,0,0,741,748,5,100,0,0,742,748,5,101,0,0,743,748,5,102,0,0,744,
-        748,5,103,0,0,745,748,5,104,0,0,746,748,3,172,86,0,747,732,1,0,0,
-        0,747,733,1,0,0,0,747,734,1,0,0,0,747,735,1,0,0,0,747,736,1,0,0,
-        0,747,737,1,0,0,0,747,738,1,0,0,0,747,739,1,0,0,0,747,740,1,0,0,
-        0,747,741,1,0,0,0,747,742,1,0,0,0,747,743,1,0,0,0,747,744,1,0,0,
-        0,747,745,1,0,0,0,747,746,1,0,0,0,748,167,1,0,0,0,749,754,3,170,
-        85,0,750,751,5,115,0,0,751,753,3,170,85,0,752,750,1,0,0,0,753,756,
-        1,0,0,0,754,752,1,0,0,0,754,755,1,0,0,0,755,169,1,0,0,0,756,754,
-        1,0,0,0,757,760,3,172,86,0,758,759,5,118,0,0,759,761,5,119,0,0,760,
-        758,1,0,0,0,760,761,1,0,0,0,761,171,1,0,0,0,762,763,5,127,0,0,763,
-        173,1,0,0,0,764,765,6,87,-1,0,765,766,3,168,84,0,766,767,5,122,0,
-        0,767,768,3,168,84,0,768,774,1,0,0,0,769,770,5,116,0,0,770,771,3,
-        174,87,0,771,772,5,117,0,0,772,774,1,0,0,0,773,764,1,0,0,0,773,769,
-        1,0,0,0,774,780,1,0,0,0,775,776,10,2,0,0,776,777,5,11,0,0,777,779,
-        3,174,87,3,778,775,1,0,0,0,779,782,1,0,0,0,780,778,1,0,0,0,780,781,
-        1,0,0,0,781,175,1,0,0,0,782,780,1,0,0,0,783,784,7,3,0,0,784,177,
-        1,0,0,0,48,182,256,262,267,273,295,301,310,315,328,333,343,347,352,
-        359,364,371,376,383,388,395,400,410,422,443,448,478,484,490,496,
-        502,553,584,591,603,612,618,633,653,663,694,714,727,747,754,760,
-        773,780
+        665,666,3,172,86,0,666,667,5,113,0,0,667,668,3,162,81,0,668,139,
+        1,0,0,0,669,670,5,29,0,0,670,671,3,168,84,0,671,672,5,3,0,0,672,
+        673,3,166,83,0,673,141,1,0,0,0,674,675,5,30,0,0,675,676,3,168,84,
+        0,676,677,5,3,0,0,677,678,3,172,86,0,678,143,1,0,0,0,679,680,5,7,
+        0,0,680,681,5,86,0,0,681,682,3,164,82,0,682,145,1,0,0,0,683,684,
+        5,4,0,0,684,685,5,10,0,0,685,686,3,172,86,0,686,147,1,0,0,0,687,
+        688,5,8,0,0,688,689,3,174,87,0,689,149,1,0,0,0,690,694,3,152,76,
+        0,691,694,3,154,77,0,692,694,3,156,78,0,693,690,1,0,0,0,693,691,
+        1,0,0,0,693,692,1,0,0,0,694,151,1,0,0,0,695,696,5,7,0,0,696,697,
+        5,84,0,0,697,698,5,117,0,0,698,699,3,162,81,0,699,700,5,118,0,0,
+        700,153,1,0,0,0,701,702,5,7,0,0,702,703,5,85,0,0,703,704,5,117,0,
+        0,704,705,3,162,81,0,705,706,5,118,0,0,706,155,1,0,0,0,707,708,5,
+        7,0,0,708,709,5,13,0,0,709,710,5,125,0,0,710,157,1,0,0,0,711,714,
+        3,160,80,0,712,714,3,144,72,0,713,711,1,0,0,0,713,712,1,0,0,0,714,
+        159,1,0,0,0,715,716,5,7,0,0,716,717,5,67,0,0,717,718,5,117,0,0,718,
+        719,3,162,81,0,719,720,5,118,0,0,720,161,1,0,0,0,721,726,3,172,86,
+        0,722,723,5,115,0,0,723,725,3,172,86,0,724,722,1,0,0,0,725,728,1,
+        0,0,0,726,724,1,0,0,0,726,727,1,0,0,0,727,163,1,0,0,0,728,726,1,
+        0,0,0,729,730,7,2,0,0,730,165,1,0,0,0,731,747,5,91,0,0,732,747,5,
+        92,0,0,733,747,5,93,0,0,734,747,5,94,0,0,735,747,5,95,0,0,736,747,
+        5,96,0,0,737,747,5,97,0,0,738,747,5,98,0,0,739,747,5,99,0,0,740,
+        747,5,100,0,0,741,747,5,101,0,0,742,747,5,102,0,0,743,747,5,103,
+        0,0,744,747,5,104,0,0,745,747,3,172,86,0,746,731,1,0,0,0,746,732,
+        1,0,0,0,746,733,1,0,0,0,746,734,1,0,0,0,746,735,1,0,0,0,746,736,
+        1,0,0,0,746,737,1,0,0,0,746,738,1,0,0,0,746,739,1,0,0,0,746,740,
+        1,0,0,0,746,741,1,0,0,0,746,742,1,0,0,0,746,743,1,0,0,0,746,744,
+        1,0,0,0,746,745,1,0,0,0,747,167,1,0,0,0,748,753,3,170,85,0,749,750,
+        5,116,0,0,750,752,3,170,85,0,751,749,1,0,0,0,752,755,1,0,0,0,753,
+        751,1,0,0,0,753,754,1,0,0,0,754,169,1,0,0,0,755,753,1,0,0,0,756,
+        759,3,172,86,0,757,758,5,119,0,0,758,760,5,120,0,0,759,757,1,0,0,
+        0,759,760,1,0,0,0,760,171,1,0,0,0,761,762,5,128,0,0,762,173,1,0,
+        0,0,763,764,6,87,-1,0,764,765,3,168,84,0,765,766,5,123,0,0,766,767,
+        3,168,84,0,767,773,1,0,0,0,768,769,5,117,0,0,769,770,3,174,87,0,
+        770,771,5,118,0,0,771,773,1,0,0,0,772,763,1,0,0,0,772,768,1,0,0,
+        0,773,779,1,0,0,0,774,775,10,2,0,0,775,776,5,11,0,0,776,778,3,174,
+        87,3,777,774,1,0,0,0,778,781,1,0,0,0,779,777,1,0,0,0,779,780,1,0,
+        0,0,780,175,1,0,0,0,781,779,1,0,0,0,782,783,7,3,0,0,783,177,1,0,
+        0,0,48,182,256,262,267,273,295,301,310,315,328,333,343,347,352,359,
+        364,371,376,383,388,395,400,410,422,443,448,478,484,490,496,502,
+        553,584,591,603,612,618,633,653,663,693,713,726,746,753,759,772,
+        779
     ]
 
 class SMEL_SpecificParser ( Parser ):
@@ -331,8 +331,9 @@ class SMEL_SpecificParser ( Parser ):
                      "'Double'", "'Float'", "'Decimal'", "'Boolean'", "'Date'", 
                      "'DateTime'", "'Timestamp'", "'UUID'", "'Binary'", 
                      "'TYPE'", "'DEFAULT'", "'SERIAL'", "'PREFIX'", "'NOT NULL'", 
-                     "<INVALID>", "<INVALID>", "<INVALID>", "':'", "','", 
-                     "'.'", "'('", "')'", "'['", "']'", "'{'", "'}'", "'='" ]
+                     "<INVALID>", "<INVALID>", "<INVALID>", "':'", "';'", 
+                     "','", "'.'", "'('", "')'", "'['", "']'", "'{'", "'}'", 
+                     "'='" ]
 
     symbolicNames = [ "<INVALID>", "MIGRATION", "FROM", "TO", "USING", "AS", 
                       "INTO", "WITH", "WHERE", "IN", "KEY", "AND", "DELETION", 
@@ -359,8 +360,8 @@ class SMEL_SpecificParser ( Parser ):
                       "TEXT", "INT", "INTEGER", "LONG", "DOUBLE", "FLOAT", 
                       "DECIMAL", "BOOLEAN", "DATE", "DATETIME", "TIMESTAMP", 
                       "UUID", "BINARY", "TYPE", "DEFAULT", "SERIAL", "PREFIX", 
-                      "NOT_NULL", "TRUE", "FALSE", "NULL", "COLON", "COMMA", 
-                      "DOT", "LPAREN", "RPAREN", "LBRACKET", "RBRACKET", 
+                      "NOT_NULL", "TRUE", "FALSE", "NULL", "COLON", "SEMICOLON", 
+                      "COMMA", "DOT", "LPAREN", "RPAREN", "LBRACKET", "RBRACKET", 
                       "LBRACE", "RBRACE", "EQUALS", "VERSION_NUMBER", "INTEGER_LITERAL", 
                       "DECIMAL_LITERAL", "STRING_LITERAL", "IDENTIFIER", 
                       "LINE_COMMENT", "BLOCK_COMMENT", "WS" ]
@@ -596,23 +597,24 @@ class SMEL_SpecificParser ( Parser ):
     FALSE=111
     NULL=112
     COLON=113
-    COMMA=114
-    DOT=115
-    LPAREN=116
-    RPAREN=117
-    LBRACKET=118
-    RBRACKET=119
-    LBRACE=120
-    RBRACE=121
-    EQUALS=122
-    VERSION_NUMBER=123
-    INTEGER_LITERAL=124
-    DECIMAL_LITERAL=125
-    STRING_LITERAL=126
-    IDENTIFIER=127
-    LINE_COMMENT=128
-    BLOCK_COMMENT=129
-    WS=130
+    SEMICOLON=114
+    COMMA=115
+    DOT=116
+    LPAREN=117
+    RPAREN=118
+    LBRACKET=119
+    RBRACKET=120
+    LBRACE=121
+    RBRACE=122
+    EQUALS=123
+    VERSION_NUMBER=124
+    INTEGER_LITERAL=125
+    DECIMAL_LITERAL=126
+    STRING_LITERAL=127
+    IDENTIFIER=128
+    LINE_COMMENT=129
+    BLOCK_COMMENT=130
+    WS=131
 
     def __init__(self, input:TokenStream, output:TextIO = sys.stdout):
         super().__init__(input, output)
@@ -1049,7 +1051,7 @@ class SMEL_SpecificParser ( Parser ):
             self.enterOuterAlt(localctx, 1)
             self.state = 208
             _la = self._input.LA(1)
-            if not(_la==123 or _la==124):
+            if not(_la==124 or _la==125):
                 self._errHandler.recoverInline(self)
             else:
                 self._errHandler.reportMatch(self)
@@ -3245,12 +3247,12 @@ class SMEL_SpecificParser ( Parser ):
             self.state = 443
             self._errHandler.sync(self)
             token = self._input.LA(1)
-            if token in [127]:
+            if token in [128]:
                 self.enterOuterAlt(localctx, 1)
                 self.state = 438
                 self.qualifiedName()
                 pass
-            elif token in [116]:
+            elif token in [117]:
                 self.enterOuterAlt(localctx, 2)
                 self.state = 439
                 self.match(SMEL_SpecificParser.LPAREN)
@@ -5089,7 +5091,7 @@ class SMEL_SpecificParser ( Parser ):
             self.state = 591
             self._errHandler.sync(self)
             _la = self._input.LA(1)
-            while _la==114:
+            while _la==115:
                 self.state = 587
                 self.match(SMEL_SpecificParser.COMMA)
                 self.state = 588
@@ -5217,7 +5219,7 @@ class SMEL_SpecificParser ( Parser ):
             self.state = 603
             self._errHandler.sync(self)
             _la = self._input.LA(1)
-            while _la==114:
+            while _la==115:
                 self.state = 599
                 self.match(SMEL_SpecificParser.COMMA)
                 self.state = 600
@@ -5809,11 +5811,11 @@ class SMEL_SpecificParser ( Parser ):
                 return self.getTypedRuleContext(SMEL_SpecificParser.SplitPartContext,i)
 
 
-        def COMMA(self, i:int=None):
+        def SEMICOLON(self, i:int=None):
             if i is None:
-                return self.getTokens(SMEL_SpecificParser.COMMA)
+                return self.getTokens(SMEL_SpecificParser.SEMICOLON)
             else:
-                return self.getToken(SMEL_SpecificParser.COMMA, i)
+                return self.getToken(SMEL_SpecificParser.SEMICOLON, i)
 
         def getRuleIndex(self):
             return SMEL_SpecificParser.RULE_split
@@ -5855,7 +5857,7 @@ class SMEL_SpecificParser ( Parser ):
             _la = self._input.LA(1)
             while True:
                 self.state = 659
-                self.match(SMEL_SpecificParser.COMMA)
+                self.match(SMEL_SpecificParser.SEMICOLON)
                 self.state = 660
                 self.splitPart()
                 self.state = 663 
@@ -5884,15 +5886,12 @@ class SMEL_SpecificParser ( Parser ):
             return self.getTypedRuleContext(SMEL_SpecificParser.IdentifierContext,0)
 
 
-        def LPAREN(self):
-            return self.getToken(SMEL_SpecificParser.LPAREN, 0)
+        def COLON(self):
+            return self.getToken(SMEL_SpecificParser.COLON, 0)
 
         def identifierList(self):
             return self.getTypedRuleContext(SMEL_SpecificParser.IdentifierListContext,0)
 
-
-        def RPAREN(self):
-            return self.getToken(SMEL_SpecificParser.RPAREN, 0)
 
         def getRuleIndex(self):
             return SMEL_SpecificParser.RULE_splitPart
@@ -5923,11 +5922,9 @@ class SMEL_SpecificParser ( Parser ):
             self.state = 665
             self.identifier()
             self.state = 666
-            self.match(SMEL_SpecificParser.LPAREN)
+            self.match(SMEL_SpecificParser.COLON)
             self.state = 667
             self.identifierList()
-            self.state = 668
-            self.match(SMEL_SpecificParser.RPAREN)
         except RecognitionException as re:
             localctx.exception = re
             self._errHandler.reportError(self, re)
@@ -5984,13 +5981,13 @@ class SMEL_SpecificParser ( Parser ):
         self.enterRule(localctx, 140, self.RULE_cast)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 670
+            self.state = 669
             self.match(SMEL_SpecificParser.CAST)
-            self.state = 671
+            self.state = 670
             self.qualifiedName()
-            self.state = 672
+            self.state = 671
             self.match(SMEL_SpecificParser.TO)
-            self.state = 673
+            self.state = 672
             self.dataType()
         except RecognitionException as re:
             localctx.exception = re
@@ -6048,13 +6045,13 @@ class SMEL_SpecificParser ( Parser ):
         self.enterRule(localctx, 142, self.RULE_linking)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 675
+            self.state = 674
             self.match(SMEL_SpecificParser.LINKING)
-            self.state = 676
+            self.state = 675
             self.qualifiedName()
-            self.state = 677
+            self.state = 676
             self.match(SMEL_SpecificParser.TO)
-            self.state = 678
+            self.state = 677
             self.identifier()
         except RecognitionException as re:
             localctx.exception = re
@@ -6108,11 +6105,11 @@ class SMEL_SpecificParser ( Parser ):
         self.enterRule(localctx, 144, self.RULE_withCardinalityClause)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 680
+            self.state = 679
             self.match(SMEL_SpecificParser.WITH)
-            self.state = 681
+            self.state = 680
             self.match(SMEL_SpecificParser.CARDINALITY)
-            self.state = 682
+            self.state = 681
             self.cardinalityType()
         except RecognitionException as re:
             localctx.exception = re
@@ -6166,11 +6163,11 @@ class SMEL_SpecificParser ( Parser ):
         self.enterRule(localctx, 146, self.RULE_usingKeyClause)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 684
+            self.state = 683
             self.match(SMEL_SpecificParser.USING)
-            self.state = 685
+            self.state = 684
             self.match(SMEL_SpecificParser.KEY)
-            self.state = 686
+            self.state = 685
             self.identifier()
         except RecognitionException as re:
             localctx.exception = re
@@ -6221,9 +6218,9 @@ class SMEL_SpecificParser ( Parser ):
         self.enterRule(localctx, 148, self.RULE_whereClause)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 688
+            self.state = 687
             self.match(SMEL_SpecificParser.WHERE)
-            self.state = 689
+            self.state = 688
             self.condition(0)
         except RecognitionException as re:
             localctx.exception = re
@@ -6278,24 +6275,24 @@ class SMEL_SpecificParser ( Parser ):
         localctx = SMEL_SpecificParser.VariationClauseContext(self, self._ctx, self.state)
         self.enterRule(localctx, 150, self.RULE_variationClause)
         try:
-            self.state = 694
+            self.state = 693
             self._errHandler.sync(self)
             la_ = self._interp.adaptivePredict(self._input,40,self._ctx)
             if la_ == 1:
                 self.enterOuterAlt(localctx, 1)
-                self.state = 691
+                self.state = 690
                 self.withAttributesClause()
                 pass
 
             elif la_ == 2:
                 self.enterOuterAlt(localctx, 2)
-                self.state = 692
+                self.state = 691
                 self.withRelationshipsClause()
                 pass
 
             elif la_ == 3:
                 self.enterOuterAlt(localctx, 3)
-                self.state = 693
+                self.state = 692
                 self.withCountClause()
                 pass
 
@@ -6358,15 +6355,15 @@ class SMEL_SpecificParser ( Parser ):
         self.enterRule(localctx, 152, self.RULE_withAttributesClause)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 696
+            self.state = 695
             self.match(SMEL_SpecificParser.WITH)
-            self.state = 697
+            self.state = 696
             self.match(SMEL_SpecificParser.ATTRIBUTES)
-            self.state = 698
+            self.state = 697
             self.match(SMEL_SpecificParser.LPAREN)
-            self.state = 699
+            self.state = 698
             self.identifierList()
-            self.state = 700
+            self.state = 699
             self.match(SMEL_SpecificParser.RPAREN)
         except RecognitionException as re:
             localctx.exception = re
@@ -6426,15 +6423,15 @@ class SMEL_SpecificParser ( Parser ):
         self.enterRule(localctx, 154, self.RULE_withRelationshipsClause)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 702
+            self.state = 701
             self.match(SMEL_SpecificParser.WITH)
-            self.state = 703
+            self.state = 702
             self.match(SMEL_SpecificParser.RELATIONSHIPS)
-            self.state = 704
+            self.state = 703
             self.match(SMEL_SpecificParser.LPAREN)
-            self.state = 705
+            self.state = 704
             self.identifierList()
-            self.state = 706
+            self.state = 705
             self.match(SMEL_SpecificParser.RPAREN)
         except RecognitionException as re:
             localctx.exception = re
@@ -6487,11 +6484,11 @@ class SMEL_SpecificParser ( Parser ):
         self.enterRule(localctx, 156, self.RULE_withCountClause)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 708
+            self.state = 707
             self.match(SMEL_SpecificParser.WITH)
-            self.state = 709
+            self.state = 708
             self.match(SMEL_SpecificParser.COUNT)
-            self.state = 710
+            self.state = 709
             self.match(SMEL_SpecificParser.INTEGER_LITERAL)
         except RecognitionException as re:
             localctx.exception = re
@@ -6542,18 +6539,18 @@ class SMEL_SpecificParser ( Parser ):
         localctx = SMEL_SpecificParser.RelTypeClauseContext(self, self._ctx, self.state)
         self.enterRule(localctx, 158, self.RULE_relTypeClause)
         try:
-            self.state = 714
+            self.state = 713
             self._errHandler.sync(self)
             la_ = self._interp.adaptivePredict(self._input,41,self._ctx)
             if la_ == 1:
                 self.enterOuterAlt(localctx, 1)
-                self.state = 712
+                self.state = 711
                 self.withPropertiesClause()
                 pass
 
             elif la_ == 2:
                 self.enterOuterAlt(localctx, 2)
-                self.state = 713
+                self.state = 712
                 self.withCardinalityClause()
                 pass
 
@@ -6616,15 +6613,15 @@ class SMEL_SpecificParser ( Parser ):
         self.enterRule(localctx, 160, self.RULE_withPropertiesClause)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 716
+            self.state = 715
             self.match(SMEL_SpecificParser.WITH)
-            self.state = 717
+            self.state = 716
             self.match(SMEL_SpecificParser.PROPERTIES)
-            self.state = 718
+            self.state = 717
             self.match(SMEL_SpecificParser.LPAREN)
-            self.state = 719
+            self.state = 718
             self.identifierList()
-            self.state = 720
+            self.state = 719
             self.match(SMEL_SpecificParser.RPAREN)
         except RecognitionException as re:
             localctx.exception = re
@@ -6682,17 +6679,17 @@ class SMEL_SpecificParser ( Parser ):
         self._la = 0 # Token type
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 722
+            self.state = 721
             self.identifier()
-            self.state = 727
+            self.state = 726
             self._errHandler.sync(self)
             _la = self._input.LA(1)
-            while _la==114:
-                self.state = 723
+            while _la==115:
+                self.state = 722
                 self.match(SMEL_SpecificParser.COMMA)
-                self.state = 724
+                self.state = 723
                 self.identifier()
-                self.state = 729
+                self.state = 728
                 self._errHandler.sync(self)
                 _la = self._input.LA(1)
 
@@ -6751,7 +6748,7 @@ class SMEL_SpecificParser ( Parser ):
         self._la = 0 # Token type
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 730
+            self.state = 729
             _la = self._input.LA(1)
             if not(((((_la - 87)) & ~0x3f) == 0 and ((1 << (_la - 87)) & 15) != 0)):
                 self._errHandler.recoverInline(self)
@@ -6845,82 +6842,82 @@ class SMEL_SpecificParser ( Parser ):
         localctx = SMEL_SpecificParser.DataTypeContext(self, self._ctx, self.state)
         self.enterRule(localctx, 166, self.RULE_dataType)
         try:
-            self.state = 747
+            self.state = 746
             self._errHandler.sync(self)
             token = self._input.LA(1)
             if token in [91]:
                 self.enterOuterAlt(localctx, 1)
-                self.state = 732
+                self.state = 731
                 self.match(SMEL_SpecificParser.STRING)
                 pass
             elif token in [92]:
                 self.enterOuterAlt(localctx, 2)
-                self.state = 733
+                self.state = 732
                 self.match(SMEL_SpecificParser.TEXT)
                 pass
             elif token in [93]:
                 self.enterOuterAlt(localctx, 3)
-                self.state = 734
+                self.state = 733
                 self.match(SMEL_SpecificParser.INT)
                 pass
             elif token in [94]:
                 self.enterOuterAlt(localctx, 4)
-                self.state = 735
+                self.state = 734
                 self.match(SMEL_SpecificParser.INTEGER)
                 pass
             elif token in [95]:
                 self.enterOuterAlt(localctx, 5)
-                self.state = 736
+                self.state = 735
                 self.match(SMEL_SpecificParser.LONG)
                 pass
             elif token in [96]:
                 self.enterOuterAlt(localctx, 6)
-                self.state = 737
+                self.state = 736
                 self.match(SMEL_SpecificParser.DOUBLE)
                 pass
             elif token in [97]:
                 self.enterOuterAlt(localctx, 7)
-                self.state = 738
+                self.state = 737
                 self.match(SMEL_SpecificParser.FLOAT)
                 pass
             elif token in [98]:
                 self.enterOuterAlt(localctx, 8)
-                self.state = 739
+                self.state = 738
                 self.match(SMEL_SpecificParser.DECIMAL)
                 pass
             elif token in [99]:
                 self.enterOuterAlt(localctx, 9)
-                self.state = 740
+                self.state = 739
                 self.match(SMEL_SpecificParser.BOOLEAN)
                 pass
             elif token in [100]:
                 self.enterOuterAlt(localctx, 10)
-                self.state = 741
+                self.state = 740
                 self.match(SMEL_SpecificParser.DATE)
                 pass
             elif token in [101]:
                 self.enterOuterAlt(localctx, 11)
-                self.state = 742
+                self.state = 741
                 self.match(SMEL_SpecificParser.DATETIME)
                 pass
             elif token in [102]:
                 self.enterOuterAlt(localctx, 12)
-                self.state = 743
+                self.state = 742
                 self.match(SMEL_SpecificParser.TIMESTAMP)
                 pass
             elif token in [103]:
                 self.enterOuterAlt(localctx, 13)
-                self.state = 744
+                self.state = 743
                 self.match(SMEL_SpecificParser.UUID)
                 pass
             elif token in [104]:
                 self.enterOuterAlt(localctx, 14)
-                self.state = 745
+                self.state = 744
                 self.match(SMEL_SpecificParser.BINARY)
                 pass
-            elif token in [127]:
+            elif token in [128]:
                 self.enterOuterAlt(localctx, 15)
-                self.state = 746
+                self.state = 745
                 self.identifier()
                 pass
             else:
@@ -6981,18 +6978,18 @@ class SMEL_SpecificParser ( Parser ):
         self.enterRule(localctx, 168, self.RULE_qualifiedName)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 749
+            self.state = 748
             self.pathSegment()
-            self.state = 754
+            self.state = 753
             self._errHandler.sync(self)
             _alt = self._interp.adaptivePredict(self._input,44,self._ctx)
             while _alt!=2 and _alt!=ATN.INVALID_ALT_NUMBER:
                 if _alt==1:
-                    self.state = 750
+                    self.state = 749
                     self.match(SMEL_SpecificParser.DOT)
-                    self.state = 751
+                    self.state = 750
                     self.pathSegment() 
-                self.state = 756
+                self.state = 755
                 self._errHandler.sync(self)
                 _alt = self._interp.adaptivePredict(self._input,44,self._ctx)
 
@@ -7048,15 +7045,15 @@ class SMEL_SpecificParser ( Parser ):
         self.enterRule(localctx, 170, self.RULE_pathSegment)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 757
+            self.state = 756
             self.identifier()
-            self.state = 760
+            self.state = 759
             self._errHandler.sync(self)
             la_ = self._interp.adaptivePredict(self._input,45,self._ctx)
             if la_ == 1:
-                self.state = 758
+                self.state = 757
                 self.match(SMEL_SpecificParser.LBRACKET)
-                self.state = 759
+                self.state = 758
                 self.match(SMEL_SpecificParser.RBRACKET)
 
 
@@ -7105,7 +7102,7 @@ class SMEL_SpecificParser ( Parser ):
         self.enterRule(localctx, 172, self.RULE_identifier)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 762
+            self.state = 761
             self.match(SMEL_SpecificParser.IDENTIFIER)
         except RecognitionException as re:
             localctx.exception = re
@@ -7177,30 +7174,30 @@ class SMEL_SpecificParser ( Parser ):
         self.enterRecursionRule(localctx, 174, self.RULE_condition, _p)
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 773
+            self.state = 772
             self._errHandler.sync(self)
             token = self._input.LA(1)
-            if token in [127]:
-                self.state = 765
+            if token in [128]:
+                self.state = 764
                 self.qualifiedName()
-                self.state = 766
+                self.state = 765
                 self.match(SMEL_SpecificParser.EQUALS)
-                self.state = 767
+                self.state = 766
                 self.qualifiedName()
                 pass
-            elif token in [116]:
-                self.state = 769
+            elif token in [117]:
+                self.state = 768
                 self.match(SMEL_SpecificParser.LPAREN)
-                self.state = 770
+                self.state = 769
                 self.condition(0)
-                self.state = 771
+                self.state = 770
                 self.match(SMEL_SpecificParser.RPAREN)
                 pass
             else:
                 raise NoViableAltException(self)
 
             self._ctx.stop = self._input.LT(-1)
-            self.state = 780
+            self.state = 779
             self._errHandler.sync(self)
             _alt = self._interp.adaptivePredict(self._input,47,self._ctx)
             while _alt!=2 and _alt!=ATN.INVALID_ALT_NUMBER:
@@ -7210,15 +7207,15 @@ class SMEL_SpecificParser ( Parser ):
                     _prevctx = localctx
                     localctx = SMEL_SpecificParser.ConditionContext(self, _parentctx, _parentState)
                     self.pushNewRecursionContext(localctx, _startState, self.RULE_condition)
-                    self.state = 775
+                    self.state = 774
                     if not self.precpred(self._ctx, 2):
                         from antlr4.error.Errors import FailedPredicateException
                         raise FailedPredicateException(self, "self.precpred(self._ctx, 2)")
-                    self.state = 776
+                    self.state = 775
                     self.match(SMEL_SpecificParser.AND)
-                    self.state = 777
+                    self.state = 776
                     self.condition(3) 
-                self.state = 782
+                self.state = 781
                 self._errHandler.sync(self)
                 _alt = self._interp.adaptivePredict(self._input,47,self._ctx)
 
@@ -7283,9 +7280,9 @@ class SMEL_SpecificParser ( Parser ):
         self._la = 0 # Token type
         try:
             self.enterOuterAlt(localctx, 1)
-            self.state = 783
+            self.state = 782
             _la = self._input.LA(1)
-            if not(((((_la - 110)) & ~0x3f) == 0 and ((1 << (_la - 110)) & 114695) != 0)):
+            if not(((((_la - 110)) & ~0x3f) == 0 and ((1 << (_la - 110)) & 229383) != 0)):
                 self._errHandler.recoverInline(self)
             else:
                 self._errHandler.reportMatch(self)
