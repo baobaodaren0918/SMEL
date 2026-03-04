@@ -134,21 +134,21 @@ class SMEL_PauschalisiertListener(ParseTreeListener):
         pass
 
 
-    # Enter a parse tree produced by SMEL_PauschalisiertParser#referenceAdd.
-    def enterReferenceAdd(self, ctx:SMEL_PauschalisiertParser.ReferenceAddContext):
+    # Enter a parse tree produced by SMEL_PauschalisiertParser#constraintAdd.
+    def enterConstraintAdd(self, ctx:SMEL_PauschalisiertParser.ConstraintAddContext):
         pass
 
-    # Exit a parse tree produced by SMEL_PauschalisiertParser#referenceAdd.
-    def exitReferenceAdd(self, ctx:SMEL_PauschalisiertParser.ReferenceAddContext):
+    # Exit a parse tree produced by SMEL_PauschalisiertParser#constraintAdd.
+    def exitConstraintAdd(self, ctx:SMEL_PauschalisiertParser.ConstraintAddContext):
         pass
 
 
-    # Enter a parse tree produced by SMEL_PauschalisiertParser#referenceClause.
-    def enterReferenceClause(self, ctx:SMEL_PauschalisiertParser.ReferenceClauseContext):
+    # Enter a parse tree produced by SMEL_PauschalisiertParser#constraintClause.
+    def enterConstraintClause(self, ctx:SMEL_PauschalisiertParser.ConstraintClauseContext):
         pass
 
-    # Exit a parse tree produced by SMEL_PauschalisiertParser#referenceClause.
-    def exitReferenceClause(self, ctx:SMEL_PauschalisiertParser.ReferenceClauseContext):
+    # Exit a parse tree produced by SMEL_PauschalisiertParser#constraintClause.
+    def exitConstraintClause(self, ctx:SMEL_PauschalisiertParser.ConstraintClauseContext):
         pass
 
 
@@ -224,39 +224,21 @@ class SMEL_PauschalisiertListener(ParseTreeListener):
         pass
 
 
-    # Enter a parse tree produced by SMEL_PauschalisiertParser#variationAdd.
-    def enterVariationAdd(self, ctx:SMEL_PauschalisiertParser.VariationAddContext):
-        pass
-
-    # Exit a parse tree produced by SMEL_PauschalisiertParser#variationAdd.
-    def exitVariationAdd(self, ctx:SMEL_PauschalisiertParser.VariationAddContext):
-        pass
-
-
-    # Enter a parse tree produced by SMEL_PauschalisiertParser#relTypeAdd.
-    def enterRelTypeAdd(self, ctx:SMEL_PauschalisiertParser.RelTypeAddContext):
-        pass
-
-    # Exit a parse tree produced by SMEL_PauschalisiertParser#relTypeAdd.
-    def exitRelTypeAdd(self, ctx:SMEL_PauschalisiertParser.RelTypeAddContext):
-        pass
-
-
-    # Enter a parse tree produced by SMEL_PauschalisiertParser#indexAdd.
-    def enterIndexAdd(self, ctx:SMEL_PauschalisiertParser.IndexAddContext):
-        pass
-
-    # Exit a parse tree produced by SMEL_PauschalisiertParser#indexAdd.
-    def exitIndexAdd(self, ctx:SMEL_PauschalisiertParser.IndexAddContext):
-        pass
-
-
     # Enter a parse tree produced by SMEL_PauschalisiertParser#labelAdd.
     def enterLabelAdd(self, ctx:SMEL_PauschalisiertParser.LabelAddContext):
         pass
 
     # Exit a parse tree produced by SMEL_PauschalisiertParser#labelAdd.
     def exitLabelAdd(self, ctx:SMEL_PauschalisiertParser.LabelAddContext):
+        pass
+
+
+    # Enter a parse tree produced by SMEL_PauschalisiertParser#reltypeAdd.
+    def enterReltypeAdd(self, ctx:SMEL_PauschalisiertParser.ReltypeAddContext):
+        pass
+
+    # Exit a parse tree produced by SMEL_PauschalisiertParser#reltypeAdd.
+    def exitReltypeAdd(self, ctx:SMEL_PauschalisiertParser.ReltypeAddContext):
         pass
 
 
@@ -278,12 +260,12 @@ class SMEL_PauschalisiertListener(ParseTreeListener):
         pass
 
 
-    # Enter a parse tree produced by SMEL_PauschalisiertParser#referenceDelete.
-    def enterReferenceDelete(self, ctx:SMEL_PauschalisiertParser.ReferenceDeleteContext):
+    # Enter a parse tree produced by SMEL_PauschalisiertParser#constraintDelete.
+    def enterConstraintDelete(self, ctx:SMEL_PauschalisiertParser.ConstraintDeleteContext):
         pass
 
-    # Exit a parse tree produced by SMEL_PauschalisiertParser#referenceDelete.
-    def exitReferenceDelete(self, ctx:SMEL_PauschalisiertParser.ReferenceDeleteContext):
+    # Exit a parse tree produced by SMEL_PauschalisiertParser#constraintDelete.
+    def exitConstraintDelete(self, ctx:SMEL_PauschalisiertParser.ConstraintDeleteContext):
         pass
 
 
@@ -314,33 +296,6 @@ class SMEL_PauschalisiertListener(ParseTreeListener):
         pass
 
 
-    # Enter a parse tree produced by SMEL_PauschalisiertParser#variationDelete.
-    def enterVariationDelete(self, ctx:SMEL_PauschalisiertParser.VariationDeleteContext):
-        pass
-
-    # Exit a parse tree produced by SMEL_PauschalisiertParser#variationDelete.
-    def exitVariationDelete(self, ctx:SMEL_PauschalisiertParser.VariationDeleteContext):
-        pass
-
-
-    # Enter a parse tree produced by SMEL_PauschalisiertParser#relTypeDelete.
-    def enterRelTypeDelete(self, ctx:SMEL_PauschalisiertParser.RelTypeDeleteContext):
-        pass
-
-    # Exit a parse tree produced by SMEL_PauschalisiertParser#relTypeDelete.
-    def exitRelTypeDelete(self, ctx:SMEL_PauschalisiertParser.RelTypeDeleteContext):
-        pass
-
-
-    # Enter a parse tree produced by SMEL_PauschalisiertParser#indexDelete.
-    def enterIndexDelete(self, ctx:SMEL_PauschalisiertParser.IndexDeleteContext):
-        pass
-
-    # Exit a parse tree produced by SMEL_PauschalisiertParser#indexDelete.
-    def exitIndexDelete(self, ctx:SMEL_PauschalisiertParser.IndexDeleteContext):
-        pass
-
-
     # Enter a parse tree produced by SMEL_PauschalisiertParser#labelDelete.
     def enterLabelDelete(self, ctx:SMEL_PauschalisiertParser.LabelDeleteContext):
         pass
@@ -350,21 +305,21 @@ class SMEL_PauschalisiertListener(ParseTreeListener):
         pass
 
 
+    # Enter a parse tree produced by SMEL_PauschalisiertParser#reltypeDelete.
+    def enterReltypeDelete(self, ctx:SMEL_PauschalisiertParser.ReltypeDeleteContext):
+        pass
+
+    # Exit a parse tree produced by SMEL_PauschalisiertParser#reltypeDelete.
+    def exitReltypeDelete(self, ctx:SMEL_PauschalisiertParser.ReltypeDeleteContext):
+        pass
+
+
     # Enter a parse tree produced by SMEL_PauschalisiertParser#remove_ps.
     def enterRemove_ps(self, ctx:SMEL_PauschalisiertParser.Remove_psContext):
         pass
 
     # Exit a parse tree produced by SMEL_PauschalisiertParser#remove_ps.
     def exitRemove_ps(self, ctx:SMEL_PauschalisiertParser.Remove_psContext):
-        pass
-
-
-    # Enter a parse tree produced by SMEL_PauschalisiertParser#indexRemove.
-    def enterIndexRemove(self, ctx:SMEL_PauschalisiertParser.IndexRemoveContext):
-        pass
-
-    # Exit a parse tree produced by SMEL_PauschalisiertParser#indexRemove.
-    def exitIndexRemove(self, ctx:SMEL_PauschalisiertParser.IndexRemoveContext):
         pass
 
 
@@ -395,15 +350,6 @@ class SMEL_PauschalisiertListener(ParseTreeListener):
         pass
 
 
-    # Enter a parse tree produced by SMEL_PauschalisiertParser#variationRemove.
-    def enterVariationRemove(self, ctx:SMEL_PauschalisiertParser.VariationRemoveContext):
-        pass
-
-    # Exit a parse tree produced by SMEL_PauschalisiertParser#variationRemove.
-    def exitVariationRemove(self, ctx:SMEL_PauschalisiertParser.VariationRemoveContext):
-        pass
-
-
     # Enter a parse tree produced by SMEL_PauschalisiertParser#rename_ps.
     def enterRename_ps(self, ctx:SMEL_PauschalisiertParser.Rename_psContext):
         pass
@@ -431,12 +377,12 @@ class SMEL_PauschalisiertListener(ParseTreeListener):
         pass
 
 
-    # Enter a parse tree produced by SMEL_PauschalisiertParser#relTypeRename.
-    def enterRelTypeRename(self, ctx:SMEL_PauschalisiertParser.RelTypeRenameContext):
+    # Enter a parse tree produced by SMEL_PauschalisiertParser#reltypeRename.
+    def enterReltypeRename(self, ctx:SMEL_PauschalisiertParser.ReltypeRenameContext):
         pass
 
-    # Exit a parse tree produced by SMEL_PauschalisiertParser#relTypeRename.
-    def exitRelTypeRename(self, ctx:SMEL_PauschalisiertParser.RelTypeRenameContext):
+    # Exit a parse tree produced by SMEL_PauschalisiertParser#reltypeRename.
+    def exitReltypeRename(self, ctx:SMEL_PauschalisiertParser.ReltypeRenameContext):
         pass
 
 
@@ -482,60 +428,6 @@ class SMEL_PauschalisiertListener(ParseTreeListener):
 
     # Exit a parse tree produced by SMEL_PauschalisiertParser#identifierList.
     def exitIdentifierList(self, ctx:SMEL_PauschalisiertParser.IdentifierListContext):
-        pass
-
-
-    # Enter a parse tree produced by SMEL_PauschalisiertParser#variationClause.
-    def enterVariationClause(self, ctx:SMEL_PauschalisiertParser.VariationClauseContext):
-        pass
-
-    # Exit a parse tree produced by SMEL_PauschalisiertParser#variationClause.
-    def exitVariationClause(self, ctx:SMEL_PauschalisiertParser.VariationClauseContext):
-        pass
-
-
-    # Enter a parse tree produced by SMEL_PauschalisiertParser#withAttributesClause.
-    def enterWithAttributesClause(self, ctx:SMEL_PauschalisiertParser.WithAttributesClauseContext):
-        pass
-
-    # Exit a parse tree produced by SMEL_PauschalisiertParser#withAttributesClause.
-    def exitWithAttributesClause(self, ctx:SMEL_PauschalisiertParser.WithAttributesClauseContext):
-        pass
-
-
-    # Enter a parse tree produced by SMEL_PauschalisiertParser#withRelationshipsClause.
-    def enterWithRelationshipsClause(self, ctx:SMEL_PauschalisiertParser.WithRelationshipsClauseContext):
-        pass
-
-    # Exit a parse tree produced by SMEL_PauschalisiertParser#withRelationshipsClause.
-    def exitWithRelationshipsClause(self, ctx:SMEL_PauschalisiertParser.WithRelationshipsClauseContext):
-        pass
-
-
-    # Enter a parse tree produced by SMEL_PauschalisiertParser#withCountClause.
-    def enterWithCountClause(self, ctx:SMEL_PauschalisiertParser.WithCountClauseContext):
-        pass
-
-    # Exit a parse tree produced by SMEL_PauschalisiertParser#withCountClause.
-    def exitWithCountClause(self, ctx:SMEL_PauschalisiertParser.WithCountClauseContext):
-        pass
-
-
-    # Enter a parse tree produced by SMEL_PauschalisiertParser#relTypeClause.
-    def enterRelTypeClause(self, ctx:SMEL_PauschalisiertParser.RelTypeClauseContext):
-        pass
-
-    # Exit a parse tree produced by SMEL_PauschalisiertParser#relTypeClause.
-    def exitRelTypeClause(self, ctx:SMEL_PauschalisiertParser.RelTypeClauseContext):
-        pass
-
-
-    # Enter a parse tree produced by SMEL_PauschalisiertParser#withPropertiesClause.
-    def enterWithPropertiesClause(self, ctx:SMEL_PauschalisiertParser.WithPropertiesClauseContext):
-        pass
-
-    # Exit a parse tree produced by SMEL_PauschalisiertParser#withPropertiesClause.
-    def exitWithPropertiesClause(self, ctx:SMEL_PauschalisiertParser.WithPropertiesClauseContext):
         pass
 
 
@@ -647,6 +539,24 @@ class SMEL_PauschalisiertListener(ParseTreeListener):
         pass
 
 
+    # Enter a parse tree produced by SMEL_PauschalisiertParser#attributeCopy.
+    def enterAttributeCopy(self, ctx:SMEL_PauschalisiertParser.AttributeCopyContext):
+        pass
+
+    # Exit a parse tree produced by SMEL_PauschalisiertParser#attributeCopy.
+    def exitAttributeCopy(self, ctx:SMEL_PauschalisiertParser.AttributeCopyContext):
+        pass
+
+
+    # Enter a parse tree produced by SMEL_PauschalisiertParser#entityCopy.
+    def enterEntityCopy(self, ctx:SMEL_PauschalisiertParser.EntityCopyContext):
+        pass
+
+    # Exit a parse tree produced by SMEL_PauschalisiertParser#entityCopy.
+    def exitEntityCopy(self, ctx:SMEL_PauschalisiertParser.EntityCopyContext):
+        pass
+
+
     # Enter a parse tree produced by SMEL_PauschalisiertParser#move_ps.
     def enterMove_ps(self, ctx:SMEL_PauschalisiertParser.Move_psContext):
         pass
@@ -692,12 +602,57 @@ class SMEL_PauschalisiertListener(ParseTreeListener):
         pass
 
 
-    # Enter a parse tree produced by SMEL_PauschalisiertParser#linking_ps.
-    def enterLinking_ps(self, ctx:SMEL_PauschalisiertParser.Linking_psContext):
+    # Enter a parse tree produced by SMEL_PauschalisiertParser#attributeCast.
+    def enterAttributeCast(self, ctx:SMEL_PauschalisiertParser.AttributeCastContext):
         pass
 
-    # Exit a parse tree produced by SMEL_PauschalisiertParser#linking_ps.
-    def exitLinking_ps(self, ctx:SMEL_PauschalisiertParser.Linking_psContext):
+    # Exit a parse tree produced by SMEL_PauschalisiertParser#attributeCast.
+    def exitAttributeCast(self, ctx:SMEL_PauschalisiertParser.AttributeCastContext):
+        pass
+
+
+    # Enter a parse tree produced by SMEL_PauschalisiertParser#constraintCast.
+    def enterConstraintCast(self, ctx:SMEL_PauschalisiertParser.ConstraintCastContext):
+        pass
+
+    # Exit a parse tree produced by SMEL_PauschalisiertParser#constraintCast.
+    def exitConstraintCast(self, ctx:SMEL_PauschalisiertParser.ConstraintCastContext):
+        pass
+
+
+    # Enter a parse tree produced by SMEL_PauschalisiertParser#recard_ps.
+    def enterRecard_ps(self, ctx:SMEL_PauschalisiertParser.Recard_psContext):
+        pass
+
+    # Exit a parse tree produced by SMEL_PauschalisiertParser#recard_ps.
+    def exitRecard_ps(self, ctx:SMEL_PauschalisiertParser.Recard_psContext):
+        pass
+
+
+    # Enter a parse tree produced by SMEL_PauschalisiertParser#transform_ps.
+    def enterTransform_ps(self, ctx:SMEL_PauschalisiertParser.Transform_psContext):
+        pass
+
+    # Exit a parse tree produced by SMEL_PauschalisiertParser#transform_ps.
+    def exitTransform_ps(self, ctx:SMEL_PauschalisiertParser.Transform_psContext):
+        pass
+
+
+    # Enter a parse tree produced by SMEL_PauschalisiertParser#TransformToRelationship.
+    def enterTransformToRelationship(self, ctx:SMEL_PauschalisiertParser.TransformToRelationshipContext):
+        pass
+
+    # Exit a parse tree produced by SMEL_PauschalisiertParser#TransformToRelationship.
+    def exitTransformToRelationship(self, ctx:SMEL_PauschalisiertParser.TransformToRelationshipContext):
+        pass
+
+
+    # Enter a parse tree produced by SMEL_PauschalisiertParser#TransformToEntity.
+    def enterTransformToEntity(self, ctx:SMEL_PauschalisiertParser.TransformToEntityContext):
+        pass
+
+    # Exit a parse tree produced by SMEL_PauschalisiertParser#TransformToEntity.
+    def exitTransformToEntity(self, ctx:SMEL_PauschalisiertParser.TransformToEntityContext):
         pass
 
 
@@ -728,12 +683,30 @@ class SMEL_PauschalisiertListener(ParseTreeListener):
         pass
 
 
+    # Enter a parse tree produced by SMEL_PauschalisiertParser#withAttributesClause.
+    def enterWithAttributesClause(self, ctx:SMEL_PauschalisiertParser.WithAttributesClauseContext):
+        pass
+
+    # Exit a parse tree produced by SMEL_PauschalisiertParser#withAttributesClause.
+    def exitWithAttributesClause(self, ctx:SMEL_PauschalisiertParser.WithAttributesClauseContext):
+        pass
+
+
     # Enter a parse tree produced by SMEL_PauschalisiertParser#cardinalityType.
     def enterCardinalityType(self, ctx:SMEL_PauschalisiertParser.CardinalityTypeContext):
         pass
 
     # Exit a parse tree produced by SMEL_PauschalisiertParser#cardinalityType.
     def exitCardinalityType(self, ctx:SMEL_PauschalisiertParser.CardinalityTypeContext):
+        pass
+
+
+    # Enter a parse tree produced by SMEL_PauschalisiertParser#constraintKeyType.
+    def enterConstraintKeyType(self, ctx:SMEL_PauschalisiertParser.ConstraintKeyTypeContext):
+        pass
+
+    # Exit a parse tree produced by SMEL_PauschalisiertParser#constraintKeyType.
+    def exitConstraintKeyType(self, ctx:SMEL_PauschalisiertParser.ConstraintKeyTypeContext):
         pass
 
 

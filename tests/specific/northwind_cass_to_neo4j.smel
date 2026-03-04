@@ -1,0 +1,170 @@
+-- SMEL Northwind: Cassandra -> Neo4j (Specific Operations Version)
+-- Cross-model Schema Migration: Columnar -> Graph
+-- Direction: northwind_cassandra.cql -> northwind_neo4j.cypher
+--
+-- Pipeline: Source Cassandra -> Reverse Engineering -> Meta V1 (Columnar)
+--           -> SMEL Operations (this script) -> Meta V2 (Graph)
+--           -> Forward Engineering -> Target Neo4j
+--
+-- Operation Semantics:
+--   DELETE_PARTITION_KEY:  Remove Cassandra partition key before restructuring
+--   DELETE_CLUSTERING_KEY: Remove Cassandra clustering key
+--   ADD_PRIMARY_KEY:       Add primary key to entity (graph node PK)
+--   DELETE_ATTRIBUTE:      Remove FK-like attribute (replaced by graph edge)
+--   ADD_RELTYPE:           Add relationship type between nodes (graph edge)
+--   TRANSFORM:             Convert entity (wide-column table) to relationship (graph edge)
+--   RENAME_RELTYPE:        Rename relationship type after TRANSFORM
+
+MIGRATION northwind_cass_to_neo4j:1.0
+FROM COLUMNAR TO GRAPH
+USING northwind_schema:1
+
+-- ============================================
+-- Source: Cassandra Wide-column Tables (8 tables)
+-- ============================================
+-- categories     (category_id [PARTITION], category_name, description)
+-- suppliers      (supplier_id [PARTITION], company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country)
+-- shippers       (shipper_id [PARTITION], company_name, phone)
+-- employees      (employee_id [PARTITION], last_name, first_name, title, birth_date, hire_date, phone, notes, street, city, region, postal_code, country, reports_to)
+-- customers      (customer_id [PARTITION], company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country)
+-- products       (category_id [PARTITION], supplier_id [PARTITION], product_id [CLUSTERING], product_name, unit_price, units_in_stock, discontinued, quantity_per_unit, supplier_id)
+-- orders         (customer_id [PARTITION], order_date [CLUSTERING], order_id [CLUSTERING], required_date, shipped_date, freight, ship_name, ship_address, ship_city, ship_region, ship_postal_code, ship_country, employee_id, shipper_id)
+-- order_details  (order_id [PARTITION], product_id [PARTITION], unit_price, quantity, discount)
+
+-- ============================================
+-- Target: Neo4j Graph (7 nodes, 7 relationships)
+-- ============================================
+-- Nodes:
+--   categories:  { category_id [PK], category_name, description }
+--   suppliers:   { supplier_id [PK], company_name, contact_name, contact_title, phone, fax, street, city, postal_code, country }
+--   shippers:    { shipper_id [PK], company_name, phone }
+--   employees:   { employee_id [PK], last_name, first_name, title, birth_date, hire_date, phone, notes, street, city, postal_code, country }
+--   customers:   { customer_id [PK], company_name, contact_name, contact_title, phone, fax, street, city, postal_code, country }
+--   products:    { product_id [PK], product_name, unit_price, units_in_stock, discontinued, quantity_per_unit }
+--   orders:      { order_id [PK], order_date, required_date, shipped_date, freight, ship_name, ship_city }
+-- Relationships:
+--   REPORTS_TO  (employees -> employees)
+--   SUPPLIES    (suppliers -> products)
+--   PART_OF     (products -> categories)
+--   PURCHASED   (customers -> orders)
+--   SOLD        (employees -> orders)
+--   SHIPPED_VIA (orders -> shippers)
+--   CONTAINS    (orders -> products) with properties { unit_price, quantity, discount }
+
+-- ============================================
+-- Step 1: Restructure keys - remove Cassandra partition/clustering for complex tables
+-- ============================================
+
+-- products: partition + clustering -> simple PK
+-- Cassandra: category_id [PARTITION], supplier_id [PARTITION], product_id [CLUSTERING]
+-- Graph: product_id [PK]
+DELETE_PARTITION_KEY (category_id, supplier_id) FROM products
+DELETE_CLUSTERING_KEY product_id FROM products
+ADD_PRIMARY_KEY product_id TO products
+-- Result:
+-- products: { product_id [PK], product_name, unit_price, units_in_stock, discontinued, quantity_per_unit, supplier_id, category_id }
+
+-- orders: partition + clustering -> simple PK
+-- Cassandra: customer_id [PARTITION], order_date [CLUSTERING], order_id [CLUSTERING]
+-- Graph: order_id [PK]
+DELETE_PARTITION_KEY customer_id FROM orders
+DELETE_CLUSTERING_KEY order_date FROM orders
+DELETE_CLUSTERING_KEY order_id FROM orders
+ADD_PRIMARY_KEY order_id TO orders
+-- Result:
+-- orders: { order_id [PK], order_date, required_date, shipped_date, freight, ship_name, ship_address, ship_city, ship_region, ship_postal_code, ship_country, customer_id, employee_id, shipper_id }
+
+-- order_details: remove partition + clustering (no PK added -- will become relationship)
+-- Cassandra: order_id [PARTITION], product_id [PARTITION]
+DELETE_PARTITION_KEY (order_id, product_id) FROM order_details
+-- Result:
+-- order_details: { order_id, product_id, unit_price, quantity, discount }
+
+-- ============================================
+-- Step 2: Delete FK-like attributes and add relationships
+-- ============================================
+
+-- employees self-reference: reports_to column -> REPORTS_TO relationship
+DELETE_ATTRIBUTE employees.reports_to
+ADD_RELTYPE REPORTS_TO BETWEEN employees AND employees
+-- Result:
+-- employees: { employee_id [PK], last_name, first_name, title, birth_date, hire_date, phone, notes, street, city, postal_code, country }
+-- + REPORTS_TO relationship (employees -> employees)
+
+-- products -> supplier: supplier_id column -> SUPPLIES relationship
+DELETE_ATTRIBUTE products.supplier_id
+ADD_RELTYPE SUPPLIES BETWEEN suppliers AND products
+-- Result:
+-- products: { product_id [PK], product_name, unit_price, units_in_stock, discontinued, quantity_per_unit, category_id }
+-- + SUPPLIES relationship (suppliers -> products)
+
+-- products -> category: category_id column -> PART_OF relationship
+DELETE_ATTRIBUTE products.category_id
+ADD_RELTYPE PART_OF BETWEEN products AND categories
+-- Result:
+-- products: { product_id [PK], product_name, unit_price, units_in_stock, discontinued, quantity_per_unit }
+
+-- orders -> customer: customer_id column -> PURCHASED relationship
+DELETE_ATTRIBUTE orders.customer_id
+ADD_RELTYPE PURCHASED BETWEEN customers AND orders
+-- Result:
+-- orders: { order_id [PK], order_date, required_date, shipped_date, freight, ship_name, ship_address, ship_city, ship_region, ship_postal_code, ship_country, employee_id, shipper_id }
+-- + PURCHASED relationship (customers -> orders)
+
+-- orders -> employee: employee_id column -> SOLD relationship
+DELETE_ATTRIBUTE orders.employee_id
+ADD_RELTYPE SOLD BETWEEN employees AND orders
+-- Result:
+-- orders: { order_id [PK], order_date, required_date, shipped_date, freight, ship_name, ship_address, ship_city, ship_region, ship_postal_code, ship_country, shipper_id }
+-- + SOLD relationship (employees -> orders)
+
+-- orders -> shipper: shipper_id column -> SHIPPED_VIA relationship
+DELETE_ATTRIBUTE orders.shipper_id
+ADD_RELTYPE SHIPPED_VIA BETWEEN orders AND shippers
+-- Result:
+-- orders: { order_id [PK], order_date, required_date, shipped_date, freight, ship_name, ship_city }
+
+-- ============================================
+-- Step 3: TRANSFORM order_details to CONTAINS relationship
+-- ============================================
+-- order_details has: order_id, product_id, unit_price, quantity, discount
+-- Remove FK-like columns, then transform entity to relationship.
+-- Remaining attributes (unit_price, quantity, discount) become relationship properties.
+DELETE_ATTRIBUTE order_details.order_id
+DELETE_ATTRIBUTE order_details.product_id
+TRANSFORM order_details TO RELATIONSHIP BETWEEN orders AND products
+RENAME_RELTYPE order_details TO CONTAINS
+-- Result:
+-- order_details table removed; CONTAINS relationship created:
+-- CONTAINS (orders -> products) with properties: { unit_price, quantity, discount }
+-- Note: TRANSFORM creates relationship with entity name "order_details",
+--       then RENAME_RELTYPE renames it to match Neo4j convention "CONTAINS".
+
+-- ============================================
+-- Final Meta V2 (7 nodes, 7 relationship types):
+-- ============================================
+-- categories:  { category_id [PK], category_name, description }
+-- suppliers:   { supplier_id [PK], company_name, contact_name, contact_title, phone, fax, street, city, postal_code, country }
+-- shippers:    { shipper_id [PK], company_name, phone }
+-- employees:   { employee_id [PK], last_name, first_name, title, birth_date, hire_date, phone, notes, street, city, postal_code, country }
+-- customers:   { customer_id [PK], company_name, contact_name, contact_title, phone, fax, street, city, postal_code, country }
+-- products:    { product_id [PK], product_name, unit_price, units_in_stock, discontinued, quantity_per_unit }
+-- orders:      { order_id [PK], order_date, required_date, shipped_date, freight, ship_name, ship_city }
+-- REPORTS_TO  (employees -> employees)
+-- SUPPLIES    (suppliers -> products)
+-- PART_OF     (products -> categories)
+-- PURCHASED   (customers -> orders)
+-- SOLD        (employees -> orders)
+-- SHIPPED_VIA (orders -> shippers)
+-- CONTAINS    (orders -> products) with properties { unit_price, quantity, discount }
+-- [order_details TRANSFORMED to CONTAINS relationship]
+-- ============================================
+
+-- ============================================
+-- Operation Summary (25 steps, 7 operation types):
+--   DELETE_PARTITION_KEY:  3    DELETE_CLUSTERING_KEY: 3
+--   ADD_PRIMARY_KEY:       2    DELETE_ATTRIBUTE:      8
+--   ADD_RELTYPE:           6    TRANSFORM:             1
+--   RENAME_RELTYPE:        1
+--   EntityKind auto-convert: WIDE_COLUMN_TABLE -> VERTEX (all 8 entities)
+-- ============================================

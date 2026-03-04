@@ -19,11 +19,11 @@ Design: from André Conrad
 import re
 from typing import Dict, List, Optional, Tuple
 from ..unified_meta_schema import (
-    Database, DatabaseType, EntityType, Attribute,
+    Database, DatabaseType, EntityType, EntityKind, Attribute,
     UniqueConstraint, UniqueProperty, PKTypeEnum,
     Reference, Cardinality, PrimitiveDataType, PrimitiveType,
     ListDataType, SetDataType, MapDataType,
-    TypeMappings
+    RelationshipType, TypeMappings
 )
 
 
@@ -149,7 +149,7 @@ class PostgreSQLAdapter:
             "CREATE TABLE person (id INT, name VARCHAR);"
             -> [("person", "id INT, name VARCHAR")]
         """
-        pattern = r'CREATE\s+TABLE\s+(\w+)\s*\((.*?)\);'
+        pattern = r'CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:\w+\.)?(\w+)\s*\((.*?)\);'
         matches = re.findall(pattern, ddl, re.IGNORECASE | re.DOTALL)
         return matches
 
@@ -170,7 +170,7 @@ class PostgreSQLAdapter:
                  constraints=[UniqueConstraint(is_primary_key=True, ...)]
                )
         """
-        entity = EntityType(object_name=[table_name.lower()])
+        entity = EntityType(object_name=[table_name.lower()], entity_kind=EntityKind.TABLE)
 
         # Split by comma, but handle parentheses in type definitions
         # e.g., DECIMAL(15,2) should not be split
@@ -213,7 +213,7 @@ class PostgreSQLAdapter:
         # e.g., "PRIMARY KEY (person_id, knows_person_id)"
         for constraint_def in table_level_constraints:
             upper = constraint_def.upper().strip()
-            if upper.startswith('PRIMARY KEY'):
+            if upper.startswith('PRIMARY KEY') and not entity.get_primary_key():
                 # Extract column names from PRIMARY KEY (col1, col2, ...)
                 pk_match = re.search(r'PRIMARY\s+KEY\s*\(([^)]+)\)', constraint_def, re.IGNORECASE)
                 if pk_match:
@@ -457,6 +457,14 @@ class PostgreSQLAdapter:
             lines.append(ddl)
             lines.append("")
 
+        # Export RelationshipTypes as SQL comments (Graph metadata)
+        if database.relationship_types:
+            lines.append("-- Relationship Types (Graph metadata):")
+            for rt in database.relationship_types.values():
+                cardinality_str = rt.cardinality.value if rt.cardinality else "0..n"
+                lines.append(f"-- {rt.rel_name}: {rt.source_entity} -> {rt.target_entity} ({cardinality_str})")
+            lines.append("")
+
         return "\n".join(lines)
 
     @classmethod
@@ -661,6 +669,14 @@ class PostgreSQLAdapter:
 
         # Fallback: default naming convention
         return f"{entity_name}_id"
+
+    @classmethod
+    def export(cls, database: Database) -> str:
+        """
+        Convenience method that calls export_to_sql().
+        Used by the adapter registry for polymorphic export.
+        """
+        return cls.export_to_sql(database)
 
     @classmethod
     def export_to_sql_file(cls, database: Database, file_path: str) -> None:

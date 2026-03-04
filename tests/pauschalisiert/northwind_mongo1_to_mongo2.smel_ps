@@ -1,0 +1,109 @@
+-- SMEL Northwind: MongoDB V1 -> MongoDB V2 (Specific Operations Version)
+-- Same-model Schema Evolution: Document -> Document
+-- V2 Business Scenario: E-commerce platform modernization
+--
+-- Structural changes:
+--   FLATTEN:   Flatten category sub-object into product (denormalize, reduce L3->L2)
+--   UNFLATTEN: Group customer contact fields into contacts sub-object (reorganize)
+
+MIGRATION northwind_mongo1_to_mongo2:1.0
+FROM DOCUMENT TO DOCUMENT
+USING northwind_schema:1
+
+-- ============================================
+-- Meta V1 (after Reverse Engineering of northwind_mongodb.json)
+-- ============================================
+-- orders (root) { _id [PK], order_date, required_date, shipped_date, freight, ship_name, ship_city }
+--   embedded: customer { company_name, contact_name, contact_title, phone, fax }
+--     embedded: address { street, city, region, postal_code, country }           [L2]
+--   embedded: employee { last_name, first_name, title, birth_date, hire_date, phone, notes, reports_to }
+--     embedded: address { street, city, region, postal_code, country }           [L2]
+--   embedded: shipper { company_name, phone }
+--   embedded: details[] (ONE_TO_MANY)
+--     embedded: product { product_name, unit_price, units_in_stock, discontinued, quantity_per_unit }
+--       embedded: category { category_name, description }               [L3]
+--       embedded: supplier { company_name, contact_name, contact_title, phone, fax }
+--         embedded: address { street, city, region, postal_code, country }      [L4]
+
+-- ============================================
+-- Phase 1: FLATTEN category into product (structural -- reduce nesting)
+-- Document equivalent of MERGE: L3 -> L2, category sub-object disappears
+-- ============================================
+-- Before: product { ..., category { category_name, description }, supplier { ... } }
+-- After:  product { ..., category_category_name, category_description, supplier { ... } }
+FLATTEN_PS orders.details.product.category
+RENAME_PS ATTRIBUTE category_category_name TO category_name IN product
+RENAME_PS ATTRIBUTE category_description TO description IN product
+-- Result: product { product_name, unit_price, ..., category_name, description, supplier { ... } }
+
+-- ============================================
+-- Phase 2: UNFLATTEN customer contact fields into contacts sub-object (structural)
+-- Document equivalent of SPLIT: group contact person fields into sub-object
+-- ============================================
+-- Before: customer { company_name, contact_name, contact_title, phone, fax, address { ... } }
+-- After:  customer { company_name, address { ... }, contacts { contact_name, contact_title, phone, fax } }
+UNFLATTEN_PS customer:contact_name, contact_title, phone, fax AS contacts
+
+-- ============================================
+-- Phase 3: suppliers -- RENAME + ADD
+-- ============================================
+RENAME_PS ATTRIBUTE company_name TO name IN supplier
+ADD_PS ATTRIBUTE website TO supplier WITH TYPE String
+
+-- ============================================
+-- Phase 4: shipper -- RENAME
+-- ============================================
+RENAME_PS ATTRIBUTE company_name TO carrier_name IN shipper
+
+-- ============================================
+-- Phase 5: employee -- simplify + ADD
+-- ============================================
+DELETE_PS ATTRIBUTE employee.birth_date
+DELETE_PS ATTRIBUTE employee.notes
+ADD_PS ATTRIBUTE email TO employee WITH TYPE String
+
+-- ============================================
+-- Phase 6: contacts -- ADD email
+-- ============================================
+ADD_PS ATTRIBUTE email TO contacts WITH TYPE String
+
+-- ============================================
+-- Phase 7: product -- RENAME + ADD
+-- ============================================
+RENAME_PS ATTRIBUTE product_name TO name IN product
+ADD_PS ATTRIBUTE sku TO product WITH TYPE String
+
+-- ============================================
+-- Phase 8: orders -- RENAME + ADD
+-- ============================================
+RENAME_PS ATTRIBUTE freight TO shipping_cost IN orders
+ADD_PS ATTRIBUTE status TO orders WITH TYPE String
+
+-- ============================================
+-- Phase 9: details (order line items) -- RENAME
+-- ============================================
+RENAME_PS ATTRIBUTE discount TO discount_rate IN details
+
+-- ============================================
+-- Final Meta V2 (4-level nesting, max L3 after FLATTEN):
+-- orders { _id [PK], order_date, required_date, shipped_date, shipping_cost, ship_name, ship_city, status }
+--   customer { company_name, address { street, city, region, postal_code, country },
+--              contacts { contact_name, contact_title, phone, fax, email } }
+--   employee { last_name, first_name, title, hire_date, email, phone, reports_to,
+--              address { street, city, region, postal_code, country } }
+--   shipper { carrier_name, phone }
+--   details[] {
+--     unit_price, quantity, discount_rate,
+--     product { name, unit_price, units_in_stock, discontinued, quantity_per_unit,
+--               category_name, description, sku,
+--               supplier { name, contact_name, contact_title, phone, fax, website,
+--                          address { street, city, region, postal_code, country } } }
+--   }
+-- ============================================
+
+-- ============================================
+-- Operation Summary (16 steps):
+--   FLATTEN: 1             UNFLATTEN: 1
+--   RENAME_ATTRIBUTE: 7    ADD_ATTRIBUTE: 5
+--   DELETE_ATTRIBUTE: 2
+-- ============================================

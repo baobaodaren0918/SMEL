@@ -30,12 +30,14 @@ from smel_listeners import SMELSpecificListener, SMELPauschalisiertListener
 
 class SyntaxErrorListener(ErrorListener):
     """Custom error listener to collect syntax errors."""
-    def __init__(self):
+    def __init__(self, grammar_type: str = ""):
         super().__init__()
         self.errors = []
+        self.grammar_type = grammar_type
 
     def syntaxError(self, recognizer, offendingSymbol, line, column, msg, e):
-        self.errors.append(f"Line {line}:{column} - {msg}")
+        prefix = f"[{self.grammar_type}] " if self.grammar_type else ""
+        self.errors.append(f"{prefix}Line {line}:{column} - {msg}")
 
 
 def detect_grammar_type(file_path: str) -> str:
@@ -113,8 +115,10 @@ def parse_smel_file(file_path: str, listener_class):
     # Create parser
     parser = ParserClass(token_stream)
 
-    # Add error listener
-    error_listener = SyntaxErrorListener()
+    # Add error listener to both lexer and parser
+    error_listener = SyntaxErrorListener(grammar_type)
+    lexer.removeErrorListeners()
+    lexer.addErrorListener(error_listener)
     parser.removeErrorListeners()
     parser.addErrorListener(error_listener)
 
@@ -195,8 +199,10 @@ def parse_smel_auto(file_path: str):
     # Create parser
     parser = ParserClass(token_stream)
 
-    # Add error listener
-    error_listener = SyntaxErrorListener()
+    # Add error listener to both lexer and parser
+    error_listener = SyntaxErrorListener(grammar_type)
+    lexer.removeErrorListeners()
+    lexer.addErrorListener(error_listener)
     parser.removeErrorListeners()
     parser.addErrorListener(error_listener)
 

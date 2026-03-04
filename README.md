@@ -1,20 +1,23 @@
 # SMEL - Schema Migration & Evolution Language
 
-A formally defined language for schema migration and evolution between heterogeneous database systems.
+A formally defined language for schema migration and evolution between heterogeneous database systems, supporting 4 data models with a full 4×4 migration matrix.
 
 ## Overview
 
 SMEL (Schema Migration & Evolution Language) provides a unified approach to:
-- Define schema transformations across heterogeneous database systems
-- Support bidirectional migration between SQL and NoSQL databases (D2R, R2D)
-- Support same-model schema evolution (R2R, D2D)
+- Define schema transformations across 4 heterogeneous database models
+- Support cross-model migration between all model pairs (R↔D, R↔G, R↔C, D↔G, D↔C, G↔C)
+- Support same-model schema evolution (R2R, D2D, G2G, C2C)
+- Validate migration correctness through two-layer automated validation
 
 ## Supported Database Models
 
-- **RELATIONAL**: PostgreSQL, MySQL, Oracle, SQL Server
-- **DOCUMENT**: MongoDB, CouchDB, DocumentDB
-- **GRAPH**: Neo4j, ArangoDB
-- **COLUMNAR**: Cassandra, HBase
+| Model | Representative DB | Schema Format | Entity Kind |
+|-------|-------------------|---------------|-------------|
+| **Relational** | PostgreSQL | SQL DDL (`.sql`) | TABLE |
+| **Document** | MongoDB | JSON Schema (`.json`) | DOCUMENT |
+| **Graph** | Neo4j | Cypher (`.cypher`) | VERTEX / EDGE |
+| **Columnar** | Cassandra | CQL (`.cql`) | WIDE_COLUMN_TABLE |
 
 ## Installation
 
@@ -41,182 +44,185 @@ pip install -r requirements.txt
 ### Web Interface
 ```bash
 python web_server.py
-# Opens at http://localhost:5582
+# Opens at http://localhost:5586
+```
+
+The web interface provides:
+- **Source Schemas** tab: View all 4 native schemas (SQL, JSON, Cypher, CQL)
+- **Migration** tab: Run any migration, view SMEL script with syntax highlighting, operation results, source/target schema comparison, and validation results
+- **Meta Schema** tab: Interactive card-based visualization of Meta V1/V2
+
+### CLI
+```bash
+set PYTHONIOENCODING=utf-8  # Windows (for Unicode arrows in display)
+python main.py
 ```
 
 ### Programmatic Usage
 ```python
 from core import run_migration
 
-# Cross-model migration
+# Cross-model migration (Northwind)
+result = run_migration('northwind_r2d_specific')    # Relational -> Document
+result = run_migration('northwind_d2g_pauschalisiert')  # Document -> Graph
+result = run_migration('northwind_g2c_specific')    # Graph -> Columnar
+
+# Same-model evolution (Northwind)
+result = run_migration('northwind_r2r_specific')    # Relational V1 -> V2
+
+# Person mini-example
 result = run_migration('person_d2r_specific')       # Document -> Relational
-result = run_migration('person_r2d_pauschalisiert')  # Relational -> Document
 
-# Same-model evolution
-result = run_migration('person_r2r_specific')        # Relational -> Relational V2
-result = run_migration('person_d2d_specific')        # Document -> Document V2
-
-print(result['exported_target'])  # Generated target schema
+print(result['exported_target'])     # Generated target schema
+print(result['validation_meta'])     # Layer 1 validation result
+print(result['validation_export'])   # Layer 2 validation result
 ```
 
 ### Run Tests
 ```bash
 python tests/test_full_flow.py
-# Tests all 8 directions: D2R(2) + R2D(2) + R2R(2) + D2D(2)
+# Tests all 40 migration configs (8 Person + 32 Northwind)
 ```
 
-## Supported Migration Directions
+## Migration Matrix
 
-| Direction | Source | Target | Description |
-|-----------|--------|--------|-------------|
-| D2R | MongoDB (Document) | PostgreSQL (Relational) | Cross-model migration |
-| R2D | PostgreSQL (Relational) | MongoDB (Document) | Cross-model migration |
-| R2R | PostgreSQL V1 | PostgreSQL V2 | Same-model evolution |
-| D2D | MongoDB V1 | MongoDB V2 | Same-model evolution |
+### Full 4×4 Matrix (16 directions)
 
-Each direction has both **Specific** (`.smel`) and **Pauschalisiert** (`.smel_ps`) grammar variants, totaling 8 test scenarios.
+|  | → Relational | → Document | → Graph | → Columnar |
+|--|:---:|:---:|:---:|:---:|
+| **Relational →** | R2R | R2D | R2G | R2C |
+| **Document →** | D2R | D2D | D2G | D2C |
+| **Graph →** | G2R | G2D | G2G | G2C |
+| **Columnar →** | C2R | C2D | C2G | C2C |
+
+Each direction has both **Specific** (`.smel`) and **Pauschalisiert** (`.smel_ps`) grammar variants.
+
+### Test Datasets
+
+| Dataset | Entities | Configs | Description |
+|---------|----------|---------|-------------|
+| **Person** | 7 entities | 8 (4 directions × 2 grammars) | Simple example: person with nested address, employment, company |
+| **Northwind** | 8 entities | 32 (16 directions × 2 grammars) | Full example: orders, products, customers, employees, etc. |
+| **Total** | — | **40 configs** | — |
 
 ## Project Structure
 
 ```
 SMEL/
 ├── grammar/
-│   ├── SMEL_Specific.g4           # Specific operations grammar (ADD_ATTRIBUTE, DELETE_ENTITY, ...)
-│   ├── SMEL_Pauschalisiert.g4     # Generalized operations grammar (ADD_PS, DELETE_PS, ...)
-│   ├── specific/                   # Generated parser for Specific grammar
-│   │   ├── SMEL_SpecificLexer.py
-│   │   ├── SMEL_SpecificParser.py
-│   │   ├── SMEL_SpecificListener.py
-│   │   └── SMEL_SpecificVisitor.py
-│   ├── pauschalisiert/            # Generated parser for Pauschalisiert grammar
-│   │   ├── SMEL_PauschalisiertLexer.py
-│   │   ├── SMEL_PauschalisiertParser.py
-│   │   ├── SMEL_PauschalisiertListener.py
-│   │   └── SMEL_PauschalisiertVisitor.py
-│   ├── antlr-4.13.2-complete.jar
-│   └── generate_parser_*.bat      # Parser generation scripts
+│   ├── SMEL_Specific.g4              # Specific operations grammar
+│   ├── SMEL_Pauschalisiert.g4        # Generalized operations grammar
+│   ├── specific/                      # Generated ANTLR parser (Specific)
+│   ├── pauschalisiert/                # Generated ANTLR parser (Pauschalisiert)
+│   └── antlr-4.13.2-complete.jar
 ├── Schema/
-│   ├── adapters/
-│   │   ├── postgresql_adapter.py  # PostgreSQL reverse/forward engineering
-│   │   └── mongodb_adapter.py     # MongoDB reverse/forward engineering
-│   └── unified_meta_schema.py     # Unified meta-schema (M-Model)
+│   ├── unified_meta_schema.py         # Unified Meta-Schema (M-Model)
+│   └── adapters/
+│       ├── __init__.py                # ADAPTER_REGISTRY
+│       ├── postgresql_adapter.py      # PostgreSQL RE/FE adapter
+│       ├── mongodb_adapter.py         # MongoDB RE/FE adapter
+│       ├── neo4j_adapter.py           # Neo4j RE/FE adapter
+│       └── cassandra_adapter.py       # Cassandra RE/FE adapter
 ├── tests/
-│   ├── person_postgresql.sql      # Source: PostgreSQL schema
-│   ├── person_mongodb.json        # Source: MongoDB schema
-│   ├── specific/                  # Specific grammar test scripts (.smel)
-│   │   ├── person_mongo_to_pg_minibeispiel.smel       # D2R
-│   │   ├── person_pg_to_mongo_minibeispiel.smel       # R2D
-│   │   ├── person_pg1_to_pg2_minibeispiel.smel        # R2R
-│   │   └── person_mongo1_to_mongo2_minibeispiel.smel  # D2D
-│   ├── pauschalisiert/            # Pauschalisiert grammar test scripts (.smel_ps)
-│   │   ├── person_mongo_to_pg_minibeispiel.smel_ps    # D2R
-│   │   ├── person_pg_to_mongo_minibeispiel.smel_ps    # R2D
-│   │   ├── person_pg1_to_pg2_minibeispiel.smel_ps     # R2R
-│   │   └── person_mongo1_to_mongo2_minibeispiel.smel_ps # D2D
-│   └── test_full_flow.py          # Full flow verification (8 directions)
-├── config.py                      # Configuration & migration registry
-├── core.py                        # Migration engine (SchemaTransformer)
-├── smel_listeners.py              # ANTLR listeners for both grammars
-├── parser_factory.py              # Parser factory (auto grammar detection)
-├── main.py                        # CLI entry point
-└── web_server.py                  # Web interface
+│   ├── person_postgresql.sql          # Person: PostgreSQL source
+│   ├── person_mongodb.json            # Person: MongoDB source
+│   ├── northwind_postgresql.sql       # Northwind: PostgreSQL schema (8 tables)
+│   ├── northwind_mongodb.json         # Northwind: MongoDB schema (1 orders document)
+│   ├── northwind_neo4j.cypher         # Northwind: Neo4j schema (7 nodes, 7 relationships)
+│   ├── northwind_cassandra.cql        # Northwind: Cassandra schema (8 wide-column tables)
+│   ├── specific/                      # Specific grammar scripts (.smel)
+│   │   ├── person_*.smel              # 4 Person scripts (D2R, R2D, R2R, D2D)
+│   │   └── northwind_*.smel           # 16 Northwind scripts (full 4×4 matrix)
+│   ├── pauschalisiert/                # Pauschalisiert grammar scripts (.smel_ps)
+│   │   ├── person_*.smel_ps           # 4 Person scripts
+│   │   └── northwind_*.smel_ps        # 16 Northwind scripts
+│   └── test_full_flow.py              # Automated test for all 40 configs
+├── config.py                          # Migration registry & configuration
+├── core.py                            # Migration engine (SchemaTransformer)
+├── smel_listeners.py                  # ANTLR listeners for both grammars
+├── parser_factory.py                  # Parser factory (auto grammar detection)
+├── validate_meta.py                   # Layer 1 validation (SMEL script correctness)
+├── validate_export.py                 # Layer 2 validation (adapter export correctness)
+├── main.py                            # CLI entry point
+└── web_server.py                      # Web interface
 ```
 
 ## Architecture
 
 ### End-to-End Pipeline
 
-The complete processing pipeline consists of 4 stages. Below is the full logic chain from source schema to target schema, showing which files and functions are involved at each step.
-
 ```
- Source Schema          SMEL Script             Unified Meta-Schema              Target Schema
- (DDL / JSON)          (.smel / .smel_ps)       (M-Model)                        (DDL / JSON)
- ─────────────         ─────────────────        ───────────────────              ─────────────
-      │                       │                        │                               ▲
-      │                       │                        │                               │
-      ▼                       ▼                        ▼                               │
- ┌──────────┐          ┌──────────────┐         ┌──────────┐    ┌──────────┐    ┌──────────┐
- │ Step 1   │          │   Step 2     │         │  Step 3  │    │  Step 3  │    │  Step 4  │
- │ Reverse  │────────►│   SMEL       │────────►│  Meta V1 │───►│  Meta V2 │───►│ Forward  │
- │ Engineer │          │   Parsing    │         │          │    │          │    │ Engineer │
- └──────────┘          └──────────────┘         └──────────┘    └──────────┘    └──────────┘
+ Source Schema          SMEL Script           Unified Meta-Schema            Target Schema
+ (SQL/JSON/             (.smel/.smel_ps)      (M-Model)                      (SQL/JSON/
+  Cypher/CQL)                                                                 Cypher/CQL)
+ ─────────────         ─────────────────     ───────────────────            ─────────────
+      │                       │                     │                             ▲
+      ▼                       ▼                     ▼                             │
+ ┌──────────┐          ┌──────────────┐      ┌──────────┐    ┌──────────┐  ┌──────────┐
+ │ Step 1   │          │   Step 2     │      │  Step 3  │    │  Step 3  │  │  Step 4  │
+ │ Reverse  │─────────►│   SMEL       │─────►│  Meta V1 │───►│  Meta V2 │─►│ Forward  │
+ │ Engineer │          │   Parsing    │      │          │    │          │  │ Engineer │
+ └──────────┘          └──────────────┘      └──────────┘    └──────────┘  └──────────┘
+                                                                                │
+                                              ┌──────────────────────────────────┘
+                                              ▼
+                                        ┌──────────┐
+                                        │  Step 5  │
+                                        │Validation│
+                                        │ (2-Layer)│
+                                        └──────────┘
 ```
 
-#### Step 1: Reverse Engineering — Source Schema to Meta V1
+#### Step 1: Reverse Engineering — Source Schema → Meta V1
 
-Converts a database-specific schema file into the **Unified Meta-Schema (M-Model)**, a database-agnostic intermediate representation.
+Converts a native schema file into the **Unified Meta-Schema (M-Model)**.
 
-| Component | File | Function |
-|-----------|------|----------|
-| Entry point | `core.py` | `run_migration()` line 1768 |
-| PostgreSQL adapter | `Schema/adapters/postgresql_adapter.py` | `PostgreSQLAdapter.load_from_file()` → `parse()` |
-| MongoDB adapter | `Schema/adapters/mongodb_adapter.py` | `MongoDBAdapter.load_from_file()` → `parse()` |
-| Type mapping | `Schema/unified_meta_schema.py` | `TypeMappings.POSTGRESQL_TO_PRIMITIVE` / `MONGODB_TO_PRIMITIVE` |
+| Source Type | Adapter | Method |
+|-------------|---------|--------|
+| PostgreSQL (`.sql`) | `PostgreSQLAdapter` | `load_from_file()` → `parse()` |
+| MongoDB (`.json`) | `MongoDBAdapter` | `load_from_file()` → `parse()` |
+| Neo4j (`.cypher`) | `Neo4jAdapter` | `load_from_file()` → `parse_cypher()` |
+| Cassandra (`.cql`) | `CassandraAdapter` | `load_from_file()` → `parse()` |
 
-**What happens:**
-- PostgreSQL: DDL is parsed with regex to extract `CREATE TABLE` statements, column types are mapped to `PrimitiveType` enums (e.g., `VARCHAR(255)` → `STRING`), `REFERENCES` clauses become `Reference` relationships
-- MongoDB: JSON Schema is parsed recursively, nested `bsonType: "object"` becomes `Embedded` relationships, arrays with primitive items become `ListDataType` attributes
+Each adapter maps native types to unified `PrimitiveType` enums (e.g., `VARCHAR(255)` → `STRING`, `bsonType: "int"` → `INTEGER`).
 
-**Output:** A `Database` object containing `EntityType`s with `Attribute`s, `Relationship`s (Reference/Embedded), and `Constraint`s (PK/FK/Unique)
+#### Step 2: SMEL Parsing — Script → Operation List
 
-#### Step 2: SMEL Parsing — Script to Operation List
+Parses `.smel` or `.smel_ps` files into executable `Operation` objects via ANTLR4.
 
-Parses a `.smel` or `.smel_ps` file into a list of executable `Operation` objects.
-
-| Component | File | Function |
-|-----------|------|----------|
-| Entry point | `core.py` | `run_migration()` line 1772-1773 |
-| Grammar detection | `parser_factory.py` | `detect_grammar_type()` — selects grammar by file extension |
-| ANTLR parsing | `parser_factory.py` | `parse_smel_auto()` — lexer → tokens → parse tree |
-| Specific listener | `smel_listeners.py` | `SMELSpecificListener` — walks parse tree, creates Operations |
-| Pauschalisiert listener | `smel_listeners.py` | `SMELPauschalisiertListener` — same role, different keyword set |
-
-**What happens:**
 1. File extension determines grammar: `.smel` → `SMEL_Specific.g4`, `.smel_ps` → `SMEL_Pauschalisiert.g4`
-2. ANTLR4 lexer tokenizes the SMEL script, parser builds a parse tree
-3. A custom listener walks the tree, calling `enterXxx()` methods for each grammar rule
-4. Each listener method creates an `Operation(op_type, params)` and appends to `self.operations`
+2. ANTLR lexer/parser builds a parse tree
+3. Custom listener walks the tree, creating `Operation(op_type, params)` objects
 
-**Output:** A tuple of `(MigrationContext, List[Operation], List[errors])`
+#### Step 3: Transformation — Meta V1 → Meta V2
 
-#### Step 3: Transformation — Meta V1 to Meta V2
+`SchemaTransformer` deep-copies Meta V1, then applies each operation via handler methods (e.g., `_handle_nest()`, `_handle_split()`, `_handle_add_key()`). Entity kinds are automatically normalized to the target model (e.g., TABLE → DOCUMENT, VERTEX → WIDE_COLUMN_TABLE).
 
-Applies each parsed `Operation` to the meta-schema, transforming it step by step.
+#### Step 4: Forward Engineering — Meta V2 → Target Schema
 
-| Component | File | Function |
-|-----------|------|----------|
-| Entry point | `core.py` | `run_migration()` line 1778-1823 |
-| Transformer | `core.py` | `SchemaTransformer.__init__()` — deep-copies Meta V1 as working copy |
-| Operation dispatch | `core.py` | `SchemaTransformer.apply()` → `_handle_{op_type}()` |
+Converts the transformed M-Model back into a native schema format.
 
-**What happens:**
-- `SchemaTransformer` creates a deep copy of Meta V1 as its working `Database`
-- For each `Operation`, the transformer calls the corresponding handler (e.g., `_handle_unnest()`, `_handle_split()`, `_handle_rename()`)
-- Each handler mutates the internal `Database` object: adding/removing `EntityType`s, `Attribute`s, `Relationship`s, `Constraint`s
-- Changes are tracked for audit (`self.changes`)
+| Target Type | Adapter | Method |
+|-------------|---------|--------|
+| PostgreSQL | `PostgreSQLAdapter` | `export_to_sql()` |
+| MongoDB | `MongoDBAdapter` | `export_to_json_string()` |
+| Neo4j | `Neo4jAdapter` | `export_to_cypher()` |
+| Cassandra | `CassandraAdapter` | `export_to_cql()` |
 
-**Output:** The transformed `Database` object (Meta V2) and a list of operation results
+#### Step 5: Two-Layer Validation
 
-#### Step 4: Forward Engineering — Meta V2 to Target Schema
+Automated validation for cross-model Northwind migrations (24 configs):
 
-Converts the transformed M-Model back into a database-specific schema format.
+| Layer | File | What it proves | Method |
+|-------|------|---------------|--------|
+| **Layer 1** | `validate_meta.py` | SMEL script correctness | Compare Meta V2 result against expected target (parsed from native file) |
+| **Layer 2** | `validate_export.py` | Adapter FE correctness | Parse exported target back → compare against expected target (round-trip) |
 
-| Component | File | Function |
-|-----------|------|----------|
-| Entry point | `core.py` | `run_migration()` line 1832-1836 |
-| PostgreSQL export | `Schema/adapters/postgresql_adapter.py` | `PostgreSQLAdapter.export_to_sql()` |
-| MongoDB export | `Schema/adapters/mongodb_adapter.py` | `MongoDBAdapter.export_to_json_string()` |
-| Type mapping | `Schema/unified_meta_schema.py` | `TypeMappings.PRIMITIVE_TO_POSTGRESQL` / `PRIMITIVE_TO_MONGODB` |
-
-**What happens:**
-- PostgreSQL: Topologically sorts entities by FK dependencies, generates `CREATE TABLE` DDL with columns, primary keys, and `REFERENCES` clauses
-- MongoDB: Recursively builds JSON Schema with nested objects for `Embedded` relationships, arrays for `ONE_TO_MANY` cardinality
-
-**Output:** A string containing the target schema (SQL DDL or JSON Schema)
+Validation compares: entity names, attributes (name, type), constraints (PK structure), references, embedded relationships, edges, and relationship types. Cardinality and key_type differences are reported as warnings rather than failures.
 
 ### The Unified Meta-Schema (M-Model)
 
-The M-Model (`Schema/unified_meta_schema.py`) is the central abstraction that makes cross-model migration possible. All adapters convert to/from this single representation.
+The M-Model (`Schema/unified_meta_schema.py`) is the central abstraction that makes cross-model migration possible.
 
 ```
                         ┌────────────────────────────────┐
@@ -230,8 +236,9 @@ The M-Model (`Schema/unified_meta_schema.py`) is the central abstraction that ma
                           ▼                     ▼
                    ┌─────────────┐      ┌────────────────┐
                    │ EntityType  │      │RelationshipType│
-                   │ (Table/Doc) │      │  (Neo4j only)  │
-                   └──────┬──────┘      └────────────────┘
+                   │(Table/Doc/  │      │  (Graph edges) │
+                   │ Vertex/WCT) │      └────────────────┘
+                   └──────┬──────┘
                           │
             ┌─────────────┼─────────────┐
             ▼             ▼             ▼
@@ -240,148 +247,163 @@ The M-Model (`Schema/unified_meta_schema.py`) is the central abstraction that ma
       │           │ │            │ │            │
       │ - name    │ │ - Reference│ │ - Unique   │
       │ - type    │ │ - Embedded │ │ - FK       │
-      │ - is_key  │ │ - card.    │ │            │
-      └───────────┘ └────────────┘ └────────────┘
+      │ - is_key  │ │ - Edge     │ │ - PK type  │
+      │ - key_type│ │ - card.    │ │   (simple/ │
+      └───────────┘ └────────────┘ │   partition│
+                                   │  /cluster) │
+                                   └────────────┘
 ```
 
-Key design: `EntityType.object_name` is a `List[str]` representing the hierarchical path. A top-level table like `person` has `["person"]`, while a nested object like `person.address` has `["person", "address"]`. This enables the M-Model to represent both flat relational tables and deeply nested document structures.
-
-### Key Generation & Dependency Resolution
-
-When extracting nested structures (Document -> Relational), SMEL automatically manages primary key generation:
-
-```
-NEST person.employment AS employment
-    GENERATE KEY id AS String PREFIX "emp"
-    ADD REFERENCE person_id TO person
-```
-
-**Key Registry** tracks generated keys for traceability:
-
-| Entity | Key Field | Prefix | Format | Source |
-|--------|-----------|--------|--------|--------|
-| person | _id | - | (original) | - |
-| employment | id | emp | emp_{uuid6} | person |
-| company | id | comp | comp_{uuid6} | employment |
-
-**Auto Prefix Generation**: If PREFIX is not specified, automatically generates from entity name (first 3 + last 1 character):
-- `employment` -> `empt`
-- `company` -> `comy`
-- `address` -> `adds`
-
-**Dependency Sorting**: Operations are automatically sorted by dependency order, so users don't need to worry about the execution sequence.
+Key design: `EntityType.object_name` is a `List[str]` representing the hierarchical path. A top-level table `person` has `["person"]`, while a nested object `person.address` has `["person", "address"]`.
 
 ## SMEL Operations
 
 ### Structural Operations
 
-| Operation | Description | Use Case |
-|-----------|-------------|----------|
-| NEST | Embed reference target as nested object | R2D: table -> embedded document |
-| UNNEST | Extract nested object to separate entity | D2R: embedded document -> table |
-| FLATTEN | Merge child entity into parent (reduce depth) | D2D: reduce nesting level |
-| UNFLATTEN | Group flat fields into nested object | R2D: flat columns -> nested object |
-| UNWIND | Expand array field to separate entity/rows | D2R: array -> table |
-| WIND | Convert scalar field back to array | R2D: column -> array |
-| MERGE | Combine two entities into one (denormalization) | R2R: merge tables |
-| SPLIT | Vertical partition into separate entities | R2R: split table |
+| Operation | Description | Typical Use |
+|-----------|-------------|-------------|
+| `NEST` | Embed reference target as nested object | R2D: table → embedded document |
+| `UNNEST` | Extract nested object to separate entity | D2R: embedded document → table |
+| `FLATTEN` | Merge child fields into parent (reduce depth) | D2R: flatten nested address |
+| `UNFLATTEN` | Group flat fields into nested object | R2D: flat columns → nested object |
+| `UNWIND` | Expand array field to separate rows | D2R: array → table rows |
+| `WIND` | Convert field back to array | R2D: column → array |
+| `MERGE` | Combine two entities into one | R2R: denormalize tables |
+| `SPLIT` | Vertical partition into separate entities | R2R: split table |
+| `TRANSFORM` | Convert relationship to entity or vice versa | G2R: edge → table |
 
 ### Field Operations
 
 | Operation | Description |
 |-----------|-------------|
-| ADD_ATTRIBUTE | Add new field to entity |
-| DELETE_ATTRIBUTE | Remove field from entity |
-| RENAME_ATTRIBUTE | Rename field within entity |
-| COPY | Copy field to another entity |
-| MOVE | Move field to another entity |
-| CAST | Change field data type |
+| `ADD_ATTRIBUTE` | Add new field to entity |
+| `DELETE_ATTRIBUTE` | Remove field from entity |
+| `RENAME_ATTRIBUTE` | Rename field within entity |
+| `COPY_ATTRIBUTE` | Copy field to another entity |
+| `MOVE_ATTRIBUTE` | Move field to another entity |
+| `CAST_ATTRIBUTE` | Change field data type |
 
 ### Key & Constraint Operations
 
 | Operation | Description |
 |-----------|-------------|
-| ADD_PRIMARY_KEY | Add primary key to entity |
-| DELETE_PRIMARY_KEY | Remove primary key |
-| ADD_FOREIGN_KEY | Add foreign key constraint |
-| DELETE_FOREIGN_KEY | Remove foreign key constraint |
-| ADD_UNIQUE_KEY | Add unique constraint |
-| DELETE_UNIQUE_KEY | Remove unique constraint |
+| `ADD_PRIMARY_KEY` | Add primary key |
+| `DELETE_PRIMARY_KEY` | Remove primary key |
+| `ADD_FOREIGN_KEY` | Add foreign key constraint |
+| `DELETE_FOREIGN_KEY` | Remove foreign key constraint |
+| `ADD_UNIQUE_KEY` | Add unique constraint |
+| `DELETE_UNIQUE_KEY` | Remove unique constraint |
+| `ADD_PARTITION_KEY` | Add Cassandra partition key |
+| `ADD_CLUSTERING_KEY` | Add Cassandra clustering key |
+| `DELETE_PARTITION_KEY` | Remove Cassandra partition key |
+| `DELETE_CLUSTERING_KEY` | Remove Cassandra clustering key |
+| `DELETE_CONSTRAINT` | Remove constraint (FK) by field |
 
-### Reference & Entity Operations
+### Entity & Relationship Operations
 
 | Operation | Description |
 |-----------|-------------|
-| ADD_REFERENCE | Add foreign key reference between entities |
-| DELETE_REFERENCE | Remove foreign key reference |
-| ADD_EMBEDDED | Add embedded relationship |
-| DELETE_EMBEDDED | Remove embedded relationship |
-| ADD_ENTITY | Add new entity |
-| DELETE_ENTITY | Remove entity |
-| RENAME_ENTITY | Rename entity |
-| LINKING | Link entities via reference relationship |
+| `ADD_ENTITY` | Add new entity |
+| `DELETE_ENTITY` | Remove entity |
+| `RENAME_ENTITY` | Rename entity |
+| `ADD_REFERENCE` | Add foreign key reference |
+| `DELETE_REFERENCE` | Remove foreign key reference |
+| `ADD_EMBEDDED` | Add embedded relationship |
+| `DELETE_EMBEDDED` | Remove embedded relationship |
+| `ADD_RELTYPE` | Add graph relationship type |
+| `DELETE_RELTYPE` | Remove graph relationship type |
+| `RENAME_RELTYPE` | Rename graph relationship type |
+| `ADD_LABEL` | Add graph node label |
+| `DELETE_LABEL` | Remove graph node label |
 
 ## Grammar Variants
 
-SMEL provides two grammar variants:
+SMEL provides two functionally equivalent grammars:
 
-1. **SMEL_Specific.g4** (`.smel`): Uses specific keywords (e.g., `ADD_ATTRIBUTE`, `DELETE_ENTITY`, `MERGE`)
-2. **SMEL_Pauschalisiert.g4** (`.smel_ps`): Uses parameterized operations (e.g., `ADD_PS ATTRIBUTE`, `DELETE_PS ENTITY`, `MERGE_PS`)
+| Grammar | File Extension | Example |
+|---------|---------------|---------|
+| **Specific** | `.smel` | `ADD_ATTRIBUTE name TO person WITH TYPE String` |
+| **Pauschalisiert** | `.smel_ps` | `ADD_PS ATTRIBUTE name TO person WITH TYPE String` |
 
-Both grammars are functionally equivalent and generate the same internal operations. See `grammar/README.md` for detailed comparison.
+Keyword mapping examples:
+
+| Specific | Pauschalisiert |
+|----------|----------------|
+| `RENAME_ENTITY` | `RENAME_PS ENTITY` |
+| `ADD_ATTRIBUTE` | `ADD_PS ATTRIBUTE` |
+| `DELETE_CONSTRAINT` | `DELETE_PS CONSTRAINT` |
+| `ADD_PRIMARY_KEY` | `ADD_PS KEY` |
+| `ADD_PARTITION_KEY` | `ADD_PS PARTITION KEY` |
+| `ADD_CLUSTERING_KEY` | `ADD_PS CLUSTERING KEY` |
+| `NEST` / `UNNEST` / `MERGE` / `SPLIT` | `NEST_PS` / `UNNEST_PS` / `MERGE_PS` / `SPLIT_PS` |
 
 ## SMEL Script Examples
 
-### SMEL Script Location & Application
+### Cross-Model: Relational → Document (R2D)
 
-All SMEL test scripts are located under the `tests/` directory, organized by grammar variant:
-
-```
-tests/
-├── person_mongodb.json                          # MongoDB source schema
-├── person_postgresql.sql                        # PostgreSQL source schema
-├── specific/                                    # Scripts using Specific grammar
-│   ├── person_mongo_to_pg_minibeispiel.smel     # D2R: MongoDB -> PostgreSQL
-│   ├── person_pg_to_mongo_minibeispiel.smel     # R2D: PostgreSQL -> MongoDB
-│   ├── person_pg1_to_pg2_minibeispiel.smel      # R2R: PostgreSQL V1 -> V2
-│   └── person_mongo1_to_mongo2_minibeispiel.smel # D2D: MongoDB V1 -> V2
-└── pauschalisiert/                              # Scripts using Pauschalisiert grammar
-    ├── person_mongo_to_pg_minibeispiel.smel_ps
-    ├── person_pg_to_mongo_minibeispiel.smel_ps
-    ├── person_pg1_to_pg2_minibeispiel.smel_ps
-    └── person_mongo1_to_mongo2_minibeispiel.smel_ps
-```
-
-Each script is registered in `config.py` under `MIGRATION_CONFIGS`, which maps a config key (e.g., `"person_d2r_specific"`) to its source file, SMEL script, source type, and target type. The `run_migration()` function in `core.py` reads this config to wire everything together.
-
-### Example: Cross-Model Migration (D2R)
-
-MongoDB document with 3-level nesting and arrays -> 7 normalized PostgreSQL tables:
+PostgreSQL 3NF tables → MongoDB nested document (Northwind):
 
 ```smel
-MIGRATION person_mongo_to_pg:1.0
-FROM DOCUMENT TO RELATIONAL
-USING person_schema:1
+MIGRATION northwind_pg_to_mongo:1.0
+FROM RELATIONAL TO DOCUMENT
+USING northwind_schema:1
 
--- Extract nested objects (UNNEST)
-UNNEST person.address:street,city AS address WITH person.person_id TO address.person_id
-UNNEST person.employment:position, company{name, address{street, city}} AS employment WITH person.person_id TO employment.person_id
-UNNEST employment.company:name, address{street, city} AS company WITH employment.employment_id TO company.employment_id
-UNNEST company.address:street,city AS company_address WITH company.company_id TO company_address.company_id
+-- Embed tables as nested objects (deepest first)
+NEST categories:category_name, description IN products.category
+  WHERE products.category_id = categories.category_id WITH DELETION
+NEST suppliers:company_name, contact_name, ... IN products.supplier
+  WHERE products.supplier_id = suppliers.supplier_id WITH DELETION
 
--- Extract arrays (SPLIT + UNWIND)
-SPLIT person INTO person:person_id, name, age, knows; person_tag:person_id, tags
-UNWIND person_tag.tags
+-- Group flat shipping fields into nested object
+UNFLATTEN orders:ship_address, ship_city, ship_region, ship_postal_code, ship_country
+  AS ship_destination
 
-SPLIT person INTO person:person_id, name, age; person_knows:person_id, knows
-UNWIND person_knows.knows
-
--- Finalize
-FLATTEN person.name
-CAST person.age TO Integer
+-- Rename PK for MongoDB convention
+RENAME_ATTRIBUTE order_id TO _id IN orders
 ```
 
-### Example: Same-Model Evolution (R2R)
+### Cross-Model: Relational → Graph (R2G)
+
+PostgreSQL tables → Neo4j nodes + relationships:
+
+```smel
+MIGRATION northwind_pg_to_neo4j:1.0
+FROM RELATIONAL TO GRAPH
+USING northwind_schema:1
+
+-- Convert FK relationships to graph edges
+TRANSFORM orders.customer_id REFERENCES customers TO RELATIONSHIP PURCHASED
+TRANSFORM orders.employee_id REFERENCES employees TO RELATIONSHIP SOLD
+TRANSFORM orders.shipper_id REFERENCES shippers TO RELATIONSHIP SHIPPED_VIA
+
+-- Self-reference becomes graph edge
+TRANSFORM employees.reports_to REFERENCES employees TO RELATIONSHIP REPORTS_TO
+```
+
+### Cross-Model: Graph → Columnar (G2C)
+
+Neo4j graph → Cassandra wide-column tables:
+
+```smel
+MIGRATION northwind_neo4j_to_cass:1.0
+FROM GRAPH TO COLUMNAR
+USING northwind_schema:1
+
+-- Convert graph edge with properties to entity
+TRANSFORM CONTAINS TO ENTITY
+RENAME_ENTITY CONTAINS TO order_details
+
+-- Delete relationships, add FK-like columns
+DELETE_RELTYPE SUPPLIES
+ADD_ATTRIBUTE supplier_id TO products WITH TYPE String
+
+-- Restructure keys for Cassandra query patterns
+DELETE_PRIMARY_KEY product_id FROM products
+ADD_PARTITION_KEY (category_id, supplier_id) TO products
+ADD_CLUSTERING_KEY product_id TO products
+```
+
+### Same-Model Evolution: Relational → Relational (R2R)
 
 ```smel
 MIGRATION person_pg1_to_pg2:1.0
@@ -389,27 +411,15 @@ FROM RELATIONAL TO RELATIONAL
 USING person_schema:1
 
 MERGE company, company_address INTO company
-SPLIT person INTO person:person_id, vorname, nachname; person_detail:person_id, age, email, phone
+SPLIT person INTO person:person_id, vorname, nachname;
+  person_detail:person_id, age, email, phone
 RENAME_ATTRIBUTE vorname TO first_name IN person
 CAST person_detail.age TO String
 ```
 
-### Example: Same-Model Evolution (D2D)
-
-```smel
-MIGRATION person_mongo1_to_mongo2:1.0
-FROM DOCUMENT TO DOCUMENT
-USING person_schema:1
-
-FLATTEN person.employment.company.address
-RENAME_ATTRIBUTE vorname TO first_name IN name
-CAST person.age TO Integer
-ADD_ATTRIBUTE email TO person WITH TYPE String
-```
-
 ## Regenerating Parsers
 
-After modifying `.g4` grammar files, regenerate the ANTLR parsers:
+After modifying `.g4` grammar files:
 
 ```bash
 java -jar grammar/antlr-4.13.2-complete.jar -Dlanguage=Python3 -visitor -listener -o grammar/specific grammar/SMEL_Specific.g4

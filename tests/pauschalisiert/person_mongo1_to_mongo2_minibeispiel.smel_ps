@@ -63,7 +63,7 @@ RENAME_PS ATTRIBUTE nachname TO last_name IN name
 -- Phase 3: Type correction
 -- age was stored as String in MongoDB V1, now Integer
 -- ============================================
-CAST_PS person.age TO Integer
+CAST_PS ATTRIBUTE person.age TO Integer
 
 -- ============================================
 -- Phase 4: Add new fields

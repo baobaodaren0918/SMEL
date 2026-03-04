@@ -3,7 +3,7 @@
  * A domain-specific language for database schema migration
  *
  * This version uses specific, independent keywords for each operation.
- * Each operation has its own dedicated keyword (e.g., ADD_ATTRIBUTE, ADD_REFERENCE)
+ * Each operation has its own dedicated keyword (e.g., ADD_ATTRIBUTE, ADD_CONSTRAINT)
  *
  * Comparison: This is the "Specific" version. See SMEL_Pauschalisiert.g4 for the
  * "Generalized" version that uses parameterized operations (e.g., ADD_PS ATTRIBUTE).
@@ -46,22 +46,24 @@ version: VERSION_NUMBER | INTEGER_LITERAL;                          // 1 | 1.0 |
 // ============================================================================
 // Structure:  NEST, UNNEST, FLATTEN, UNWIND, EXTRACT
 // Movement:   COPY, MOVE, MERGE, SPLIT
-// Type:       CAST, LINKING
+// Type:       CAST
 // CRUD:       ADD_*, DELETE_*, REMOVE_*, RENAME_*
 
-operation: add_attribute | add_reference | add_embedded | add_entity
+operation: add_attribute | add_constraint | add_embedded | add_entity
          | add_primary_key | add_foreign_key | add_unique_key
          | add_partition_key | add_clustering_key
-         | add_variation | add_reltype | add_index | add_label
-         | delete_attribute | delete_reference | delete_embedded | delete_entity
+         | add_label
+         | delete_attribute | delete_constraint | delete_embedded | delete_entity
          | delete_primary_key | delete_foreign_key | delete_unique_key
          | delete_partition_key | delete_clustering_key
-         | delete_variation | delete_reltype | delete_index | delete_label
-         | remove_index | remove_unique_key | remove_foreign_key
-         | remove_label | remove_variation
-         | rename_attribute | rename_entity | rename_reltype
+         | delete_label
+         | remove_unique_key | remove_foreign_key
+         | remove_label
+         | rename_attribute | rename_entity
          | flatten | unflatten | unwind | wind | nest | unnest
-         | copy | move | merge | split | cast | linking
+         | copy_attribute | copy_entity | move_attribute | merge | split | cast_attribute | cast_constraint | recard
+         | transform
+         | add_reltype | delete_reltype | rename_reltype
 ;
 
 // ============================================================================
@@ -76,11 +78,11 @@ withTypeClause: WITH TYPE dataType;
 withDefaultClause: WITH DEFAULT literal;
 notNullClause: NOT_NULL;
 
-// ADD_REFERENCE: Add foreign key relationship (SQL-style) with explicit entity.field
-// Example: ADD_REFERENCE address.person_id REFERENCES person(person_id)
-// Example: ADD_REFERENCE order.customer_id REFERENCES customer(id) WITH CARDINALITY ONE_TO_MANY
-add_reference: ADD_REFERENCE qualifiedName REFERENCES identifier LPAREN identifier RPAREN referenceClause*;
-referenceClause: withCardinalityClause | usingKeyClause | whereClause;
+// ADD_CONSTRAINT: Add foreign key constraint (SQL-style) with explicit entity.field
+// Example: ADD_CONSTRAINT address.person_id REFERENCES person(person_id)
+// Example: ADD_CONSTRAINT order.customer_id REFERENCES customer(id) WITH CARDINALITY ONE_TO_MANY
+add_constraint: ADD_CONSTRAINT qualifiedName REFERENCES identifier LPAREN identifier RPAREN constraintClause*;
+constraintClause: withCardinalityClause | usingKeyClause | whereClause;
 
 // ADD_EMBEDDED: Add embedded object relationship (MongoDB style)
 // Example: ADD_EMBEDDED address TO Customer WITH CARDINALITY ONE_TO_ONE
@@ -118,18 +120,6 @@ add_partition_key: ADD_PARTITION_KEY keyColumns (TO identifier)? keyClause*;
 // Example: ADD_CLUSTERING_KEY timestamp TO UserActivity
 add_clustering_key: ADD_CLUSTERING_KEY keyColumns (TO identifier)? keyClause*;
 
-// ADD_VARIATION: Add structural variation (U-Schema support)
-// Example: ADD_VARIATION v1 TO Customer WITH ATTRIBUTES (a, b)
-add_variation: ADD_VARIATION identifier TO identifier variationClause*;
-
-// ADD_RELTYPE: Add relationship type (Graph database support)
-// Example: ADD_RELTYPE ACTED_IN FROM Actor TO Movie
-add_reltype: ADD_RELTYPE identifier FROM identifier TO identifier relTypeClause*;
-
-// ADD_INDEX: Add index to table (relational/document)
-// Example: ADD_INDEX idx_name ON Customer (email, name)
-add_index: ADD_INDEX identifier ON identifier LPAREN identifierList RPAREN;
-
 // ADD_LABEL: Add label to node (graph database)
 // Example: ADD_LABEL Employee TO Person
 add_label: ADD_LABEL identifier TO identifier;
@@ -150,9 +140,9 @@ withColumnsClause: WITH COLUMNS LPAREN identifierList RPAREN;
 // Example: DELETE_ATTRIBUTE Customer.email
 delete_attribute: DELETE_ATTRIBUTE qualifiedName;
 
-// DELETE_REFERENCE: Remove foreign key relationship
-// Example: DELETE_REFERENCE Customer.order_id
-delete_reference: DELETE_REFERENCE qualifiedName;
+// DELETE_CONSTRAINT: Remove foreign key constraint
+// Example: DELETE_CONSTRAINT Customer.order_id
+delete_constraint: DELETE_CONSTRAINT qualifiedName;
 
 // DELETE_EMBEDDED: Remove embedded object relationship
 // Example: DELETE_EMBEDDED Customer.address
@@ -182,18 +172,6 @@ delete_partition_key: DELETE_PARTITION_KEY keyColumns (FROM identifier)?;
 // Example: DELETE_CLUSTERING_KEY timestamp FROM UserActivity
 delete_clustering_key: DELETE_CLUSTERING_KEY keyColumns (FROM identifier)?;
 
-// DELETE_VARIATION: Delete structural variation
-// Example: DELETE_VARIATION v1 FROM Customer
-delete_variation: DELETE_VARIATION identifier FROM identifier;
-
-// DELETE_RELTYPE: Delete relationship type
-// Example: DELETE_RELTYPE ACTED_IN
-delete_reltype: DELETE_RELTYPE identifier;
-
-// DELETE_INDEX: Delete index
-// Example: DELETE_INDEX idx_name FROM Customer
-delete_index: DELETE_INDEX identifier FROM identifier;
-
 // DELETE_LABEL: Delete label from node
 // Example: DELETE_LABEL Employee FROM Person
 delete_label: DELETE_LABEL identifier FROM identifier;
@@ -202,11 +180,7 @@ delete_label: DELETE_LABEL identifier FROM identifier;
 // REMOVE OPERATIONS - Non-destructive constraint removal
 // ============================================================================
 // These operations remove constraints/metadata while preserving structure
-// Useful for schema evolution: index optimization, constraint relaxation, etc.
-
-// REMOVE_INDEX: Remove index (for optimization)
-// Example: REMOVE_INDEX idx_name FROM Customer
-remove_index: REMOVE_INDEX identifier FROM identifier;
+// Useful for schema evolution: constraint relaxation, etc.
 
 // REMOVE_UNIQUE_KEY: Remove unique constraint (constraint relaxation)
 // Example: REMOVE_UNIQUE_KEY email FROM Customer
@@ -220,10 +194,6 @@ remove_foreign_key: REMOVE_FOREIGN_KEY keyColumns FROM identifier;
 // Example: REMOVE_LABEL Manager FROM Person
 remove_label: REMOVE_LABEL identifier FROM identifier;
 
-// REMOVE_VARIATION: Remove structural variation (simplify schema)
-// Example: REMOVE_VARIATION v1 FROM Customer
-remove_variation: REMOVE_VARIATION identifier FROM identifier;
-
 // ============================================================================
 // RENAME OPERATIONS - Specific keywords for each type
 // ============================================================================
@@ -236,8 +206,20 @@ rename_attribute: RENAME_ATTRIBUTE identifier TO identifier (IN identifier)?;
 // Example: RENAME_ENTITY Customer TO Client
 rename_entity: RENAME_ENTITY identifier TO identifier;
 
-// RENAME_RELTYPE: Rename relationship type (Graph database)
-// Example: RENAME_RELTYPE ACTED_IN TO PERFORMED_IN
+// ============================================================================
+// RELTYPE OPERATIONS - Relationship type management (Graph database)
+// ============================================================================
+
+// ADD_RELTYPE: Add new relationship type
+// Example: ADD_RELTYPE works_at BETWEEN person AND company
+add_reltype: ADD_RELTYPE identifier BETWEEN identifier AND identifier;
+
+// DELETE_RELTYPE: Remove relationship type
+// Example: DELETE_RELTYPE works_at
+delete_reltype: DELETE_RELTYPE identifier;
+
+// RENAME_RELTYPE: Rename relationship type
+// Example: RENAME_RELTYPE works_at TO employed_at
 rename_reltype: RENAME_RELTYPE identifier TO identifier;
 
 // ============================================================================
@@ -253,10 +235,10 @@ rename_reltype: RENAME_RELTYPE identifier TO identifier;
 flatten: FLATTEN qualifiedName;
 
 // UNFLATTEN - Combine flat fields into nested object (reverse of FLATTEN)
-// Example: UNFLATTEN person(vorname, nachname) AS name
+// Example: UNFLATTEN person:vorname, nachname AS name
 //   Before: person { vorname, nachname, age }
 //   After:  person { name: { vorname, nachname }, age }
-unflatten: UNFLATTEN identifier LPAREN identifierList RPAREN AS identifier;
+unflatten: UNFLATTEN identifier COLON identifierList AS identifier;
 
 // UNNEST - Extract nested object to separate table (normalization)
 // Example: UNNEST person.address:street,city AS address WITH person.person_id TO address.person_id
@@ -269,7 +251,7 @@ unflatten: UNFLATTEN identifier LPAREN identifierList RPAREN AS identifier;
 //   Before: person { person_id, address: { street, city } }
 //   After:  person { person_id }
 //           address { person_id, street, city }
-// Note: Use separate ADD_PRIMARY_KEY, ADD_REFERENCE for constraints
+// Note: Use separate ADD_PRIMARY_KEY, ADD_CONSTRAINT for constraints
 unnest: UNNEST qualifiedName COLON unnestFieldList AS identifier (WITH unnestCarryList)?;
 
 // Carry list for UNNEST: fields to copy from source to new table
@@ -311,13 +293,18 @@ nest: NEST identifier COLON unnestFieldList IN qualifiedName WHERE condition (WI
 // SIMPLE OPERATIONS
 // ============================================================================
 
-// COPY: Duplicate an attribute to another location (keeps original)
-// Example: COPY source TO target
-copy: COPY qualifiedName TO qualifiedName;
+// COPY_ATTRIBUTE: Duplicate an attribute to another location (keeps original)
+// Example: COPY_ATTRIBUTE person.name TO person.first_name
+copy_attribute: COPY_ATTRIBUTE qualifiedName TO qualifiedName;
 
-// MOVE: Relocate an attribute to another location (removes original)
-// Example: MOVE source TO target
-move: MOVE qualifiedName TO qualifiedName;
+// COPY_ENTITY: Duplicate an entire entity with all its structure (attributes, keys, constraints)
+// Reference: PRISM "COPY TABLE R INTO S", CoDEL "Addtable(S, R)"
+// Example: COPY_ENTITY person AS employee
+copy_entity: COPY_ENTITY identifier AS identifier;
+
+// MOVE_ATTRIBUTE: Relocate an attribute to another location (removes original)
+// Example: MOVE_ATTRIBUTE person.name TO other.name
+move_attribute: MOVE_ATTRIBUTE qualifiedName TO qualifiedName;
 
 // MERGE: Combine two entities into one new entity
 // Example: MERGE A, B INTO C AS alias
@@ -333,13 +320,29 @@ merge: MERGE identifier COMMA identifier INTO identifier (AS identifier)?;
 split: SPLIT identifier INTO splitPart (SEMICOLON splitPart)+;
 splitPart: identifier COLON identifierList;
 
-// CAST: Change the data type of an attribute
-// Example: CAST Entity.field TO Integer
-cast: CAST qualifiedName TO dataType;
+// CAST_ATTRIBUTE: Change the data type of an attribute
+// Example: CAST_ATTRIBUTE Entity.field TO Integer
+cast_attribute: CAST_ATTRIBUTE qualifiedName TO dataType;
 
-// LINKING: Create a relationship link between entities
-// Example: LINKING source.field TO target
-linking: LINKING qualifiedName TO identifier;
+// CAST_CONSTRAINT: Change the type of a constraint
+// Reference: Orion "Cast Reference" - change the type of a constraint
+// Example: CAST_CONSTRAINT person.email TO UNIQUE KEY
+// Example: CAST_CONSTRAINT person.city TO PARTITION KEY
+cast_constraint: CAST_CONSTRAINT qualifiedName TO constraintKeyType;
+
+// RECARD: Change the multiplicity/cardinality of a reference
+// Reference: Orion "Mult Reference" - change the multiplicity of a reference
+// Example: RECARD person.address_id TO ONE_TO_MANY
+recard: RECARD qualifiedName TO cardinalityType;
+
+// TRANSFORM: Transform entity between node and relationship (Graph database)
+// Reference: Hausler et al. - "transform a node with its features into a relationship" / vice versa
+// Example: TRANSFORM works_at TO RELATIONSHIP BETWEEN person AND company
+// Example: TRANSFORM works_at TO ENTITY
+transform: TRANSFORM identifier TO transformTarget;
+transformTarget: RELATIONSHIP BETWEEN identifier AND identifier    # TransformToRelationship
+              | ENTITY                                             # TransformToEntity
+              ;
 
 // ============================================================================
 // SHARED CLAUSES - Reusable clause definitions
@@ -350,15 +353,8 @@ withCardinalityClause: WITH CARDINALITY cardinalityType;
 usingKeyClause: USING KEY identifier;
 whereClause: WHERE condition;
 
-// Variation clauses (U-Schema StructuralVariation support)
-variationClause: withAttributesClause | withRelationshipsClause | withCountClause;
+// Entity clauses (for ADD_ENTITY)
 withAttributesClause: WITH ATTRIBUTES LPAREN identifierList RPAREN;
-withRelationshipsClause: WITH RELATIONSHIPS LPAREN identifierList RPAREN;
-withCountClause: WITH COUNT INTEGER_LITERAL;
-
-// RelType clauses (Graph relationship type support)
-relTypeClause: withPropertiesClause | withCardinalityClause;
-withPropertiesClause: WITH PROPERTIES LPAREN identifierList RPAREN;
 
 // Identifier list
 identifierList: identifier (COMMA identifier)*;
@@ -369,6 +365,9 @@ identifierList: identifier (COMMA identifier)*;
 
 // Cardinality notation
 cardinalityType: ONE_TO_ONE | ONE_TO_MANY | ZERO_TO_ONE | ZERO_TO_MANY;
+
+// Constraint key type (for CAST_CONSTRAINT)
+constraintKeyType: PRIMARY KEY | UNIQUE KEY | PARTITION KEY | CLUSTERING KEY;
 
 // Data types
 dataType: STRING | TEXT | INT | INTEGER | LONG | DOUBLE | FLOAT | DECIMAL
@@ -396,7 +395,7 @@ literal: STRING_LITERAL | INTEGER_LITERAL | DECIMAL_LITERAL | TRUE | FALSE | NUL
 // ----------------------------------------------------------------------------
 MIGRATION: 'MIGRATION'; FROM: 'FROM'; TO: 'TO'; USING: 'USING'; AS: 'AS';
 INTO: 'INTO'; WITH: 'WITH'; WHERE: 'WHERE'; IN: 'IN'; KEY: 'KEY'; AND: 'AND'; DELETION: 'DELETION';
-COUNT: 'COUNT'; ON: 'ON';
+ON: 'ON';
 
 // Database model types
 RELATIONAL: 'RELATIONAL'; DOCUMENT: 'DOCUMENT'; GRAPH: 'GRAPH'; COLUMNAR: 'COLUMNAR';
@@ -406,11 +405,13 @@ NEST: 'NEST'; UNNEST: 'UNNEST'; FLATTEN: 'FLATTEN'; UNFLATTEN: 'UNFLATTEN';
 UNWIND: 'UNWIND'; WIND: 'WIND';
 
 // Simple operations
-COPY: 'COPY'; MOVE: 'MOVE'; MERGE: 'MERGE'; SPLIT: 'SPLIT'; CAST: 'CAST'; LINKING: 'LINKING';
+COPY_ATTRIBUTE: 'COPY_ATTRIBUTE'; COPY_ENTITY: 'COPY_ENTITY'; MOVE_ATTRIBUTE: 'MOVE_ATTRIBUTE'; MERGE: 'MERGE'; SPLIT: 'SPLIT';
+CAST_ATTRIBUTE: 'CAST_ATTRIBUTE'; CAST_CONSTRAINT: 'CAST_CONSTRAINT'; RECARD: 'RECARD';
+TRANSFORM: 'TRANSFORM'; RELATIONSHIP: 'RELATIONSHIP'; BETWEEN: 'BETWEEN';
 
 // ADD operations - specific keywords
 ADD_ATTRIBUTE: 'ADD_ATTRIBUTE';
-ADD_REFERENCE: 'ADD_REFERENCE';
+ADD_CONSTRAINT: 'ADD_CONSTRAINT';
 ADD_EMBEDDED: 'ADD_EMBEDDED';
 ADD_ENTITY: 'ADD_ENTITY';
 ADD_PRIMARY_KEY: 'ADD_PRIMARY_KEY';
@@ -418,14 +419,11 @@ ADD_FOREIGN_KEY: 'ADD_FOREIGN_KEY';
 ADD_UNIQUE_KEY: 'ADD_UNIQUE_KEY';
 ADD_PARTITION_KEY: 'ADD_PARTITION_KEY';
 ADD_CLUSTERING_KEY: 'ADD_CLUSTERING_KEY';
-ADD_VARIATION: 'ADD_VARIATION';
-ADD_RELTYPE: 'ADD_RELTYPE';
-ADD_INDEX: 'ADD_INDEX';
 ADD_LABEL: 'ADD_LABEL';
 
 // DELETE operations - specific keywords
 DELETE_ATTRIBUTE: 'DELETE_ATTRIBUTE';
-DELETE_REFERENCE: 'DELETE_REFERENCE';
+DELETE_CONSTRAINT: 'DELETE_CONSTRAINT';
 DELETE_EMBEDDED: 'DELETE_EMBEDDED';
 DELETE_ENTITY: 'DELETE_ENTITY';
 DELETE_PRIMARY_KEY: 'DELETE_PRIMARY_KEY';
@@ -433,41 +431,40 @@ DELETE_FOREIGN_KEY: 'DELETE_FOREIGN_KEY';
 DELETE_UNIQUE_KEY: 'DELETE_UNIQUE_KEY';
 DELETE_PARTITION_KEY: 'DELETE_PARTITION_KEY';
 DELETE_CLUSTERING_KEY: 'DELETE_CLUSTERING_KEY';
-DELETE_VARIATION: 'DELETE_VARIATION';
-DELETE_RELTYPE: 'DELETE_RELTYPE';
-DELETE_INDEX: 'DELETE_INDEX';
 DELETE_LABEL: 'DELETE_LABEL';
 
 // REMOVE operations - specific keywords (non-destructive constraint removal)
-REMOVE_INDEX: 'REMOVE_INDEX';
 REMOVE_UNIQUE_KEY: 'REMOVE_UNIQUE_KEY';
 REMOVE_FOREIGN_KEY: 'REMOVE_FOREIGN_KEY';
 REMOVE_LABEL: 'REMOVE_LABEL';
-REMOVE_VARIATION: 'REMOVE_VARIATION';
 
 // RENAME operations - specific keywords
 RENAME_ATTRIBUTE: 'RENAME_ATTRIBUTE';
 RENAME_ENTITY: 'RENAME_ENTITY';
+
+// RELTYPE operations - specific keywords (Graph database)
+ADD_RELTYPE: 'ADD_RELTYPE';
+DELETE_RELTYPE: 'DELETE_RELTYPE';
 RENAME_RELTYPE: 'RENAME_RELTYPE';
 
 // Shared keywords
 RENAME: 'RENAME';
 
-// RelType (Graph relationship types)
-RELTYPE: 'RELTYPE'; PROPERTIES: 'PROPERTIES'; STRUCTURE: 'STRUCTURE';
+// Structural keywords
+STRUCTURE: 'STRUCTURE';
 
 // Feature types
 ATTRIBUTE: 'ATTRIBUTE'; EMBEDDED: 'EMBEDDED';
-ENTITY: 'ENTITY'; VARIATION: 'VARIATION'; VALUE: 'VALUE';
-INDEX: 'INDEX'; LABEL: 'LABEL';
+ENTITY: 'ENTITY'; VALUE: 'VALUE';
+LABEL: 'LABEL';
+
+// Entity/Variation clauses
+ATTRIBUTES: 'ATTRIBUTES';
 
 // Key types
 PRIMARY: 'PRIMARY'; UNIQUE: 'UNIQUE'; FOREIGN: 'FOREIGN';
 PARTITION: 'PARTITION'; CLUSTERING: 'CLUSTERING';
 REFERENCE: 'REFERENCE'; REFERENCES: 'REFERENCES'; COLUMNS: 'COLUMNS';
-
-// Variation clauses
-ATTRIBUTES: 'ATTRIBUTES'; RELATIONSHIPS: 'RELATIONSHIPS';
 
 // Cardinality
 CARDINALITY: 'CARDINALITY';

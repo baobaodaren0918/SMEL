@@ -79,13 +79,13 @@ class SMEL_PauschalisiertVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
-    # Visit a parse tree produced by SMEL_PauschalisiertParser#referenceAdd.
-    def visitReferenceAdd(self, ctx:SMEL_PauschalisiertParser.ReferenceAddContext):
+    # Visit a parse tree produced by SMEL_PauschalisiertParser#constraintAdd.
+    def visitConstraintAdd(self, ctx:SMEL_PauschalisiertParser.ConstraintAddContext):
         return self.visitChildren(ctx)
 
 
-    # Visit a parse tree produced by SMEL_PauschalisiertParser#referenceClause.
-    def visitReferenceClause(self, ctx:SMEL_PauschalisiertParser.ReferenceClauseContext):
+    # Visit a parse tree produced by SMEL_PauschalisiertParser#constraintClause.
+    def visitConstraintClause(self, ctx:SMEL_PauschalisiertParser.ConstraintClauseContext):
         return self.visitChildren(ctx)
 
 
@@ -129,23 +129,13 @@ class SMEL_PauschalisiertVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
-    # Visit a parse tree produced by SMEL_PauschalisiertParser#variationAdd.
-    def visitVariationAdd(self, ctx:SMEL_PauschalisiertParser.VariationAddContext):
-        return self.visitChildren(ctx)
-
-
-    # Visit a parse tree produced by SMEL_PauschalisiertParser#relTypeAdd.
-    def visitRelTypeAdd(self, ctx:SMEL_PauschalisiertParser.RelTypeAddContext):
-        return self.visitChildren(ctx)
-
-
-    # Visit a parse tree produced by SMEL_PauschalisiertParser#indexAdd.
-    def visitIndexAdd(self, ctx:SMEL_PauschalisiertParser.IndexAddContext):
-        return self.visitChildren(ctx)
-
-
     # Visit a parse tree produced by SMEL_PauschalisiertParser#labelAdd.
     def visitLabelAdd(self, ctx:SMEL_PauschalisiertParser.LabelAddContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by SMEL_PauschalisiertParser#reltypeAdd.
+    def visitReltypeAdd(self, ctx:SMEL_PauschalisiertParser.ReltypeAddContext):
         return self.visitChildren(ctx)
 
 
@@ -159,8 +149,8 @@ class SMEL_PauschalisiertVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
-    # Visit a parse tree produced by SMEL_PauschalisiertParser#referenceDelete.
-    def visitReferenceDelete(self, ctx:SMEL_PauschalisiertParser.ReferenceDeleteContext):
+    # Visit a parse tree produced by SMEL_PauschalisiertParser#constraintDelete.
+    def visitConstraintDelete(self, ctx:SMEL_PauschalisiertParser.ConstraintDeleteContext):
         return self.visitChildren(ctx)
 
 
@@ -179,33 +169,18 @@ class SMEL_PauschalisiertVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
-    # Visit a parse tree produced by SMEL_PauschalisiertParser#variationDelete.
-    def visitVariationDelete(self, ctx:SMEL_PauschalisiertParser.VariationDeleteContext):
-        return self.visitChildren(ctx)
-
-
-    # Visit a parse tree produced by SMEL_PauschalisiertParser#relTypeDelete.
-    def visitRelTypeDelete(self, ctx:SMEL_PauschalisiertParser.RelTypeDeleteContext):
-        return self.visitChildren(ctx)
-
-
-    # Visit a parse tree produced by SMEL_PauschalisiertParser#indexDelete.
-    def visitIndexDelete(self, ctx:SMEL_PauschalisiertParser.IndexDeleteContext):
-        return self.visitChildren(ctx)
-
-
     # Visit a parse tree produced by SMEL_PauschalisiertParser#labelDelete.
     def visitLabelDelete(self, ctx:SMEL_PauschalisiertParser.LabelDeleteContext):
         return self.visitChildren(ctx)
 
 
-    # Visit a parse tree produced by SMEL_PauschalisiertParser#remove_ps.
-    def visitRemove_ps(self, ctx:SMEL_PauschalisiertParser.Remove_psContext):
+    # Visit a parse tree produced by SMEL_PauschalisiertParser#reltypeDelete.
+    def visitReltypeDelete(self, ctx:SMEL_PauschalisiertParser.ReltypeDeleteContext):
         return self.visitChildren(ctx)
 
 
-    # Visit a parse tree produced by SMEL_PauschalisiertParser#indexRemove.
-    def visitIndexRemove(self, ctx:SMEL_PauschalisiertParser.IndexRemoveContext):
+    # Visit a parse tree produced by SMEL_PauschalisiertParser#remove_ps.
+    def visitRemove_ps(self, ctx:SMEL_PauschalisiertParser.Remove_psContext):
         return self.visitChildren(ctx)
 
 
@@ -224,11 +199,6 @@ class SMEL_PauschalisiertVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
-    # Visit a parse tree produced by SMEL_PauschalisiertParser#variationRemove.
-    def visitVariationRemove(self, ctx:SMEL_PauschalisiertParser.VariationRemoveContext):
-        return self.visitChildren(ctx)
-
-
     # Visit a parse tree produced by SMEL_PauschalisiertParser#rename_ps.
     def visitRename_ps(self, ctx:SMEL_PauschalisiertParser.Rename_psContext):
         return self.visitChildren(ctx)
@@ -244,8 +214,8 @@ class SMEL_PauschalisiertVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
-    # Visit a parse tree produced by SMEL_PauschalisiertParser#relTypeRename.
-    def visitRelTypeRename(self, ctx:SMEL_PauschalisiertParser.RelTypeRenameContext):
+    # Visit a parse tree produced by SMEL_PauschalisiertParser#reltypeRename.
+    def visitReltypeRename(self, ctx:SMEL_PauschalisiertParser.ReltypeRenameContext):
         return self.visitChildren(ctx)
 
 
@@ -271,36 +241,6 @@ class SMEL_PauschalisiertVisitor(ParseTreeVisitor):
 
     # Visit a parse tree produced by SMEL_PauschalisiertParser#identifierList.
     def visitIdentifierList(self, ctx:SMEL_PauschalisiertParser.IdentifierListContext):
-        return self.visitChildren(ctx)
-
-
-    # Visit a parse tree produced by SMEL_PauschalisiertParser#variationClause.
-    def visitVariationClause(self, ctx:SMEL_PauschalisiertParser.VariationClauseContext):
-        return self.visitChildren(ctx)
-
-
-    # Visit a parse tree produced by SMEL_PauschalisiertParser#withAttributesClause.
-    def visitWithAttributesClause(self, ctx:SMEL_PauschalisiertParser.WithAttributesClauseContext):
-        return self.visitChildren(ctx)
-
-
-    # Visit a parse tree produced by SMEL_PauschalisiertParser#withRelationshipsClause.
-    def visitWithRelationshipsClause(self, ctx:SMEL_PauschalisiertParser.WithRelationshipsClauseContext):
-        return self.visitChildren(ctx)
-
-
-    # Visit a parse tree produced by SMEL_PauschalisiertParser#withCountClause.
-    def visitWithCountClause(self, ctx:SMEL_PauschalisiertParser.WithCountClauseContext):
-        return self.visitChildren(ctx)
-
-
-    # Visit a parse tree produced by SMEL_PauschalisiertParser#relTypeClause.
-    def visitRelTypeClause(self, ctx:SMEL_PauschalisiertParser.RelTypeClauseContext):
-        return self.visitChildren(ctx)
-
-
-    # Visit a parse tree produced by SMEL_PauschalisiertParser#withPropertiesClause.
-    def visitWithPropertiesClause(self, ctx:SMEL_PauschalisiertParser.WithPropertiesClauseContext):
         return self.visitChildren(ctx)
 
 
@@ -364,6 +304,16 @@ class SMEL_PauschalisiertVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
+    # Visit a parse tree produced by SMEL_PauschalisiertParser#attributeCopy.
+    def visitAttributeCopy(self, ctx:SMEL_PauschalisiertParser.AttributeCopyContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by SMEL_PauschalisiertParser#entityCopy.
+    def visitEntityCopy(self, ctx:SMEL_PauschalisiertParser.EntityCopyContext):
+        return self.visitChildren(ctx)
+
+
     # Visit a parse tree produced by SMEL_PauschalisiertParser#move_ps.
     def visitMove_ps(self, ctx:SMEL_PauschalisiertParser.Move_psContext):
         return self.visitChildren(ctx)
@@ -389,8 +339,33 @@ class SMEL_PauschalisiertVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
-    # Visit a parse tree produced by SMEL_PauschalisiertParser#linking_ps.
-    def visitLinking_ps(self, ctx:SMEL_PauschalisiertParser.Linking_psContext):
+    # Visit a parse tree produced by SMEL_PauschalisiertParser#attributeCast.
+    def visitAttributeCast(self, ctx:SMEL_PauschalisiertParser.AttributeCastContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by SMEL_PauschalisiertParser#constraintCast.
+    def visitConstraintCast(self, ctx:SMEL_PauschalisiertParser.ConstraintCastContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by SMEL_PauschalisiertParser#recard_ps.
+    def visitRecard_ps(self, ctx:SMEL_PauschalisiertParser.Recard_psContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by SMEL_PauschalisiertParser#transform_ps.
+    def visitTransform_ps(self, ctx:SMEL_PauschalisiertParser.Transform_psContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by SMEL_PauschalisiertParser#TransformToRelationship.
+    def visitTransformToRelationship(self, ctx:SMEL_PauschalisiertParser.TransformToRelationshipContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by SMEL_PauschalisiertParser#TransformToEntity.
+    def visitTransformToEntity(self, ctx:SMEL_PauschalisiertParser.TransformToEntityContext):
         return self.visitChildren(ctx)
 
 
@@ -409,8 +384,18 @@ class SMEL_PauschalisiertVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
+    # Visit a parse tree produced by SMEL_PauschalisiertParser#withAttributesClause.
+    def visitWithAttributesClause(self, ctx:SMEL_PauschalisiertParser.WithAttributesClauseContext):
+        return self.visitChildren(ctx)
+
+
     # Visit a parse tree produced by SMEL_PauschalisiertParser#cardinalityType.
     def visitCardinalityType(self, ctx:SMEL_PauschalisiertParser.CardinalityTypeContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by SMEL_PauschalisiertParser#constraintKeyType.
+    def visitConstraintKeyType(self, ctx:SMEL_PauschalisiertParser.ConstraintKeyTypeContext):
         return self.visitChildren(ctx)
 
 

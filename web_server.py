@@ -1,6 +1,6 @@
 """
 SMEL Web Server - Web interface for schema migration visualization.
-Run this file and open http://localhost:5567 in your browser.
+Run this file and open http://localhost:5582 in your browser.
 """
 import sys
 import json
@@ -13,45 +13,101 @@ import webbrowser
 sys.path.insert(0, str(Path(__file__).parent))
 
 from core import run_migration
+from config import MIGRATION_CONFIGS, DB_TYPE_EXPORT_LABEL
 
-PORT = 5582
+PORT = 5586
 
 
 class SMELHandler(SimpleHTTPRequestHandler):
     """HTTP request handler for SMEL web interface."""
 
     def do_GET(self):
-        if self.path == '/' or self.path == '/index.html':
-            self.send_response(200)
-            self.send_header('Content-type', 'text/html')
-            self.send_header('Cache-Control', 'no-cache, no-store, must-revalidate')
-            self.send_header('Pragma', 'no-cache')
-            self.send_header('Expires', '0')
-            self.end_headers()
-            self.wfile.write(get_html().encode())
-        elif self.path.startswith('/api/migrate'):
-            query = self.path.split('?')[1] if '?' in self.path else ''
-            params = parse_qs(query)
-            direction = params.get('direction', ['2'])[0]
+        try:
+            if self.path == '/' or self.path == '/index.html':
+                self.send_response(200)
+                self.send_header('Content-type', 'text/html')
+                self.send_header('Cache-Control', 'no-cache, no-store, must-revalidate')
+                self.send_header('Pragma', 'no-cache')
+                self.send_header('Expires', '0')
+                self.end_headers()
+                self.wfile.write(get_html().encode())
+            elif self.path.startswith('/api/schemas'):
+                schema_files = {
+                    'postgresql': 'tests/northwind_postgresql.sql',
+                    'mongodb': 'tests/northwind_mongodb.json',
+                    'neo4j': 'tests/northwind_neo4j.cypher',
+                    'cassandra': 'tests/northwind_cassandra.cql',
+                }
+                result = {}
+                base = Path(__file__).parent
+                for key, rel_path in schema_files.items():
+                    fpath = base / rel_path
+                    try:
+                        result[key] = fpath.read_text(encoding='utf-8')
+                    except Exception as e:
+                        result[key] = f'Error reading {rel_path}: {e}'
 
-            result = run_migration(direction)
+                self.send_response(200)
+                self.send_header('Content-type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.send_header('Cache-Control', 'no-cache')
+                self.end_headers()
+                self.wfile.write(json.dumps(result).encode())
+            elif self.path.startswith('/api/migrate'):
+                query = self.path.split('?')[1] if '?' in self.path else ''
+                params = parse_qs(query)
+                direction = params.get('direction', ['person_d2r_pauschalisiert'])[0]
 
-            self.send_response(200)
-            self.send_header('Content-type', 'application/json')
-            self.send_header('Access-Control-Allow-Origin', '*')
-            self.send_header('Cache-Control', 'no-cache')
-            self.end_headers()
-            self.wfile.write(json.dumps(result).encode())
-        else:
-            super().do_GET()
+                try:
+                    result = run_migration(direction)
+                except Exception as e:
+                    result = {"error": f"Migration failed: {e}"}
+
+                self.send_response(200)
+                self.send_header('Content-type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.send_header('Cache-Control', 'no-cache')
+                self.end_headers()
+                self.wfile.write(json.dumps(result).encode())
+            else:
+                super().do_GET()
+        except (ConnectionAbortedError, ConnectionResetError, BrokenPipeError):
+            pass  # Browser closed connection early — harmless on Windows
 
     def log_message(self, format, *args):
         pass
 
 
+def _build_dropdown_options() -> str:
+    """Generate <optgroup>/<option> HTML tags from MIGRATION_CONFIGS."""
+    person, nw_evo, nw_cross = [], [], []
+    for key, cfg in MIGRATION_CONFIGS.items():
+        display = cfg["display_name"]
+        selected = ' selected' if key == "person_d2r_pauschalisiert" else ''
+        tag = f'<option value="{key}"{selected}>{display}</option>'
+        if key.startswith("person_"):
+            person.append(tag)
+        elif key.startswith("northwind_") and cfg["source_type"] == cfg["target_type"]:
+            nw_evo.append(tag)
+        else:
+            nw_cross.append(tag)
+    nl = '\n                        '
+    html = f'<optgroup label="Person (Mini-Beispiel)">{nl}{nl.join(person)}{nl}</optgroup>'
+    if nw_evo:
+        html += f'\n                    <optgroup label="Northwind (Schema Evolution)">{nl}{nl.join(nw_evo)}{nl}</optgroup>'
+    if nw_cross:
+        html += f'\n                    <optgroup label="Northwind (Cross-Model Migration)">{nl}{nl.join(nw_cross)}{nl}</optgroup>'
+    return html
+
+
+def _build_config_js() -> str:
+    """Generate JavaScript constant for DB_TYPE_EXPORT_LABEL from config.py."""
+    return f"const DB_TYPE_EXPORT_LABEL = {json.dumps(DB_TYPE_EXPORT_LABEL)};"
+
+
 def get_html():
     """Return the HTML page with Apple-style design."""
-    return '''<!DOCTYPE html>
+    html = '''<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -97,7 +153,7 @@ def get_html():
         .control-group { display: flex; align-items: center; gap: 12px; }
         .control-label { font-size: 15px; font-weight: 500; color: #636366; }
 
-        .dropdown { position: relative; min-width: 240px; }
+        .dropdown { position: relative; min-width: 380px; }
         .dropdown select {
             width: 100%;
             padding: 12px 44px 12px 16px;
@@ -113,6 +169,8 @@ def get_html():
         }
         .dropdown select:hover { border-color: #0066CC; }
         .dropdown select:focus { outline: none; border-color: #0066CC; }
+        .dropdown select optgroup { font-weight: 600; font-size: 13px; color: #636366; }
+        .dropdown select option { font-weight: 400; font-size: 14px; color: #1D1D1F; padding: 4px 8px; }
         .dropdown::after {
             content: '';
             position: absolute;
@@ -222,6 +280,8 @@ def get_html():
         }
         .schema-badge.relational { background: #F5F5F7; color: #0066CC; }
         .schema-badge.document { background: #F5F5F7; color: #BF4800; }
+        .schema-badge.graph { background: #F5F5F7; color: #34A853; }
+        .schema-badge.columnar { background: #F5F5F7; color: #8E24AA; }
 
         .er-section { margin-bottom: 40px; }
         .section-title {
@@ -241,66 +301,52 @@ def get_html():
             overflow: auto;
         }
         .er-diagram svg { display: block; margin: 0 auto; }
+        .er-diagram .node circle { fill: #E8F5E9; stroke: #34A853; }
+        .er-diagram .edgeLabel { font-size: 12px; background: #fff; }
 
-        .tables-section { margin-bottom: 40px; }
-        .tables-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-            gap: 16px;
+        /* Graph SVG Circular Layout */
+        .graph-svg-container { display: flex; justify-content: center; padding: 8px 0; }
+        .graph-svg-container svg { max-height: 600px; }
+        /* Compact graph in 4-column target column */
+        .graph-compact .graph-svg-container svg { max-height: 260px; }
+        .graph-compact { min-height: auto; padding: 8px; }
+
+        /* Chebotko Diagram (Cassandra) */
+        .chebotko-diagram {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 24px;
+            padding: 24px;
+            background: #F5F5F7;
+            border-radius: 16px;
         }
-
-        .table-card { background: #F5F5F7; border-radius: 16px; overflow: hidden; }
-        .table-header {
-            padding: 14px 18px;
-            background: #FFFFFF;
-            border-bottom: 1px solid #E8E8ED;
+        .chebotko-table {
+            background: #fff;
+            border-radius: 10px;
+            border: 2px solid #8E24AA;
+            overflow: hidden;
+            min-width: 180px;
+            max-width: 240px;
+            flex: 1;
+        }
+        .chebotko-header {
+            background: #8E24AA;
+            color: #fff;
             font-weight: 600;
-            font-size: 15px;
-            color: #1D1D1F;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        .table-icon {
-            width: 24px;
-            height: 24px;
-            background: #0066CC;
-            border-radius: 6px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-size: 12px;
-            font-weight: 700;
-        }
-
-        .table-body { padding: 8px 0; }
-        .table-row {
-            display: flex;
-            align-items: center;
-            padding: 8px 18px;
             font-size: 14px;
+            padding: 8px 16px;
+            text-align: center;
         }
-        .col-name { flex: 1; font-weight: 500; color: #1D1D1F; }
-        .col-type { color: #636366; font-size: 13px; margin-right: 10px; }
-        .col-badge {
-            font-size: 10px;
-            font-weight: 700;
-            padding: 2px 6px;
-            border-radius: 4px;
-            margin-left: 4px;
-        }
-        .col-badge.pk { background: #0066CC; color: white; }
-        .col-badge.fk { background: #BF4800; color: white; }
-        .col-badge.null { background: #E8E8ED; color: #636366; }
-
-        .fk-section {
-            padding: 10px 18px;
-            background: #FFFFFF;
-            border-top: 1px solid #E8E8ED;
-            font-size: 12px;
-            color: #0066CC;
-        }
+        .chebotko-cols { width: 100%; border-collapse: collapse; }
+        .chebotko-cols tr { border-bottom: 1px solid #E8E8ED; }
+        .chebotko-cols tr:last-child { border-bottom: none; }
+        .chebotko-cols td { padding: 6px 10px; font-size: 13px; }
+        .ck-marker-cell { width: 30px; text-align: center; }
+        .ck-marker { font-weight: 700; font-size: 12px; }
+        .ck-marker.pk { color: #8E24AA; }
+        .ck-marker.ck { color: #0066CC; }
+        .ck-name { font-weight: 500; }
+        .ck-type { color: #636366; font-family: 'SF Mono', monospace; font-size: 12px; }
 
         .document-view {
             background: #F5F5F7;
@@ -367,6 +413,7 @@ def get_html():
         .legend-dot.new { background: #34C759; }
         .legend-dot.reference { background: #0066CC; }
         .legend-dot.embedded { background: #BF4800; }
+        .legend-dot.edge { background: #8B5CF6; }
         .legend-dot.pk { background: #AF52DE; }
 
         .migration-layout { display: flex; gap: 24px; align-items: flex-start; }
@@ -435,12 +482,6 @@ def get_html():
         }
         .target-er-diagram svg { display: block; margin: 0 auto; max-width: 100%; }
 
-        .target-tables-grid {
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-        }
-
         .schema-grid {
             display: grid;
             grid-template-columns: repeat(3, 1fr);
@@ -482,6 +523,15 @@ def get_html():
         .independent-column .entity-card {
             margin-bottom: 8px;
         }
+
+        /* Dense layout for schemas with 7+ entities */
+        .four-column-layout.dense-layout .independent-column { max-width: 320px; }
+        .four-column-layout.dense-layout .column-content { max-height: 900px; }
+        .four-column-layout.dense-layout .attribute { padding: 3px 0; font-size: 13px; }
+        .four-column-layout.dense-layout .attr-name { font-size: 13px; }
+        .four-column-layout.dense-layout .entity-name { padding: 10px 12px; font-size: 14px; }
+        .four-column-layout.dense-layout .entity-body { padding: 8px 12px; }
+        .four-column-layout.dense-layout .entity-card { margin-bottom: 6px; }
 
         .meta-aligned-columns {
             flex: 2;
@@ -596,6 +646,17 @@ def get_html():
             border-radius: 6px;
             font-size: 13px;
             color: #BF4800;
+        }
+
+        .edge-item {
+            display: flex;
+            align-items: center;
+            padding: 6px 10px;
+            margin: 4px 0;
+            background: rgba(139, 92, 246, 0.08);
+            border-radius: 6px;
+            font-size: 13px;
+            color: #8B5CF6;
         }
 
         .placeholder { padding: 14px; text-align: center; color: #636366; font-size: 14px; background: #F5F5F7; border-radius: 12px; margin-bottom: 12px; }
@@ -750,6 +811,71 @@ def get_html():
         .summary-value { font-size: 24px; font-weight: 700; color: #0066CC; }
         .summary-label { font-size: 13px; color: #636366; margin-top: 4px; }
 
+        .validation-section {
+            margin-top: 24px;
+            padding: 20px 24px;
+            background: #FFFFFF;
+            border-radius: 12px;
+            border: 1px solid #E8E8ED;
+        }
+        .validation-section-title {
+            font-size: 15px;
+            font-weight: 600;
+            color: #1D1D1F;
+            margin-bottom: 16px;
+        }
+        .validation-layer {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 0;
+            border-bottom: 1px solid #F0F0F5;
+        }
+        .validation-layer:last-child { border-bottom: none; }
+        .validation-layer-label {
+            font-size: 13px;
+            font-weight: 500;
+            color: #636366;
+            min-width: 180px;
+        }
+        .validation-badge {
+            padding: 4px 12px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+        }
+        .validation-badge.pass { background: rgba(52, 199, 89, 0.12); color: #248A3D; }
+        .validation-badge.fail { background: rgba(255, 59, 48, 0.12); color: #D70015; }
+        .validation-badge.na { background: #F0F0F5; color: #8E8E93; }
+        .validation-details {
+            margin-top: 8px;
+            padding: 12px 16px;
+            background: #FFF5F5;
+            border-radius: 8px;
+            font-size: 12px;
+            color: #636366;
+            font-family: 'SF Mono', 'Monaco', 'Menlo', monospace;
+        }
+        .validation-details .detail-entity {
+            margin: 4px 0;
+            padding-left: 8px;
+            border-left: 2px solid #FF3B30;
+        }
+        .validation-warnings {
+            margin-top: 8px;
+            padding: 12px 16px;
+            background: #FFFAF0;
+            border-radius: 8px;
+            font-size: 12px;
+            color: #636366;
+            font-family: 'SF Mono', 'Monaco', 'Menlo', monospace;
+        }
+        .validation-warnings .detail-entity {
+            margin: 4px 0;
+            padding-left: 8px;
+            border-left: 2px solid #F39C12;
+        }
+
         /* Expand/Collapse styles */
         .toggle-btn {
             display: inline-flex;
@@ -832,6 +958,65 @@ def get_html():
             color: #636366;
             font-style: italic;
         }
+
+        /* Source Schemas Tab */
+        .source-schemas-page { padding: 32px 48px; }
+        .source-schemas-page .schema-section {
+            margin-bottom: 48px;
+            padding-bottom: 48px;
+            border-bottom: 1px solid #E8E8ED;
+        }
+        .source-schemas-page .schema-section:last-child { border-bottom: none; margin-bottom: 0; }
+        .schema-section-header {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .schema-section-header h2 {
+            font-size: 22px;
+            font-weight: 600;
+            color: #1D1D1F;
+        }
+        .schema-section-header .schema-badge { font-size: 14px; }
+        .schema-section-subtitle {
+            font-size: 14px;
+            color: #636366;
+            margin-bottom: 24px;
+        }
+        .schema-section .vis-and-code {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+        }
+        .schema-section .vis-block,
+        .schema-section .code-block-wrapper {
+            min-width: 0;
+        }
+        .schema-section .code-block-wrapper .sql-code-view {
+            max-height: 600px;
+            overflow-y: auto;
+        }
+        /* Full-width code block when no side-by-side visualization */
+        .schema-section .vis-and-code.full-width { grid-template-columns: 1fr; }
+
+        /* Document tree for MongoDB source schemas */
+        .document-tree {
+            font-family: 'SF Mono', 'Monaco', 'Menlo', monospace;
+            font-size: 13px;
+            line-height: 1.8;
+            color: #1D1D1F;
+            background: #F5F5F7;
+            border-radius: 16px;
+            padding: 24px;
+            border: 1px solid #E8E8ED;
+            white-space: pre-wrap;
+        }
+        .document-tree .dt-key { color: #0066CC; font-weight: 600; }
+        .document-tree .dt-type { color: #636366; }
+        .document-tree .dt-obj { color: #AF52DE; font-weight: 600; }
+        .document-tree .dt-arr { color: #BF4800; font-weight: 600; }
+        .document-tree .dt-comment { color: #636366; font-style: italic; font-size: 12px; }
     </style>
 </head>
 <body>
@@ -845,14 +1030,7 @@ def get_html():
             <span class="control-label">Migration Direction</span>
             <div class="dropdown">
                 <select id="directionSelect">
-                    <option value="person_d2r_specific">Person: MongoDB &rarr; PostgreSQL (Specific)</option>
-                    <option value="person_d2r_pauschalisiert" selected>Person: MongoDB &rarr; PostgreSQL (Pauschalisiert)</option>
-                    <option value="person_r2d_specific">Person: PostgreSQL &rarr; MongoDB (Specific)</option>
-                    <option value="person_r2d_pauschalisiert">Person: PostgreSQL &rarr; MongoDB (Pauschalisiert)</option>
-                    <option value="person_r2r_specific">Person: PostgreSQL &rarr; PostgreSQL V2 (Specific)</option>
-                    <option value="person_r2r_pauschalisiert">Person: PostgreSQL &rarr; PostgreSQL V2 (Pauschalisiert)</option>
-                    <option value="person_d2d_specific">Person: MongoDB &rarr; MongoDB V2 (Specific)</option>
-                    <option value="person_d2d_pauschalisiert">Person: MongoDB &rarr; MongoDB V2 (Pauschalisiert)</option>
+                    <!-- DROPDOWN_OPTIONS -->
                 </select>
             </div>
         </div>
@@ -864,24 +1042,27 @@ def get_html():
         <p>Running schema transformation...</p>
     </div>
 
-    <div class="welcome" id="welcome">
+    <div class="welcome" id="welcome" style="display:none;">
         <h2>Select migration or evolution and click Run</h2>
         <p>Compare source and target schemas side by side</p>
     </div>
 
-    <nav class="tab-nav" id="tabNav">
-        <button class="tab-btn active" data-tab="compare">Schema Comparison</button>
+    <nav class="tab-nav show" id="tabNav">
+        <button class="tab-btn active" data-tab="schemas">Source Schemas</button>
+        <button class="tab-btn" data-tab="compare">Schema Comparison</button>
         <button class="tab-btn" data-tab="smel">SMEL Script</button>
-        <button class="tab-btn" data-tab="migration">Migration Process</button>
+        <button class="tab-btn" data-tab="migration">Migration / Evolution Process</button>
     </nav>
 
-    <div class="tab-content active" id="tab-compare"></div>
+    <div class="tab-content active" id="tab-schemas"></div>
+    <div class="tab-content" id="tab-compare"></div>
     <div class="tab-content" id="tab-smel"></div>
     <div class="tab-content" id="tab-migration"></div>
 
     <footer class="footer">SMEL - Schema Migration & Evolution Language</footer>
 
     <script>
+        // INJECT_CONFIG
         let mermaidReady = false;
         try {
             if (typeof mermaid !== 'undefined') {
@@ -900,7 +1081,7 @@ def get_html():
                         fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif',
                         fontSize: '14px'
                     },
-                    er: { useMaxWidth: true, layoutDirection: 'LR', entityPadding: 15, fontSize: 14 }
+                    er: { useMaxWidth: true, layoutDirection: 'LR', entityPadding: 12, fontSize: 13 }
                 });
                 mermaidReady = true;
             }
@@ -921,7 +1102,6 @@ def get_html():
             const direction = document.getElementById('directionSelect').value;
             document.getElementById('welcome').style.display = 'none';
             document.getElementById('loading').classList.add('show');
-            document.getElementById('tabNav').classList.remove('show');
             document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
 
             try {
@@ -934,7 +1114,6 @@ def get_html():
                 renderCompareView();
                 renderSmelScript();
                 renderMigrationProcess();
-                document.getElementById('tabNav').classList.add('show');
                 document.querySelector('.tab-btn[data-tab="compare"]').click();
             } catch (error) {
                 document.getElementById('loading').classList.remove('show');
@@ -942,48 +1121,91 @@ def get_html():
             }
         }
 
+        function getBadgeClass(sourceType) {
+            return sourceType ? sourceType.toLowerCase() : 'document';
+        }
+
+        function isDDLType(sourceType) {
+            return sourceType === 'Relational' || sourceType === 'Columnar';
+        }
+
         function renderCompareView() {
             const container = document.getElementById('tab-compare');
-            const isSourceRelational = migrationData.source_type === 'Relational';
-            const isTargetRelational = migrationData.target_type === 'Relational';
+            const sourceType = migrationData.source_type;
+            const targetType = migrationData.target_type;
 
             let html = '<div class="schema-compare">';
             html += '<div class="schema-panel">';
             html += '<div class="panel-header"><span class="panel-title">Source Schema</span>';
-            html += '<span class="schema-badge ' + (isSourceRelational ? 'relational' : 'document') + '">' + migrationData.source_type + '</span></div>';
+            html += '<span class="schema-badge ' + getBadgeClass(sourceType) + '">' + sourceType + '</span></div>';
 
-            if (isSourceRelational) {
-                // Relational Source: Show original DDL with database-specific types
+            if (sourceType === 'Relational') {
+                // Relational Source: Original SQL DDL
                 html += '<div class="sql-section"><div class="section-title">Original DDL</div>';
                 html += '<div class="sql-code-view"><pre>' + escapeHtml(migrationData.raw_source) + '</pre></div></div>';
+            } else if (sourceType === 'Graph') {
+                // Graph Source: Graph Diagram + Original Cypher DDL
+                const sourceEntities = migrationData.meta_v1 || {};
+                html += '<div class="er-section"><div class="section-title">Graph Diagram</div>';
+                html += '<div class="er-diagram">' + generateGraphDiagram(sourceEntities) + '</div></div>';
+                html += '<div class="sql-section"><div class="section-title">Neo4j Cypher</div>';
+                html += '<div class="sql-code-view"><pre>' + escapeHtml(migrationData.raw_source) + '</pre></div></div>';
+            } else if (sourceType === 'Columnar') {
+                // Columnar Source: Chebotko Diagram + Original CQL
+                const sourceEntities = migrationData.meta_v1 || {};
+                html += '<div class="er-section"><div class="section-title">Chebotko Diagram</div>';
+                html += generateChebotkoDiagram(sourceEntities);
+                html += '</div>';
+                html += '<div class="sql-section"><div class="section-title">Original CQL</div>';
+                html += '<div class="sql-code-view"><pre>' + escapeHtml(migrationData.raw_source) + '</pre></div></div>';
             } else {
-                // Document Source: Show original JSON schema
+                // Document Source: Original JSON schema
                 html += '<div class="document-view"><div class="json-display">' + syntaxHighlightJSON(migrationData.raw_source) + '</div></div>';
             }
             html += '</div>';
 
             html += '<div class="schema-panel">';
             html += '<div class="panel-header"><span class="panel-title">Target Schema</span>';
-            html += '<span class="schema-badge ' + (isTargetRelational ? 'relational' : 'document') + '">' + migrationData.target_type + '</span></div>';
+            html += '<span class="schema-badge ' + getBadgeClass(targetType) + '">' + targetType + '</span></div>';
 
-            if (isTargetRelational) {
-                // Relational Target: Show ER Diagram + Generated DDL
+            // Use centralized export label from config (injected by Python)
+            const exportLabel = (typeof DB_TYPE_EXPORT_LABEL !== 'undefined' && DB_TYPE_EXPORT_LABEL[targetType])
+                ? DB_TYPE_EXPORT_LABEL[targetType]
+                : (targetType + ' Schema');
+
+            if (targetType === 'Relational') {
+                // Relational Target: ER Diagram + Generated DDL
                 const targetEntities = migrationData.target_with_db_types || migrationData.result;
                 html += '<div class="er-section"><div class="section-title">ER Diagram</div>';
                 html += '<div class="er-diagram">' + generateERDiagram(targetEntities) + '</div></div>';
-                html += '<div class="sql-section"><div class="section-title">Generated DDL</div>';
+                html += '<div class="sql-section"><div class="section-title">' + exportLabel + '</div>';
+                html += '<div class="sql-code-view"><pre>' + escapeHtml(migrationData.exported_target) + '</pre></div></div>';
+            } else if (targetType === 'Graph') {
+                // Graph Target: Graph Diagram + Generated Cypher
+                const targetEntities = migrationData.target_with_db_types || migrationData.result;
+                html += '<div class="er-section"><div class="section-title">Graph Diagram</div>';
+                html += '<div class="er-diagram">' + generateGraphDiagram(targetEntities) + '</div></div>';
+                html += '<div class="sql-section"><div class="section-title">' + exportLabel + '</div>';
+                html += '<div class="sql-code-view"><pre>' + escapeHtml(migrationData.exported_target) + '</pre></div></div>';
+            } else if (targetType === 'Columnar') {
+                // Columnar Target: Chebotko Diagram + Generated CQL
+                const targetEntities = migrationData.target_with_db_types || migrationData.result;
+                html += '<div class="er-section"><div class="section-title">Chebotko Diagram</div>';
+                html += generateChebotkoDiagram(targetEntities);
+                html += '</div>';
+                html += '<div class="sql-section"><div class="section-title">' + exportLabel + '</div>';
                 html += '<div class="sql-code-view"><pre>' + escapeHtml(migrationData.exported_target) + '</pre></div></div>';
             } else {
-                // Document Target: card view (same style as Source) + JSON Schema
-                const targetNested = migrationData.target_nested;
-                if (targetNested && Object.keys(targetNested).length > 0) {
+                // Document Target: card view + JSON Schema
+                const targetNested = filterEntities(migrationData.target_nested || {});
+                if (Object.keys(targetNested).length > 0) {
                     html += '<div class="document-view">';
                     Object.values(targetNested).forEach(entity => {
                         html += renderNestedEntityCard(entity);
                     });
                     html += '</div>';
                 }
-                html += '<div class="document-view"><div class="section-title">JSON Schema</div><div class="json-display">' + syntaxHighlightJSON(migrationData.exported_target) + '</div></div>';
+                html += '<div class="document-view"><div class="section-title">' + exportLabel + '</div><div class="json-display">' + syntaxHighlightJSON(migrationData.exported_target) + '</div></div>';
             }
             html += '</div></div>';
             container.innerHTML = html;
@@ -1064,14 +1286,116 @@ def get_html():
 
             // Summary
             html += '<div class="smel-summary">';
-            html += '<div class="summary-item"><div class="summary-value">' + migrationData.stats.source_count + '</div><div class="summary-label">Source Entities</div></div>';
+            html += '<div class="summary-item"><div class="summary-value">' + ((migrationData.stats || {}).source_count || 0) + '</div><div class="summary-label">Source Entities</div></div>';
             html += '<div class="summary-item"><div class="summary-value">' + operations.length + '</div><div class="summary-label">Operations</div></div>';
-            html += '<div class="summary-item"><div class="summary-value">' + migrationData.stats.result_count + '</div><div class="summary-label">Result Entities</div></div>';
+            html += '<div class="summary-item"><div class="summary-value">' + ((migrationData.stats || {}).result_count || 0) + '</div><div class="summary-label">Result Entities</div></div>';
             html += '<div class="summary-item"><div class="summary-value">' + migrationData.source_type + ' → ' + migrationData.target_type + '</div><div class="summary-label">Direction</div></div>';
             html += '</div>';
 
+            // Validation Results
+            html += renderValidation(migrationData);
+
             html += '</div></div>';
             container.innerHTML = html;
+        }
+
+        function renderValidation(data) {
+            var vMeta = data.validation_meta || {};
+            var vExport = data.validation_export || {};
+            // Skip if both N/A
+            if (vMeta.passed == null && vExport.passed == null) return '';
+
+            var html = '<div class="validation-section">';
+            html += '<div class="validation-section-title">Validation</div>';
+
+            html += renderValidationLayer('Layer 1 — SMEL Script', vMeta);
+            html += renderValidationLayer('Layer 2 — Adapter Export', vExport);
+
+            html += '</div>';
+            return html;
+        }
+
+        function renderValidationLayer(label, v) {
+            if (!v || v.passed == null) {
+                return '<div class="validation-layer">' +
+                    '<span class="validation-layer-label">' + label + '</span>' +
+                    '<span class="validation-badge na">' + (v && v.summary ? v.summary : 'N/A') + '</span>' +
+                    '</div>';
+            }
+            var badge = v.passed
+                ? '<span class="validation-badge pass">PASS</span>'
+                : '<span class="validation-badge fail">FAIL</span>';
+            var html = '<div class="validation-layer">' +
+                '<span class="validation-layer-label">' + label + '</span>' +
+                badge +
+                '<span style="font-size:12px;color:#8E8E93;">' + escapeHtml(v.summary || '') + '</span>' +
+                '</div>';
+            // Details for failures
+            if (!v.passed && v.details) {
+                var d = v.details;
+                var hasDetails = (d.missing_entities && d.missing_entities.length) ||
+                    (d.extra_entities && d.extra_entities.length) ||
+                    (d.entity_diffs && Object.keys(d.entity_diffs).length);
+                if (hasDetails) {
+                    html += '<div class="validation-details">';
+                    if (d.missing_entities && d.missing_entities.length)
+                        html += '<div>Missing entities: ' + d.missing_entities.join(', ') + '</div>';
+                    if (d.extra_entities && d.extra_entities.length)
+                        html += '<div>Extra entities: ' + d.extra_entities.join(', ') + '</div>';
+                    if (d.entity_diffs) {
+                        for (var ename in d.entity_diffs) {
+                            var ed = d.entity_diffs[ename];
+                            var parts = [];
+                            var ad = ed.attributes || {};
+                            if (ad.missing && ad.missing.length) parts.push('missing attrs: ' + ad.missing.join(', '));
+                            if (ad.extra && ad.extra.length) parts.push('extra attrs: ' + ad.extra.join(', '));
+                            if (ad.type_mismatches && ad.type_mismatches.length) {
+                                ad.type_mismatches.forEach(function(tm) {
+                                    parts.push(tm.attr + ': ' + tm.actual + ' != ' + tm.expected);
+                                });
+                            }
+                            var rd = ed.references || {};
+                            if (rd.missing && rd.missing.length) parts.push('missing refs: ' + rd.missing.join(', '));
+                            if (rd.extra && rd.extra.length) parts.push('extra refs: ' + rd.extra.join(', '));
+                            var emd = ed.embedded || {};
+                            if (emd.missing && emd.missing.length) parts.push('missing embedded: ' + emd.missing.join(', '));
+                            if (emd.extra && emd.extra.length) parts.push('extra embedded: ' + emd.extra.join(', '));
+                            if (parts.length) html += '<div class="detail-entity">' + escapeHtml(ename) + ': ' + escapeHtml(parts.join('; ')) + '</div>';
+                        }
+                    }
+                    html += '</div>';
+                }
+                // Warnings
+                var hasWarnings = d.entity_warnings && Object.keys(d.entity_warnings).length;
+                if (hasWarnings) {
+                    html += renderValidationWarnings(d.entity_warnings);
+                }
+            }
+            // Warnings for passed results
+            if (v.passed && v.details && v.details.entity_warnings && Object.keys(v.details.entity_warnings).length) {
+                html += renderValidationWarnings(v.details.entity_warnings);
+            }
+            return html;
+        }
+
+        function renderValidationWarnings(warnings) {
+            var html = '<div class="validation-warnings">';
+            html += '<div style="color:#F39C12;font-weight:600;margin-bottom:4px;">Warnings:</div>';
+            for (var ename in warnings) {
+                var w = warnings[ename];
+                var parts = [];
+                if (w.entity_kind) parts.push('kind: ' + w.entity_kind);
+                if (w.cardinality && w.cardinality.length) {
+                    w.cardinality.forEach(function(c) { parts.push(c); });
+                }
+                if (w.key_type && w.key_type.length) {
+                    w.key_type.forEach(function(k) { parts.push(k); });
+                }
+                if (w.fk_constraints) parts.push('FK constraints differ');
+                if (parts.length) html += '<div class="detail-entity">' + escapeHtml(ename) + ': ' + escapeHtml(parts.join('; ')) + '</div>';
+            }
+            html += '</div>';
+            return html;
         }
 
         function highlightSmelSyntax(code) {
@@ -1082,23 +1406,29 @@ def get_html():
             result = result.replace(/(--[^\\n]*)/g, '<span class="smel-comment">$1</span>');
 
             // Keywords
-            const keywords = ['MIGRATION', 'FROM', 'TO', 'USING', 'AS', 'INTO', 'WITH', 'WHERE', 'IN', 'KEY', 'AND', 'GENERATE', 'PREFIX', 'SERIAL',
+            const keywords = ['MIGRATION', 'FROM', 'TO', 'USING', 'AS', 'INTO', 'WITH', 'WHERE', 'IN', 'KEY', 'AND', 'BETWEEN', 'PREFIX', 'SERIAL',
                 'RELATIONAL', 'DOCUMENT', 'GRAPH', 'COLUMNAR',
                 'NEST', 'UNNEST', 'FLATTEN', 'UNFLATTEN', 'UNWIND', 'WIND',
-                'DELETE', 'ADD', 'RENAME', 'COPY', 'MOVE', 'MERGE', 'SPLIT', 'CAST', 'LINKING',
-                'REFERENCE', 'ATTRIBUTE', 'EMBEDDED', 'ENTITY', 'VARIATION', 'RELTYPE',
+                'DELETE', 'ADD', 'RENAME', 'COPY', 'MOVE', 'MERGE', 'SPLIT', 'CAST', 'TRANSFORM',
+                'REFERENCE', 'REFERENCES', 'ATTRIBUTE', 'ATTRIBUTES', 'EMBEDDED', 'ENTITY', 'RELATIONSHIP',
+                'COLUMNS', 'STRUCTURE', 'LABEL',
                 'CARDINALITY', 'ONE_TO_ONE', 'ONE_TO_MANY', 'ZERO_TO_ONE', 'ZERO_TO_MANY',
                 'PRIMARY', 'UNIQUE', 'FOREIGN', 'PARTITION', 'CLUSTERING',
                 // Specific grammar keywords
-                'ADD_ATTRIBUTE', 'ADD_REFERENCE', 'ADD_EMBEDDED', 'ADD_ENTITY', 'ADD_PRIMARY_KEY', 'ADD_FOREIGN_KEY', 'ADD_UNIQUE_KEY',
-                'DELETE_ATTRIBUTE', 'DELETE_REFERENCE', 'DELETE_EMBEDDED', 'DELETE_ENTITY',
-                'DELETE_PRIMARY_KEY', 'DELETE_UNIQUE_KEY', 'DELETE_FOREIGN_KEY', 'DELETE_VARIATION', 'DELETE_RELTYPE',
-                'REMOVE_VARIATION', 'REMOVE_FOREIGN_KEY', 'REMOVE_UNIQUE_KEY',
-                'RENAME_ATTRIBUTE', 'RENAME_ENTITY', 'RENAME_RELTYPE',
+                'ADD_ATTRIBUTE', 'ADD_CONSTRAINT', 'ADD_EMBEDDED', 'ADD_ENTITY', 'ADD_LABEL',
+                'ADD_PRIMARY_KEY', 'ADD_FOREIGN_KEY', 'ADD_UNIQUE_KEY',
+                'DELETE_ATTRIBUTE', 'DELETE_CONSTRAINT', 'DELETE_EMBEDDED', 'DELETE_ENTITY', 'DELETE_LABEL',
+                'DELETE_PRIMARY_KEY', 'DELETE_UNIQUE_KEY', 'DELETE_FOREIGN_KEY',
+                'REMOVE_FOREIGN_KEY', 'REMOVE_UNIQUE_KEY', 'REMOVE_KEY', 'REMOVE_LABEL',
+                'RENAME_ATTRIBUTE', 'RENAME_ENTITY',
+                'COPY_ATTRIBUTE', 'COPY_ENTITY', 'MOVE_ATTRIBUTE', 'CAST_ATTRIBUTE', 'CAST_CONSTRAINT', 'RECARD',
+                'ADD_RELTYPE', 'DELETE_RELTYPE', 'RENAME_RELTYPE',
+                'ADD_PARTITION_KEY', 'ADD_CLUSTERING_KEY', 'DELETE_PARTITION_KEY', 'DELETE_CLUSTERING_KEY',
+                'DELETION', 'CONSTRAINT',
                 // Pauschalisiert grammar keywords
-                'ADD_PS', 'DELETE_PS', 'REMOVE_PS', 'RENAME_PS',
+                'ADD_PS', 'DELETE_PS', 'REMOVE_PS', 'RENAME_PS', 'RELTYPE',
                 'FLATTEN_PS', 'UNFLATTEN_PS', 'NEST_PS', 'UNNEST_PS', 'UNWIND_PS', 'WIND_PS',
-                'COPY_PS', 'MOVE_PS', 'MERGE_PS', 'SPLIT_PS', 'CAST_PS', 'LINKING_PS'];
+                'COPY_PS', 'MOVE_PS', 'MERGE_PS', 'SPLIT_PS', 'CAST_PS', 'RECARD_PS', 'TRANSFORM_PS'];
             keywords.forEach(kw => {
                 result = result.replace(new RegExp('\\\\b' + kw + '\\\\b', 'g'), '<span class="smel-keyword">' + kw + '</span>');
             });
@@ -1242,112 +1572,183 @@ def get_html():
 
         function formatOperationParams(type, params) {
             if (!params) return '';
+            // Helper: escape HTML to prevent XSS and handle null/undefined
+            function esc(v) { return escapeHtml(String(v != null ? v : '')); }
             let html = '';
 
             switch(type) {
                 case 'NEST':
-                    html = '<span class="param-key">source:</span> <span class="param-value">' + params.source + '</span> → ';
-                    html += '<span class="param-key">target:</span> <span class="param-value">' + params.target + '</span>';
-                    if (params.alias) html += ' <span class="param-key">as:</span> <span class="param-value">' + params.alias + '</span>';
+                    html = '<span class="param-key">source:</span> <span class="param-value">' + esc(params.source) + '</span> → ';
+                    html += '<span class="param-key">target:</span> <span class="param-value">' + esc(params.target) + '</span>';
+                    if (params.alias) html += ' <span class="param-key">as:</span> <span class="param-value">' + esc(params.alias) + '</span>';
                     break;
-                case 'DELETE_REFERENCE':
-                    html = '<span class="param-key">reference:</span> <span class="param-value">' + params.reference + '</span>';
+                case 'DELETE_CONSTRAINT':
+                    html = '<span class="param-key">reference:</span> <span class="param-value">' + esc(params.reference) + '</span>';
                     break;
                 case 'DELETE_ENTITY':
-                    html = '<span class="param-key">entity:</span> <span class="param-value">' + params.name + '</span>';
+                    html = '<span class="param-key">entity:</span> <span class="param-value">' + esc(params.name) + '</span>';
                     break;
                 case 'RENAME':
-                    html = '<span class="param-key">rename:</span> <span class="param-value">' + params.old_name + '</span> → <span class="param-value">' + params.new_name + '</span>';
-                    if (params.entity) html += ' <span class="param-key">in:</span> <span class="param-value">' + params.entity + '</span>';
+                    html = '<span class="param-key">rename:</span> <span class="param-value">' + esc(params.old_name) + '</span> → <span class="param-value">' + esc(params.new_name) + '</span>';
+                    if (params.entity) html += ' <span class="param-key">in:</span> <span class="param-value">' + esc(params.entity) + '</span>';
                     break;
                 case 'FLATTEN':
-                    // FLATTEN: Flatten nested object fields into parent table (reduce depth by 1)
-                    // New syntax: FLATTEN_PS person.name (no target - flattens to same table with prefix)
-                    html = '<span class="param-key">source:</span> <span class="param-value">' + params.source + '</span>';
+                    html = '<span class="param-key">source:</span> <span class="param-value">' + esc(params.source) + '</span>';
                     html += ' <span style="color:#636366;font-size:12px;">(flatten to same table with prefix)</span>';
                     break;
                 case 'UNNEST':
-                    // UNNEST: Extract nested object to separate table (normalization)
-                    // New syntax: UNNEST person.address:street,city AS address WITH person.person_id TO address.person_id
-                    html = '<span class="param-value">' + params.source_path + '</span>';
+                    html = '<span class="param-value">' + esc(params.source_path) + '</span>';
                     if (params.attributes && params.attributes.length > 0) {
-                        html += ':' + params.attributes.join(',');
+                        html += ':' + params.attributes.map(a => esc(a)).join(',');
                     }
-                    html += ' <span class="param-key">AS</span> <span class="param-value">' + params.target + '</span>';
+                    html += ' <span class="param-key">AS</span> <span class="param-value">' + esc(params.target) + '</span>';
                     if (params.carry_fields && params.carry_fields.length > 0) {
                         html += ' <span class="param-key">WITH</span> ';
                         html += params.carry_fields.map(cf =>
-                            '<span class="param-value">' + cf.source + '</span> <span class="param-key">TO</span> <span class="param-value">' + cf.target + '</span>'
+                            '<span class="param-value">' + esc(cf.source) + '</span> <span class="param-key">TO</span> <span class="param-value">' + esc(cf.target) + '</span>'
                         ).join(', ');
                     }
                     break;
                 case 'UNWIND':
-                    // UNWIND: Expand array (two modes)
-                    html = '<span class="param-value">' + params.source + '</span>';
+                    html = '<span class="param-value">' + esc(params.source) + '</span>';
                     if (params.mode === 'create_table' && params.target) {
-                        // Mode 1: Create new table - UNWIND person.tags[] INTO person_tag
-                        html += ' → <span class="param-key">INTO</span> <span class="param-value">' + params.target + '</span>';
+                        html += ' → <span class="param-key">INTO</span> <span class="param-value">' + esc(params.target) + '</span>';
                     } else {
-                        // Mode 2: Expand in place - UNWIND person_tag.tags
                         html += ' <span class="param-key">(expand in place)</span>';
                     }
                     break;
                 case 'UNFLATTEN':
-                    // UNFLATTEN: Combine flat fields into nested object (reverse of FLATTEN)
-                    html = '<span class="param-value">' + params.entity + '</span>';
-                    html += '(' + params.fields.join(', ') + ')';
-                    html += ' <span class="param-key">AS</span> <span class="param-value">' + params.nested_name + '</span>';
+                    html = '<span class="param-value">' + esc(params.entity) + '</span>';
+                    html += '(' + (params.fields || []).map(f => esc(f)).join(', ') + ')';
+                    html += ' <span class="param-key">AS</span> <span class="param-value">' + esc(params.nested_name) + '</span>';
                     break;
                 case 'WIND':
-                    // WIND: Convert scalar attribute back to array (reverse of UNWIND)
-                    // Only in-place mode: WIND person_tag.tags (scalar → array)
-                    // Cross-entity movement is handled by MERGE, not WIND.
-                    html = '<span class="param-value">' + params.source + '</span>';
+                    html = '<span class="param-value">' + esc(params.source) + '</span>';
                     html += ' <span class="param-key">(scalar → array)</span>';
                     break;
                 case 'SPLIT':
-                    // SPLIT: Vertical partitioning of same-level fields
-                    // New syntax: SPLIT_PS person INTO person(a, b), person_tag(a, c)
-                    html = '<span class="param-value">' + params.source + '</span> <span class="param-key">INTO</span> ';
+                case 'SPLIT_FLAT':
+                    html = '<span class="param-value">' + esc(params.source) + '</span> <span class="param-key">INTO</span> ';
                     if (params.parts && params.parts.length > 0) {
-                        html += params.parts.map(p => '<span class="param-value">' + p.name + '</span>(' + (p.fields || []).join(', ') + ')').join(', ');
+                        html += params.parts.map(p => '<span class="param-value">' + esc(p.name) + '</span>(' + (p.fields || []).map(f => esc(f)).join(', ') + ')').join(', ');
                     }
                     break;
                 case 'ADD_KEY':
-                    html = '<span class="param-key">key_type:</span> <span class="param-value">' + (params.key_type || 'PRIMARY') + '</span> ';
+                    html = '<span class="param-key">key_type:</span> <span class="param-value">' + esc(params.key_type || 'PRIMARY') + '</span> ';
                     if (params.key_columns) {
-                        const cols = params.key_columns.length > 1 ? '(' + params.key_columns.join(', ') + ')' : params.key_columns[0];
+                        const cols = params.key_columns.length > 1 ? '(' + params.key_columns.map(c => esc(c)).join(', ') + ')' : esc(params.key_columns[0]);
                         html += '<span class="param-key">columns:</span> <span class="param-value">' + cols + '</span>';
                     }
-                    if (params.data_type) html += ' <span class="param-key">AS</span> <span class="param-value">' + params.data_type + '</span>';
-                    if (params.entity) html += ' <span class="param-key">TO</span> <span class="param-value">' + params.entity + '</span>';
+                    if (params.data_type) html += ' <span class="param-key">AS</span> <span class="param-value">' + esc(params.data_type) + '</span>';
+                    if (params.entity) html += ' <span class="param-key">TO</span> <span class="param-value">' + esc(params.entity) + '</span>';
                     break;
                 case 'DELETE_KEY':
-                    html = '<span class="param-key">key_type:</span> <span class="param-value">' + params.key_type + '</span> ';
+                    html = '<span class="param-key">key_type:</span> <span class="param-value">' + esc(params.key_type) + '</span> ';
                     if (params.key_columns) {
-                        const cols = params.key_columns.length > 1 ? '(' + params.key_columns.join(', ') + ')' : params.key_columns[0];
+                        const cols = params.key_columns.length > 1 ? '(' + params.key_columns.map(c => esc(c)).join(', ') + ')' : esc(params.key_columns[0]);
                         html += '<span class="param-key">columns:</span> <span class="param-value">' + cols + '</span>';
                     }
-                    if (params.entity) html += ' <span class="param-key">FROM</span> <span class="param-value">' + params.entity + '</span>';
+                    if (params.entity) html += ' <span class="param-key">FROM</span> <span class="param-value">' + esc(params.entity) + '</span>';
                     break;
-                case 'ADD_REFERENCE':
-                    // New syntax: field_name REFERENCES target_table(target_column)
+                case 'ADD_CONSTRAINT':
                     if (params.field_name) {
-                        html = '<span class="param-key">field:</span> <span class="param-value">' + params.field_name + '</span> ';
-                        html += '<span class="param-key">REFERENCES</span> <span class="param-value">' + params.target_table + '(' + params.target_column + ')</span>';
+                        html = '<span class="param-key">field:</span> <span class="param-value">' + esc(params.field_name) + '</span> ';
+                        html += '<span class="param-key">REFERENCES</span> <span class="param-value">' + esc(params.target_table) + '(' + esc(params.target_column) + ')</span>';
                     } else {
-                        // Fallback to old syntax
-                        html = '<span class="param-key">reference:</span> <span class="param-value">' + params.reference + '</span> → ';
-                        html += '<span class="param-key">target:</span> <span class="param-value">' + params.target + '</span>';
+                        html = '<span class="param-key">reference:</span> <span class="param-value">' + esc(params.reference) + '</span> → ';
+                        html += '<span class="param-key">target:</span> <span class="param-value">' + esc(params.target) + '</span>';
                     }
                     break;
                 case 'DELETE_EMBEDDED':
-                    html = '<span class="param-key">embedded:</span> <span class="param-value">' + params.embedded + '</span>';
+                    html = '<span class="param-key">embedded:</span> <span class="param-value">' + esc(params.embedded) + '</span>';
+                    break;
+                case 'ADD_RELTYPE':
+                    html = '<span class="param-key">reltype:</span> <span class="param-value">' + esc(params.name) + '</span> ';
+                    html += '<span class="param-key">BETWEEN</span> <span class="param-value">' + esc(params.source_entity) + '</span> ';
+                    html += '<span class="param-key">AND</span> <span class="param-value">' + esc(params.target_entity) + '</span>';
+                    break;
+                case 'DELETE_RELTYPE':
+                    html = '<span class="param-key">reltype:</span> <span class="param-value">' + esc(params.name) + '</span>';
+                    break;
+                case 'RENAME_RELTYPE':
+                    html = '<span class="param-key">rename:</span> <span class="param-value">' + esc(params.old_name) + '</span> → <span class="param-value">' + esc(params.new_name) + '</span>';
+                    break;
+                case 'ADD_ATTRIBUTE':
+                    html = '<span class="param-key">attribute:</span> <span class="param-value">' + esc(params.name) + '</span>';
+                    if (params.data_type) html += ' <span class="param-key">type:</span> <span class="param-value">' + esc(params.data_type) + '</span>';
+                    if (params.entity) html += ' <span class="param-key">TO</span> <span class="param-value">' + esc(params.entity) + '</span>';
+                    break;
+                case 'ADD_EMBEDDED':
+                    html = '<span class="param-key">embedded:</span> <span class="param-value">' + esc(params.name) + '</span>';
+                    if (params.entity) html += ' <span class="param-key">TO</span> <span class="param-value">' + esc(params.entity) + '</span>';
+                    break;
+                case 'ADD_ENTITY':
+                    html = '<span class="param-key">entity:</span> <span class="param-value">' + esc(params.name) + '</span>';
+                    break;
+                case 'ADD_LABEL':
+                    html = '<span class="param-key">label:</span> <span class="param-value">' + esc(params.label) + '</span>';
+                    if (params.entity) html += ' <span class="param-key">TO</span> <span class="param-value">' + esc(params.entity) + '</span>';
+                    break;
+                case 'DELETE_ATTRIBUTE':
+                    html = '<span class="param-key">target:</span> <span class="param-value">' + esc(params.target) + '</span>';
+                    break;
+                case 'DELETE_LABEL':
+                    html = '<span class="param-key">label:</span> <span class="param-value">' + esc(params.label) + '</span>';
+                    if (params.entity) html += ' <span class="param-key">FROM</span> <span class="param-value">' + esc(params.entity) + '</span>';
+                    break;
+                case 'REMOVE_KEY':
+                    html = '<span class="param-key">key_type:</span> <span class="param-value">' + esc(params.key_type || 'PRIMARY') + '</span>';
+                    if (params.key_columns) {
+                        html += ' <span class="param-key">columns:</span> <span class="param-value">' + params.key_columns.map(c => esc(c)).join(', ') + '</span>';
+                    }
+                    if (params.entity) html += ' <span class="param-key">FROM</span> <span class="param-value">' + esc(params.entity) + '</span>';
+                    break;
+                case 'REMOVE_LABEL':
+                    html = '<span class="param-key">label:</span> <span class="param-value">' + esc(params.label) + '</span>';
+                    if (params.entity) html += ' <span class="param-key">FROM</span> <span class="param-value">' + esc(params.entity) + '</span>';
+                    break;
+                case 'RENAME_ENTITY':
+                    html = '<span class="param-key">rename:</span> <span class="param-value">' + esc(params.old_name) + '</span> → <span class="param-value">' + esc(params.new_name) + '</span>';
+                    break;
+                case 'COPY':
+                    html = '<span class="param-value">' + esc(params.source) + '</span>';
+                    html += ' <span class="param-key">TO</span> <span class="param-value">' + esc(params.target) + '</span>';
+                    break;
+                case 'COPY_ENTITY':
+                    html = '<span class="param-key">entity:</span> <span class="param-value">' + esc(params.source) + '</span>';
+                    html += ' <span class="param-key">AS</span> <span class="param-value">' + esc(params.target) + '</span>';
+                    break;
+                case 'MOVE':
+                    html = '<span class="param-value">' + esc(params.source) + '</span>';
+                    html += ' <span class="param-key">TO</span> <span class="param-value">' + esc(params.target) + '</span>';
+                    break;
+                case 'MERGE':
+                    html = '<span class="param-value">' + esc(params.source1) + '</span>, ';
+                    html += '<span class="param-value">' + esc(params.source2) + '</span>';
+                    html += ' <span class="param-key">INTO</span> <span class="param-value">' + esc(params.target) + '</span>';
+                    if (params.alias) html += ' <span class="param-key">AS</span> <span class="param-value">' + esc(params.alias) + '</span>';
+                    break;
+                case 'CAST':
+                    html = '<span class="param-key">target:</span> <span class="param-value">' + esc(params.target) + '</span>';
+                    html += ' <span class="param-key">TO</span> <span class="param-value">' + esc(params.type || params.data_type) + '</span>';
+                    break;
+                case 'CAST_CONSTRAINT':
+                    html = '<span class="param-key">target:</span> <span class="param-value">' + esc(params.target) + '</span>';
+                    html += ' <span class="param-key">TO</span> <span class="param-value">' + esc(params.constraint_type) + '</span>';
+                    break;
+                case 'RECARD':
+                    html = '<span class="param-key">target:</span> <span class="param-value">' + esc(params.target) + '</span>';
+                    html += ' <span class="param-key">TO</span> <span class="param-value">' + esc(params.cardinality) + '</span>';
+                    break;
+                case 'TRANSFORM':
+                    html = '<span class="param-key">entity:</span> <span class="param-value">' + esc(params.name) + '</span>';
+                    html += ' <span class="param-key">TO</span> <span class="param-value">' + esc(params.target_type) + '</span>';
+                    if (params.source_entity) html += ' <span class="param-key">BETWEEN</span> <span class="param-value">' + esc(params.source_entity) + '</span> <span class="param-key">AND</span> <span class="param-value">' + esc(params.target_entity) + '</span>';
                     break;
                 default:
                     html = Object.entries(params).map(([k, v]) => {
                         if (typeof v === 'object') return '';
-                        return '<span class="param-key">' + k + ':</span> <span class="param-value">' + v + '</span>';
+                        return '<span class="param-key">' + esc(k) + ':</span> <span class="param-value">' + esc(v) + '</span>';
                     }).filter(x => x).join(' ');
             }
             return html;
@@ -1358,18 +1759,19 @@ def get_html():
             return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         }
 
-        function renderRelationalPanel(entities, type) {
-            let html = '<div class="er-section"><div class="section-title">ER Diagram</div>';
-            html += '<div class="er-diagram">' + generateERDiagram(entities) + '</div></div>';
-            html += '<div class="tables-section"><div class="section-title">Tables</div><div class="tables-grid">';
-            Object.values(entities).forEach(entity => { html += renderTableCard(entity); });
-            html += '</div></div>';
-            return html;
+        // Filter out __relationship_types__ special key from entity dicts
+        function filterEntities(entities) {
+            if (!entities) return {};
+            const filtered = {};
+            Object.entries(entities).forEach(([k, v]) => {
+                if (!k.startsWith('__')) filtered[k] = v;
+            });
+            return filtered;
         }
 
         function generateMermaidSyntax(entities) {
             let syntax = 'erDiagram\\n';
-            const entityList = Object.values(entities);
+            const entityList = Object.values(filterEntities(entities));
             const addedRels = new Set();
 
             entityList.forEach(entity => {
@@ -1426,6 +1828,15 @@ def get_html():
                         syntax += '    ' + src + ' ' + rel + ' ' + tgt + ' : "embedded"\\n';
                     }
                 });
+                (entity.edges || []).forEach(edge => {
+                    const tgt = edge.target.replace(/[^a-zA-Z0-9_]/g, '_');
+                    const key = src + '-' + tgt + '-' + edge.name;
+                    if (!addedRels.has(key)) {
+                        addedRels.add(key);
+                        const rel = edge.cardinality === '1..1' ? '||--||' : '||--o{';
+                        syntax += '    ' + src + ' ' + rel + ' ' + tgt + ' : "' + edge.name + '"\\n';
+                    }
+                });
             });
             return syntax;
         }
@@ -1434,24 +1845,236 @@ def get_html():
             return '<div class="mermaid">' + generateMermaidSyntax(entities) + '</div>';
         }
 
-        function renderTableCard(entity) {
-            const refs = entity.references || [];
-            const refNames = new Set(refs.map(r => r.name));
-            let html = '<div class="table-card"><div class="table-header"><span class="table-icon">T</span>' + entity.name + '</div><div class="table-body">';
-            (entity.attributes || []).forEach(attr => {
-                const isFk = refNames.has(attr.name);
-                html += '<div class="table-row"><span class="col-name">' + attr.name + '</span><span class="col-type">' + attr.type + '</span>';
-                if (attr.is_key) html += '<span class="col-badge pk">PK</span>';
-                if (isFk) html += '<span class="col-badge fk">FK</span>';
-                if (attr.is_optional) html += '<span class="col-badge null">NULL</span>';
-                html += '</div>';
+        function generateGraphDiagram(entities) {
+            const entityList = Object.values(filterEntities(entities));
+            if (entityList.length === 0) return '';
+
+            // ── Step 1: Collect all edges ──
+            const allEdges = [];
+            const addedEdges = new Set();
+            entityList.forEach(entity => {
+                (entity.edges || []).forEach(edge => {
+                    const key = entity.name + '->' + edge.target + ':' + edge.name;
+                    if (!addedEdges.has(key)) {
+                        addedEdges.add(key);
+                        allEdges.push({ source: entity.name, target: edge.target, name: edge.name });
+                    }
+                });
             });
-            html += '</div>';
-            if (refs.length > 0) {
-                html += '<div class="fk-section">';
-                refs.forEach(r => { html += '<div>' + r.name + ' &rarr; ' + r.target + '</div>'; });
-                html += '</div>';
+            const relTypes = entities['__relationship_types__'] || {};
+            Object.entries(relTypes).forEach(([name, rt]) => {
+                const key = (rt.source_entity||'') + '->' + (rt.target_entity||'') + ':' + (rt.rel_name||name);
+                if (rt.source_entity && rt.target_entity && !addedEdges.has(key)) {
+                    addedEdges.add(key);
+                    allEdges.push({ source: rt.source_entity, target: rt.target_entity, name: rt.rel_name || name });
+                }
+            });
+
+            // ── Step 2: Count connections per node ──
+            const connCount = {};
+            entityList.forEach(e => { connCount[e.name] = 0; });
+            allEdges.forEach(e => {
+                if (connCount[e.source] !== undefined) connCount[e.source]++;
+                if (connCount[e.target] !== undefined) connCount[e.target]++;
+            });
+
+            // ── Step 3: Pick hub nodes (top N by connection count) ──
+            const sorted = Object.entries(connCount).sort((a, b) => b[1] - a[1]);
+            let numHubs = entityList.length >= 10 ? 3 : (entityList.length >= 5 ? 2 : 1);
+            numHubs = Math.min(numHubs, sorted.length);
+            const hubNames = sorted.slice(0, numHubs).map(e => e[0]);
+
+            // ── Step 4: Assign each non-hub node to its most-connected hub ──
+            const clusters = {};
+            hubNames.forEach(h => { clusters[h] = []; });
+
+            entityList.forEach(entity => {
+                if (hubNames.includes(entity.name)) return;
+                let bestHub = hubNames[0];
+                let bestScore = -1;
+                hubNames.forEach(hub => {
+                    let score = 0;
+                    allEdges.forEach(edge => {
+                        if ((edge.source === entity.name && edge.target === hub) ||
+                            (edge.target === entity.name && edge.source === hub)) {
+                            score += 2;
+                        }
+                    });
+                    if (score > bestScore || (score === bestScore && clusters[hub].length < clusters[bestHub].length)) {
+                        bestScore = score;
+                        bestHub = hub;
+                    }
+                });
+                clusters[bestHub].push(entity.name);
+            });
+
+            // ── Step 5: Calculate positions ──
+            const W = 960, H = entityList.length >= 7 ? 760 : 700;
+            const hubR = 30, satR = 22;
+            const pos = {};
+
+            const hubCenters = numHubs === 1
+                ? [{ x: W/2, y: H/2 }]
+                : numHubs === 2
+                    ? [{ x: W*0.25, y: H*0.5 }, { x: W*0.75, y: H*0.5 }]
+                    : [{ x: W*0.28, y: H*0.50 }, { x: W*0.72, y: H*0.25 }, { x: W*0.72, y: H*0.75 }];
+
+            hubNames.forEach((hub, i) => {
+                const hc = hubCenters[i];
+                pos[hub] = { x: hc.x, y: hc.y, isHub: true, hubIdx: i };
+                const sats = clusters[hub];
+                if (sats.length === 0) return;
+                const ringR = Math.max(95, Math.min(180, sats.length * 22 + 10));
+                sats.forEach((name, j) => {
+                    const angle = (2 * Math.PI * j / sats.length) - Math.PI / 2;
+                    pos[name] = {
+                        x: hc.x + ringR * Math.cos(angle),
+                        y: hc.y + ringR * Math.sin(angle),
+                        isHub: false, hubIdx: i
+                    };
+                });
+            });
+
+            // ── Step 6: Build SVG ──
+            const hubThemes = [
+                { fill:'#DBEAFE', stroke:'#3B82F6', text:'#1E40AF', satFill:'#EFF6FF', satStroke:'#93C5FD', satText:'#1E3A5F' },
+                { fill:'#FEF3C7', stroke:'#F59E0B', text:'#92400E', satFill:'#FFFBEB', satStroke:'#FCD34D', satText:'#78350F' },
+                { fill:'#D1FAE5', stroke:'#10B981', text:'#065F46', satFill:'#ECFDF5', satStroke:'#6EE7B7', satText:'#064E3B' }
+            ];
+            const interEdge = '#94A3B8';
+            const selfEdge = '#E11D48';
+            const labelColor = '#475569';
+
+            let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;max-width:960px;height:auto;font-family:-apple-system,BlinkMacSystemFont,sans-serif;">';
+
+            // Arrowhead markers
+            svg += '<defs>';
+            svg += '<marker id="ahG" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="' + interEdge + '"/></marker>';
+            svg += '<marker id="ahS" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="' + selfEdge + '"/></marker>';
+            for (let i = 0; i < numHubs; i++) {
+                svg += '<marker id="ahC' + i + '" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="' + hubThemes[i].stroke + '" opacity="0.6"/></marker>';
             }
+            svg += '</defs>';
+
+            // Cluster background circles (subtle dashed)
+            hubNames.forEach((hub, i) => {
+                const hc = hubCenters[i];
+                const sats = clusters[hub];
+                if (sats.length === 0) return;
+                const bgR = Math.max(115, sats.length * 20 + 48);
+                svg += '<circle cx="' + hc.x + '" cy="' + hc.y + '" r="' + bgR + '" fill="' + hubThemes[i].satFill + '" stroke="' + hubThemes[i].satStroke + '" stroke-width="1" stroke-dasharray="6,3" opacity="0.4"/>';
+            });
+
+            // Group edges by pair for parallel offset
+            const edgesByPair = {};
+            allEdges.forEach(edge => {
+                const pairKey = [edge.source, edge.target].sort().join('|');
+                if (!edgesByPair[pairKey]) edgesByPair[pairKey] = [];
+                edgesByPair[pairKey].push(edge);
+            });
+
+            // Draw edges
+            allEdges.forEach(edge => {
+                const s = pos[edge.source], t = pos[edge.target];
+                if (!s || !t) return;
+                const isSelf = edge.source === edge.target;
+                const sameCluster = s.hubIdx === t.hubIdx;
+                let eColor, marker, eOpacity;
+                if (isSelf) {
+                    eColor = selfEdge; marker = 'url(#ahS)'; eOpacity = '0.8';
+                } else if (sameCluster) {
+                    eColor = hubThemes[s.hubIdx].stroke; marker = 'url(#ahC' + s.hubIdx + ')'; eOpacity = '0.4';
+                } else {
+                    eColor = interEdge; marker = 'url(#ahG)'; eOpacity = '0.65';
+                }
+
+                const pairKey = [edge.source, edge.target].sort().join('|');
+                const pairEdges = edgesByPair[pairKey] || [];
+                const edgeIdx = pairEdges.indexOf(edge);
+
+                if (isSelf) {
+                    const nodeR = s.isHub ? hubR : satR;
+                    const loopR = 25 + edgeIdx * 12;
+                    svg += '<path d="M ' + (s.x-8) + ' ' + (s.y-nodeR) + ' C ' + (s.x-loopR*1.2) + ' ' + (s.y-nodeR-loopR*1.5) + ', ' + (s.x+loopR*1.2) + ' ' + (s.y-nodeR-loopR*1.5) + ', ' + (s.x+8) + ' ' + (s.y-nodeR) + '" fill="none" stroke="' + eColor + '" stroke-width="1.3" opacity="' + eOpacity + '" marker-end="' + marker + '"/>';
+                    svg += '<text x="' + s.x + '" y="' + (s.y-nodeR-loopR*0.8) + '" text-anchor="middle" font-size="7" fill="' + eColor + '" font-weight="500">' + escapeHtml(edge.name) + '</text>';
+                } else {
+                    const dx = t.x-s.x, dy = t.y-s.y;
+                    const dist = Math.sqrt(dx*dx+dy*dy);
+                    if (dist < 0.1) return;
+                    const nx = dx/dist, ny = dy/dist;
+                    const sR = s.isHub ? hubR : satR;
+                    const tR = t.isHub ? hubR : satR;
+                    const x1 = s.x + nx*(sR+2), y1 = s.y + ny*(sR+2);
+                    const x2 = t.x - nx*(tR+10), y2 = t.y - ny*(tR+10);
+                    const offset = pairEdges.length > 1 ? (edgeIdx-(pairEdges.length-1)/2)*18 : 0;
+                    const mx = (x1+x2)/2 + (-ny)*offset;
+                    const my = (y1+y2)/2 + nx*offset;
+
+                    if (Math.abs(offset) > 0.1) {
+                        svg += '<path d="M '+x1+' '+y1+' Q '+mx+' '+my+' '+x2+' '+y2+'" fill="none" stroke="'+eColor+'" stroke-width="1.1" opacity="'+eOpacity+'" marker-end="'+marker+'"/>';
+                    } else {
+                        svg += '<line x1="'+x1+'" y1="'+y1+'" x2="'+x2+'" y2="'+y2+'" stroke="'+eColor+'" stroke-width="1.1" opacity="'+eOpacity+'" marker-end="'+marker+'"/>';
+                    }
+                    svg += '<text x="'+mx+'" y="'+(my-3)+'" text-anchor="middle" font-size="7" fill="'+labelColor+'" opacity="0.8">'+escapeHtml(edge.name)+'</text>';
+                }
+            });
+
+            // Draw hub nodes (larger, bold colors)
+            hubNames.forEach((hub, i) => {
+                const p = pos[hub];
+                const th = hubThemes[i];
+                svg += '<circle cx="'+p.x+'" cy="'+p.y+'" r="'+hubR+'" fill="'+th.fill+'" stroke="'+th.stroke+'" stroke-width="2.5"/>';
+                const fs = hub.length > 10 ? 9 : (hub.length > 7 ? 10 : 11);
+                svg += '<text x="'+p.x+'" y="'+(p.y+4)+'" text-anchor="middle" font-size="'+fs+'" font-weight="700" fill="'+th.text+'">'+escapeHtml(hub)+'</text>';
+            });
+
+            // Draw satellite nodes (smaller, lighter colors matching their hub)
+            entityList.forEach(entity => {
+                if (hubNames.includes(entity.name)) return;
+                const p = pos[entity.name];
+                if (!p) return;
+                const th = hubThemes[p.hubIdx];
+                svg += '<circle cx="'+p.x+'" cy="'+p.y+'" r="'+satR+'" fill="'+th.satFill+'" stroke="'+th.satStroke+'" stroke-width="1.5"/>';
+                const fs = entity.name.length > 11 ? 7.5 : (entity.name.length > 8 ? 8.5 : 9.5);
+                svg += '<text x="'+p.x+'" y="'+(p.y+3)+'" text-anchor="middle" font-size="'+fs+'" font-weight="600" fill="'+th.satText+'">'+escapeHtml(entity.name)+'</text>';
+            });
+
+            // Summary label at bottom
+            svg += '<text x="' + (W/2) + '" y="' + (H-12) + '" text-anchor="middle" font-size="11" fill="#94A3B8" font-weight="500">' + entityList.length + ' Nodes, ' + allEdges.length + ' Relationships</text>';
+
+            svg += '</svg>';
+            return '<div class="graph-svg-container">' + svg + '</div>';
+        }
+
+        function generateChebotkoDiagram(entities) {
+            const entityList = Object.values(filterEntities(entities));
+            if (entityList.length === 0) return '';
+
+            let html = '<div class="chebotko-diagram">';
+            entityList.forEach(entity => {
+                html += '<div class="chebotko-table">';
+                html += '<div class="chebotko-header">' + escapeHtml(entity.name) + '</div>';
+                html += '<table class="chebotko-cols">';
+
+                (entity.attributes || []).forEach(attr => {
+                    let marker = '';
+                    const keyType = attr.key_type || null;
+                    if (keyType === 'partition') {
+                        marker = '<span class="ck-marker pk">K&#x2191;</span>';
+                    } else if (keyType === 'clustering') {
+                        marker = '<span class="ck-marker ck">C&#x2191;</span>';
+                    } else if (attr.is_key) {
+                        marker = '<span class="ck-marker pk">K&#x2191;</span>';
+                    }
+                    html += '<tr>';
+                    html += '<td class="ck-marker-cell">' + marker + '</td>';
+                    html += '<td class="ck-name">' + escapeHtml(attr.name) + '</td>';
+                    html += '<td class="ck-type">' + escapeHtml(attr.type) + '</td>';
+                    html += '</tr>';
+                });
+
+                html += '</table></div>';
+            });
             html += '</div>';
             return html;
         }
@@ -1469,34 +2092,38 @@ def get_html():
 
         function renderMigrationProcess() {
             const container = document.getElementById('tab-migration');
-            const isSourceRelational = migrationData.source_type === 'Relational';
-            const isTargetRelational = migrationData.target_type === 'Relational';
+            const targetType = migrationData.target_type;
 
             // Meta V1 and Meta V2 entities (must be aligned)
-            const metaEntities = new Set([...Object.keys(migrationData.meta_v1), ...Object.keys(migrationData.result)]);
-            const newEntities = new Set(migrationData.changes.filter(c => c.startsWith('FLATTEN:') || c.startsWith('NEST:') || c.startsWith('UNWIND:')).map(c => c.split(':')[1]));
-
-            // Source entities (independent)
-            const sourceEntities = Object.values(migrationData.source);
-
-            // Target: use exported_target for display
+            const metaEntities = new Set([...Object.keys(filterEntities(migrationData.meta_v1 || {})), ...Object.keys(filterEntities(migrationData.result || {}))]);
+            const newEntities = new Set((migrationData.changes || []).filter(c => c.startsWith('FLATTEN:') || c.startsWith('NEST:') || c.startsWith('UNWIND:') || c.startsWith('ADD_ENTITY:')).map(c => {
+                const p = c.split(':');
+                const val = p[1] || '';
+                if (val.includes('->')) return val.split('->').pop();
+                if (val.includes('.')) return val;
+                return val;
+            }).filter(x => x));
 
             let html = '<div class="migration-content"><div class="legend">';
             html += '<div class="legend-item"><span class="legend-dot new"></span>New Entity</div>';
             html += '<div class="legend-item"><span class="legend-dot reference"></span>Reference (FK)</div>';
             html += '<div class="legend-item"><span class="legend-dot embedded"></span>Embedded</div>';
+            html += '<div class="legend-item"><span class="legend-dot edge"></span>Edge (Graph)</div>';
             html += '<div class="legend-item"><span class="legend-dot pk"></span>Primary Key</div></div>';
 
-            // Four-column layout
-            html += '<div class="four-column-layout">';
+            // Four-column layout (dense for 7+ entities)
+            const entityCount = Object.keys(filterEntities(migrationData.result || {})).length;
+            const denseClass = entityCount >= 7 ? ' dense-layout' : '';
+            html += '<div class="four-column-layout' + denseClass + '">';
 
             // Column 1: Source Schema (original nested structure before reverse eng)
             html += '<div class="independent-column source-column">';
             html += '<div class="column-header"><h3>Source</h3><div class="subtitle">' + migrationData.source_type + '</div></div>';
             html += '<div class="column-content">';
-            const sourceData = migrationData.original_source && Object.keys(migrationData.original_source).length > 0
+            const sourceDataRaw = migrationData.original_source && Object.keys(migrationData.original_source).length > 0
                 ? migrationData.original_source
                 : migrationData.source;
+            const sourceData = filterEntities(sourceDataRaw || {});
             Object.values(sourceData).forEach(entity => {
                 html += renderNestedEntityCard(entity);
             });
@@ -1513,7 +2140,7 @@ def get_html():
             // Aligned entity rows
             Array.from(metaEntities).sort().forEach(name => {
                 // Meta V1 cell
-                const v1Entity = migrationData.meta_v1[name];
+                const v1Entity = (migrationData.meta_v1 || {})[name];
                 html += '<div class="grid-cell">';
                 if (!v1Entity) {
                     html += '<div class="entity-card placeholder-card"><div class="entity-name placeholder-name">' + name + '</div>';
@@ -1524,7 +2151,7 @@ def get_html():
                 html += '</div>';
 
                 // Meta V2 cell
-                const v2Entity = migrationData.result[name];
+                const v2Entity = (migrationData.result || {})[name];
                 html += '<div class="grid-cell">';
                 if (!v2Entity) {
                     html += '<div class="entity-card placeholder-card"><div class="entity-name placeholder-name">' + name + '</div>';
@@ -1540,15 +2167,38 @@ def get_html():
 
             // Column 4: Target Schema (Forward Engineering result - Schema format)
             html += '<div class="independent-column target-column">';
-            html += '<div class="column-header"><h3>Target</h3><div class="subtitle">' + migrationData.target_type + '</div></div>';
+            html += '<div class="column-header"><h3>Target</h3><div class="subtitle">' + targetType + '</div></div>';
             html += '<div class="column-content">';
-            if (isTargetRelational) {
-                // Show schema format
+            if (targetType === 'Relational') {
+                // Relational: ER Diagram + DDL
+                const targetEntities = migrationData.target_with_db_types || migrationData.result;
+                html += '<div class="er-section"><div class="section-title">ER Diagram</div>';
+                html += '<div class="er-diagram">' + generateERDiagram(targetEntities) + '</div></div>';
+                html += '<div class="schema-view"><pre class="schema-code">' + escapeHtml(migrationData.exported_target) + '</pre></div>';
+            } else if (targetType === 'Graph') {
+                // Graph: Entity cards with edge indicators + Cypher DDL
+                // (full graph diagram is shown in Compare view; cards are clearer in narrow column)
+                const targetEntities = migrationData.target_with_db_types || migrationData.result;
+                const graphEntities = Object.values(filterEntities(targetEntities));
+                const graphRts = targetEntities['__relationship_types__'] || {};
+                const rtCount = Object.keys(graphRts).length;
+                html += '<div class="er-section"><div class="section-title">Graph Schema (' + graphEntities.length + ' Nodes, ' + rtCount + ' Relationships)</div>';
+                html += '<div class="er-diagram graph-compact">' + generateGraphDiagram(targetEntities) + '</div></div>';
+                graphEntities.forEach(entity => {
+                    html += renderEntityCard(entity, newEntities.has(entity.name), false);
+                });
+                html += '<div class="schema-view"><pre class="schema-code">' + escapeHtml(migrationData.exported_target) + '</pre></div>';
+            } else if (targetType === 'Columnar') {
+                // Columnar: Chebotko Diagram + CQL
+                const targetEntities = migrationData.target_with_db_types || migrationData.result;
+                html += '<div class="er-section"><div class="section-title">Chebotko Diagram</div>';
+                html += generateChebotkoDiagram(targetEntities);
+                html += '</div>';
                 html += '<div class="schema-view"><pre class="schema-code">' + escapeHtml(migrationData.exported_target) + '</pre></div>';
             } else {
-                // Document Target: show card view (same style as Source)
-                const targetNested = migrationData.target_nested;
-                if (targetNested && Object.keys(targetNested).length > 0) {
+                // Document: card view + JSON Schema
+                const targetNested = filterEntities(migrationData.target_nested || {});
+                if (Object.keys(targetNested).length > 0) {
                     Object.values(targetNested).forEach(entity => {
                         html += renderNestedEntityCard(entity);
                     });
@@ -1563,9 +2213,9 @@ def get_html():
             html += '<div class="validation"><div class="validation-header"><h2>Transformation Summary</h2>';
             html += '<div class="validation-status passed">Complete</div></div><div class="validation-stats">';
             html += '<div class="stat-card"><div class="stat-value">' + migrationData.operations_count + '</div><div class="stat-label">Operations</div></div>';
-            html += '<div class="stat-card"><div class="stat-value">' + migrationData.stats.source_count + '</div><div class="stat-label">Source Entities</div></div>';
-            html += '<div class="stat-card"><div class="stat-value">' + migrationData.stats.result_count + '</div><div class="stat-label">Result Entities</div></div>';
-            html += '<div class="stat-card"><div class="stat-value">' + migrationData.target_type + '</div><div class="stat-label">Target Format</div></div>';
+            html += '<div class="stat-card"><div class="stat-value">' + ((migrationData.stats || {}).source_count || 0) + '</div><div class="stat-label">Source Entities</div></div>';
+            html += '<div class="stat-card"><div class="stat-value">' + ((migrationData.stats || {}).result_count || 0) + '</div><div class="stat-label">Result Entities</div></div>';
+            html += '<div class="stat-card"><div class="stat-value">' + targetType + '</div><div class="stat-label">Target Format</div></div>';
             html += '</div></div></div>';
             container.innerHTML = html;
 
@@ -1578,7 +2228,7 @@ def get_html():
             let html = '<div class="entity-card' + (isNew ? ' new' : '') + '"><div class="entity-name' + (isNew ? ' new' : '') + '">' + entity.name + '</div><div class="entity-body">';
 
             const refMap = {};
-            entity.references.forEach(r => { refMap[r.name] = r.target; });
+            (entity.references || []).forEach(r => { refMap[r.name] = r.target; });
 
             // Get key_registry info for this entity (with defensive checks)
             let keyInfo = null;
@@ -1588,7 +2238,7 @@ def get_html():
                 }
             } catch(e) { keyInfo = null; }
 
-            entity.attributes.forEach(a => {
+            (entity.attributes || []).forEach(a => {
                 html += '<div class="attribute"><span class="attr-name">' + a.name + '</span><span class="attr-type">' + a.type;
                 // Show key format for PK with generated prefix
                 if (a.is_key && keyInfo && keyInfo.generated && keyInfo.prefix) {
@@ -1614,11 +2264,12 @@ def get_html():
                 html += '</div>';
             });
 
-            entity.embedded.forEach(e => { html += '<div class="embedded-item">&lt;&gt; ' + e.name + ' [' + e.cardinality + ']</div>'; });
+            (entity.embedded || []).forEach(e => { html += '<div class="embedded-item">&lt;&gt; ' + e.name + ' [' + e.cardinality + ']</div>'; });
 
             if (!isSource) {
-                entity.references.forEach(r => { html += '<div class="reference-item">' + r.name + ' &rarr; ' + r.target + '</div>'; });
+                (entity.references || []).forEach(r => { html += '<div class="reference-item">' + r.name + ' &rarr; ' + r.target + '</div>'; });
             }
+            (entity.edges || []).forEach(e => { html += '<div class="edge-item">&#x2194; ' + e.name + ' &rarr; ' + e.target + ' [' + e.cardinality + ']</div>'; });
             html += '</div></div>';
             return html;
         }
@@ -1664,13 +2315,452 @@ def get_html():
             if (entity.references) {
                 entity.references.forEach(r => { html += '<div class="reference-item">' + r.name + ' &rarr; ' + r.target + '</div>'; });
             }
+            if (entity.edges) {
+                entity.edges.forEach(e => { html += '<div class="edge-item">&#x2194; ' + e.name + ' &rarr; ' + e.target + ' [' + e.cardinality + ']</div>'; });
+            }
 
             html += '</div></div>';
             return html;
         }
+        // ═══════════════════════════════════════════════════════
+        // Source Schemas Tab - auto-loaded on page open
+        // ═══════════════════════════════════════════════════════
+        async function loadSourceSchemas() {
+            const container = document.getElementById('tab-schemas');
+            container.innerHTML = '<div class="loading show"><div class="spinner"></div><p>Loading schemas...</p></div>';
+            try {
+                const resp = await fetch('/api/schemas?t=' + Date.now());
+                const data = await resp.json();
+                renderSourceSchemas(data);
+            } catch (e) {
+                container.innerHTML = '<div class="welcome"><h2>Failed to load schemas</h2><p>' + e.message + '</p></div>';
+            }
+        }
+
+        function renderSourceSchemas(data) {
+            const container = document.getElementById('tab-schemas');
+            let html = '<div class="source-schemas-page">';
+
+            // ── Section 1: PostgreSQL ──
+            html += '<div class="schema-section">';
+            html += '<div class="schema-section-header"><h2>PostgreSQL</h2><span class="schema-badge relational">Relational</span></div>';
+            html += '<div class="schema-section-subtitle">8 Tables, 8 Foreign Keys, 69 Fields — Normalized 3NF Design</div>';
+            html += '<div class="vis-and-code">';
+            html += '<div class="vis-block"><div class="section-title">ER Diagram</div>';
+            html += '<div class="er-diagram"><div class="mermaid">' + getStaticERDiagram() + '</div></div></div>';
+            html += '<div class="code-block-wrapper"><div class="section-title">DDL (SQL)</div>';
+            html += '<div class="sql-code-view"><pre>' + escapeHtml(data.postgresql) + '</pre></div></div>';
+            html += '</div></div>';
+
+            // ── Section 2: MongoDB ──
+            html += '<div class="schema-section">';
+            html += '<div class="schema-section-header"><h2>MongoDB</h2><span class="schema-badge document">Document</span></div>';
+            html += '<div class="schema-section-subtitle">1 Root Document "orders", 4-Level Nesting — Fully Denormalized</div>';
+            html += '<div class="vis-and-code">';
+            html += '<div class="vis-block"><div class="section-title">Document Structure</div>';
+            html += '<div class="document-tree">' + renderMongoDocTree() + '</div></div>';
+            html += '<div class="code-block-wrapper"><div class="section-title">JSON Schema</div>';
+            html += '<div class="sql-code-view"><pre>' + syntaxHighlightJSON(data.mongodb) + '</pre></div></div>';
+            html += '</div></div>';
+
+            // ── Section 3: Neo4j ──
+            html += '<div class="schema-section">';
+            html += '<div class="schema-section-header"><h2>Neo4j</h2><span class="schema-badge graph">Graph</span></div>';
+            html += '<div class="schema-section-subtitle">7 Nodes, 7 Relationships, 61 Properties — Property Graph Model</div>';
+            html += '<div class="vis-and-code">';
+            html += '<div class="vis-block"><div class="section-title">Graph Diagram</div>';
+            html += '<div class="er-diagram">' + getStaticGraphDiagram() + '</div></div>';
+            html += '<div class="code-block-wrapper"><div class="section-title">Cypher Schema</div>';
+            html += '<div class="sql-code-view"><pre>' + escapeHtml(data.neo4j) + '</pre></div></div>';
+            html += '</div></div>';
+
+            // ── Section 4: Cassandra ──
+            html += '<div class="schema-section">';
+            html += '<div class="schema-section-header"><h2>Cassandra</h2><span class="schema-badge columnar">Columnar</span></div>';
+            html += '<div class="schema-section-subtitle">8 Tables, Query-Driven Design, 69 Fields — Denormalized Wide-Column</div>';
+            html += '<div class="vis-and-code">';
+            html += '<div class="vis-block"><div class="section-title">Chebotko Diagram</div>';
+            html += getStaticChebotkoDiagram();
+            html += '</div>';
+            html += '<div class="code-block-wrapper"><div class="section-title">CQL</div>';
+            html += '<div class="sql-code-view"><pre>' + escapeHtml(data.cassandra) + '</pre></div></div>';
+            html += '</div></div>';
+
+            html += '</div>';
+            container.innerHTML = html;
+
+            // Render Mermaid diagrams
+            if (mermaidReady) {
+                setTimeout(() => { try { mermaid.run({ nodes: container.querySelectorAll('.mermaid') }); } catch(e) { console.warn('Mermaid render error:', e); } }, 100);
+            }
+        }
+
+        // ── Static ER Diagram (PostgreSQL Northwind) ──
+        function getStaticERDiagram() {
+            return `erDiagram
+    categories {
+        string category_id PK
+        string category_name
+        string description
+    }
+    suppliers {
+        string supplier_id PK
+        string company_name
+        string contact_name
+        string contact_title
+        string phone
+        string fax
+        string street
+        string city
+        string region
+        string postal_code
+        string country
+    }
+    shippers {
+        string shipper_id PK
+        string company_name
+        string phone
+    }
+    employees {
+        string employee_id PK
+        string last_name
+        string first_name
+        string title
+        string birth_date
+        string hire_date
+        string phone
+        string notes
+        string street
+        string city
+        string region
+        string postal_code
+        string country
+        string reports_to FK
+    }
+    customers {
+        string customer_id PK
+        string company_name
+        string contact_name
+        string contact_title
+        string phone
+        string fax
+        string street
+        string city
+        string region
+        string postal_code
+        string country
+    }
+    products {
+        string product_id PK
+        string product_name
+        double unit_price
+        integer units_in_stock
+        boolean discontinued
+        string quantity_per_unit
+        string supplier_id FK
+        string category_id FK
+    }
+    orders {
+        string order_id PK
+        string order_date
+        string required_date
+        string shipped_date
+        double freight
+        string ship_name
+        string ship_address
+        string ship_city
+        string ship_region
+        string ship_postal_code
+        string ship_country
+        string customer_id FK
+        string employee_id FK
+        string shipper_id FK
+    }
+    order_details {
+        string order_id PK "FK"
+        string product_id PK "FK"
+        double unit_price
+        integer quantity
+        double discount
+    }
+    categories ||--o{ products : "category_id"
+    suppliers ||--o{ products : "supplier_id"
+    customers ||--o{ orders : "customer_id"
+    employees ||--o{ orders : "employee_id"
+    shippers ||--o{ orders : "shipper_id"
+    employees |o--o{ employees : "reports_to"
+    orders ||--o{ order_details : "order_id"
+    products ||--o{ order_details : "product_id"`;
+        }
+
+        // ── Static Graph Diagram (Neo4j Northwind) ──
+        function getStaticGraphDiagram() {
+            // Build a static SVG using the same layout engine as generateGraphDiagram
+            const W = 960, H = 700;
+            const nodes = [
+                { name: 'orders', x: W*0.28, y: H*0.45, hub: true, theme: 0 },
+                { name: 'products', x: W*0.72, y: H*0.30, hub: true, theme: 1 },
+                { name: 'customers', x: W*0.08, y: H*0.20, hub: false, theme: 0 },
+                { name: 'employees', x: W*0.08, y: H*0.70, hub: false, theme: 0 },
+                { name: 'shippers', x: W*0.42, y: H*0.78, hub: false, theme: 0 },
+                { name: 'categories', x: W*0.92, y: H*0.12, hub: false, theme: 1 },
+                { name: 'suppliers', x: W*0.92, y: H*0.52, hub: false, theme: 1 },
+            ];
+            const edges = [
+                { from: 'customers', to: 'orders', label: 'PURCHASED' },
+                { from: 'employees', to: 'orders', label: 'SOLD' },
+                { from: 'orders', to: 'shippers', label: 'SHIPPED_VIA' },
+                { from: 'orders', to: 'products', label: 'CONTAINS' },
+                { from: 'suppliers', to: 'products', label: 'SUPPLIES' },
+                { from: 'products', to: 'categories', label: 'PART_OF' },
+                { from: 'employees', to: 'employees', label: 'REPORTS_TO' },
+            ];
+            const hubR = 30, satR = 22;
+            const themes = [
+                { fill:'#DBEAFE', stroke:'#3B82F6', text:'#1E40AF', satFill:'#EFF6FF', satStroke:'#93C5FD', satText:'#1E3A5F' },
+                { fill:'#FEF3C7', stroke:'#F59E0B', text:'#92400E', satFill:'#FFFBEB', satStroke:'#FCD34D', satText:'#78350F' }
+            ];
+            const posMap = {};
+            nodes.forEach(n => { posMap[n.name] = n; });
+
+            let svg = '<div class="graph-svg-container"><svg viewBox="0 0 '+W+' '+H+'" style="width:100%;max-width:960px;height:auto;font-family:-apple-system,BlinkMacSystemFont,sans-serif;">';
+            svg += '<defs><marker id="ahSS" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#94A3B8"/></marker>';
+            svg += '<marker id="ahSelf" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#E11D48"/></marker></defs>';
+
+            // Draw edges
+            edges.forEach(e => {
+                const s = posMap[e.from], t = posMap[e.to];
+                if (e.from === e.to) {
+                    // Self-loop
+                    const loopR = 28;
+                    svg += '<path d="M '+(s.x-8)+' '+(s.y-satR)+' C '+(s.x-loopR*1.2)+' '+(s.y-satR-loopR*1.5)+', '+(s.x+loopR*1.2)+' '+(s.y-satR-loopR*1.5)+', '+(s.x+8)+' '+(s.y-satR)+'" fill="none" stroke="#E11D48" stroke-width="1.3" opacity="0.8" marker-end="url(#ahSelf)"/>';
+                    svg += '<text x="'+s.x+'" y="'+(s.y-satR-loopR*0.8)+'" text-anchor="middle" font-size="8" fill="#E11D48" font-weight="500">'+e.label+'</text>';
+                } else {
+                    const dx = t.x-s.x, dy = t.y-s.y;
+                    const dist = Math.sqrt(dx*dx+dy*dy);
+                    const nx = dx/dist, ny = dy/dist;
+                    const sR = s.hub ? hubR : satR;
+                    const tR = t.hub ? hubR : satR;
+                    const x1 = s.x+nx*(sR+2), y1 = s.y+ny*(sR+2);
+                    const x2 = t.x-nx*(tR+10), y2 = t.y-ny*(tR+10);
+                    const mx = (x1+x2)/2, my = (y1+y2)/2;
+                    svg += '<line x1="'+x1+'" y1="'+y1+'" x2="'+x2+'" y2="'+y2+'" stroke="#94A3B8" stroke-width="1.1" opacity="0.65" marker-end="url(#ahSS)"/>';
+                    svg += '<text x="'+mx+'" y="'+(my-4)+'" text-anchor="middle" font-size="8" fill="#475569" opacity="0.85">'+e.label+'</text>';
+                }
+            });
+
+            // Draw nodes
+            nodes.forEach(n => {
+                const th = themes[n.theme];
+                if (n.hub) {
+                    svg += '<circle cx="'+n.x+'" cy="'+n.y+'" r="'+hubR+'" fill="'+th.fill+'" stroke="'+th.stroke+'" stroke-width="2.5"/>';
+                    const fs = n.name.length > 7 ? 10 : 11;
+                    svg += '<text x="'+n.x+'" y="'+(n.y+4)+'" text-anchor="middle" font-size="'+fs+'" font-weight="700" fill="'+th.text+'">'+n.name+'</text>';
+                } else {
+                    svg += '<circle cx="'+n.x+'" cy="'+n.y+'" r="'+satR+'" fill="'+th.satFill+'" stroke="'+th.satStroke+'" stroke-width="1.5"/>';
+                    const fs = n.name.length > 8 ? 8.5 : 9.5;
+                    svg += '<text x="'+n.x+'" y="'+(n.y+3)+'" text-anchor="middle" font-size="'+fs+'" font-weight="600" fill="'+th.satText+'">'+n.name+'</text>';
+                }
+            });
+
+            svg += '<text x="'+(W/2)+'" y="'+(H-12)+'" text-anchor="middle" font-size="11" fill="#94A3B8" font-weight="500">7 Nodes, 7 Relationships</text>';
+            svg += '</svg></div>';
+            return svg;
+        }
+
+        // ── MongoDB Document Tree ──
+        function renderMongoDocTree() {
+            return '<span class="dt-key">orders</span> <span class="dt-comment">(root document)</span>\\n'
+                + '<span class="dt-key">|-- _id</span>: <span class="dt-type">string</span> <span class="dt-comment">(order_id, primary key)</span>\\n'
+                + '<span class="dt-key">|-- order_date</span>: <span class="dt-type">string</span>\\n'
+                + '<span class="dt-key">|-- required_date</span>: <span class="dt-type">string</span>\\n'
+                + '<span class="dt-key">|-- shipped_date</span>: <span class="dt-type">string</span>\\n'
+                + '<span class="dt-key">|-- freight</span>: <span class="dt-type">double</span>\\n'
+                + '<span class="dt-key">|-- ship_name</span>: <span class="dt-type">string</span>\\n'
+                + '<span class="dt-key">|-- ship_destination</span>: <span class="dt-obj">{object}</span> <span class="dt-comment">Level 1</span>\\n'
+                + '<span class="dt-key">|   |-- ship_address</span>: <span class="dt-type">string</span>\\n'
+                + '<span class="dt-key">|   |-- ship_city</span>: <span class="dt-type">string</span>\\n'
+                + '<span class="dt-key">|   |-- ship_region</span>: <span class="dt-type">string</span>\\n'
+                + '<span class="dt-key">|   |-- ship_postal_code</span>: <span class="dt-type">string</span>\\n'
+                + '<span class="dt-key">|   +-- ship_country</span>: <span class="dt-type">string</span>\\n'
+                + '<span class="dt-key">|</span>\\n'
+                + '<span class="dt-key">|-- customer</span>: <span class="dt-obj">{object}</span> <span class="dt-comment">Level 1, required</span>\\n'
+                + '<span class="dt-key">|   |-- company_name</span>: <span class="dt-type">string</span>\\n'
+                + '<span class="dt-key">|   |-- contact_name</span>: <span class="dt-type">string</span>\\n'
+                + '<span class="dt-key">|   |-- contact_title</span>: <span class="dt-type">string</span>\\n'
+                + '<span class="dt-key">|   |-- phone</span>: <span class="dt-type">string</span>\\n'
+                + '<span class="dt-key">|   |-- fax</span>: <span class="dt-type">string</span>\\n'
+                + '<span class="dt-key">|   +-- address</span>: <span class="dt-obj">{object}</span> <span class="dt-comment">Level 2</span>\\n'
+                + '<span class="dt-key">|       |-- street</span>: <span class="dt-type">string</span>\\n'
+                + '<span class="dt-key">|       |-- city</span>: <span class="dt-type">string</span>\\n'
+                + '<span class="dt-key">|       |-- region</span>: <span class="dt-type">string</span>\\n'
+                + '<span class="dt-key">|       |-- postal_code</span>: <span class="dt-type">string</span>\\n'
+                + '<span class="dt-key">|       +-- country</span>: <span class="dt-type">string</span>\\n'
+                + '<span class="dt-key">|</span>\\n'
+                + '<span class="dt-key">|-- employee</span>: <span class="dt-obj">{object}</span> <span class="dt-comment">Level 1, required</span>\\n'
+                + '<span class="dt-key">|   |-- last_name</span>: <span class="dt-type">string</span>\\n'
+                + '<span class="dt-key">|   |-- first_name</span>: <span class="dt-type">string</span>\\n'
+                + '<span class="dt-key">|   |-- title</span>: <span class="dt-type">string</span>\\n'
+                + '<span class="dt-key">|   |-- birth_date</span>: <span class="dt-type">string</span>\\n'
+                + '<span class="dt-key">|   |-- hire_date</span>: <span class="dt-type">string</span>\\n'
+                + '<span class="dt-key">|   |-- phone</span>: <span class="dt-type">string</span>\\n'
+                + '<span class="dt-key">|   |-- notes</span>: <span class="dt-type">string</span>\\n'
+                + '<span class="dt-key">|   |-- reports_to</span>: <span class="dt-type">string</span> <span class="dt-comment">(self-ref)</span>\\n'
+                + '<span class="dt-key">|   +-- address</span>: <span class="dt-obj">{object}</span> <span class="dt-comment">Level 2</span>\\n'
+                + '<span class="dt-key">|       |-- street</span>: <span class="dt-type">string</span>\\n'
+                + '<span class="dt-key">|       |-- city</span>: <span class="dt-type">string</span>\\n'
+                + '<span class="dt-key">|       |-- region</span>: <span class="dt-type">string</span>\\n'
+                + '<span class="dt-key">|       |-- postal_code</span>: <span class="dt-type">string</span>\\n'
+                + '<span class="dt-key">|       +-- country</span>: <span class="dt-type">string</span>\\n'
+                + '<span class="dt-key">|</span>\\n'
+                + '<span class="dt-key">|-- shipper</span>: <span class="dt-obj">{object}</span> <span class="dt-comment">Level 1, required</span>\\n'
+                + '<span class="dt-key">|   |-- company_name</span>: <span class="dt-type">string</span>\\n'
+                + '<span class="dt-key">|   +-- phone</span>: <span class="dt-type">string</span>\\n'
+                + '<span class="dt-key">|</span>\\n'
+                + '<span class="dt-key">+-- details</span>: <span class="dt-arr">[array]</span> <span class="dt-comment">Level 1, order line items</span>\\n'
+                + '<span class="dt-key">    +-- [each item]</span>:\\n'
+                + '<span class="dt-key">        |-- unit_price</span>: <span class="dt-type">double</span>\\n'
+                + '<span class="dt-key">        |-- quantity</span>: <span class="dt-type">int</span>\\n'
+                + '<span class="dt-key">        |-- discount</span>: <span class="dt-type">double</span>\\n'
+                + '<span class="dt-key">        +-- product</span>: <span class="dt-obj">{object}</span> <span class="dt-comment">Level 2, required</span>\\n'
+                + '<span class="dt-key">            |-- product_name</span>: <span class="dt-type">string</span>\\n'
+                + '<span class="dt-key">            |-- unit_price</span>: <span class="dt-type">double</span>\\n'
+                + '<span class="dt-key">            |-- units_in_stock</span>: <span class="dt-type">int</span>\\n'
+                + '<span class="dt-key">            |-- discontinued</span>: <span class="dt-type">bool</span>\\n'
+                + '<span class="dt-key">            |-- quantity_per_unit</span>: <span class="dt-type">string</span>\\n'
+                + '<span class="dt-key">            |-- category</span>: <span class="dt-obj">{object}</span> <span class="dt-comment">Level 3, required</span>\\n'
+                + '<span class="dt-key">            |   |-- category_name</span>: <span class="dt-type">string</span>\\n'
+                + '<span class="dt-key">            |   +-- description</span>: <span class="dt-type">string</span>\\n'
+                + '<span class="dt-key">            +-- supplier</span>: <span class="dt-obj">{object}</span> <span class="dt-comment">Level 3, required</span>\\n'
+                + '<span class="dt-key">                |-- company_name</span>: <span class="dt-type">string</span>\\n'
+                + '<span class="dt-key">                |-- contact_name</span>: <span class="dt-type">string</span>\\n'
+                + '<span class="dt-key">                |-- contact_title</span>: <span class="dt-type">string</span>\\n'
+                + '<span class="dt-key">                |-- phone</span>: <span class="dt-type">string</span>\\n'
+                + '<span class="dt-key">                |-- fax</span>: <span class="dt-type">string</span>\\n'
+                + '<span class="dt-key">                +-- address</span>: <span class="dt-obj">{object}</span> <span class="dt-comment">Level 4 (deepest)</span>\\n'
+                + '<span class="dt-key">                    |-- street</span>: <span class="dt-type">string</span>\\n'
+                + '<span class="dt-key">                    |-- city</span>: <span class="dt-type">string</span>\\n'
+                + '<span class="dt-key">                    |-- region</span>: <span class="dt-type">string</span>\\n'
+                + '<span class="dt-key">                    |-- postal_code</span>: <span class="dt-type">string</span>\\n'
+                + '<span class="dt-key">                    +-- country</span>: <span class="dt-type">string</span>';
+        }
+
+        // ── Static Chebotko Diagram (Cassandra Northwind) ──
+        function getStaticChebotkoDiagram() {
+            const tables = [
+                { name: 'categories', cols: [
+                    { name: 'category_id', type: 'TEXT', key: 'pk' },
+                    { name: 'category_name', type: 'TEXT', key: '' },
+                    { name: 'description', type: 'TEXT', key: '' }
+                ]},
+                { name: 'suppliers', cols: [
+                    { name: 'supplier_id', type: 'TEXT', key: 'pk' },
+                    { name: 'company_name', type: 'TEXT', key: '' },
+                    { name: 'contact_name', type: 'TEXT', key: '' },
+                    { name: 'contact_title', type: 'TEXT', key: '' },
+                    { name: 'phone', type: 'TEXT', key: '' },
+                    { name: 'fax', type: 'TEXT', key: '' },
+                    { name: 'street', type: 'TEXT', key: '' },
+                    { name: 'city', type: 'TEXT', key: '' },
+                    { name: 'region', type: 'TEXT', key: '' },
+                    { name: 'postal_code', type: 'TEXT', key: '' },
+                    { name: 'country', type: 'TEXT', key: '' }
+                ]},
+                { name: 'shippers', cols: [
+                    { name: 'shipper_id', type: 'TEXT', key: 'pk' },
+                    { name: 'company_name', type: 'TEXT', key: '' },
+                    { name: 'phone', type: 'TEXT', key: '' }
+                ]},
+                { name: 'employees', cols: [
+                    { name: 'employee_id', type: 'TEXT', key: 'pk' },
+                    { name: 'last_name', type: 'TEXT', key: '' },
+                    { name: 'first_name', type: 'TEXT', key: '' },
+                    { name: 'title', type: 'TEXT', key: '' },
+                    { name: 'birth_date', type: 'TEXT', key: '' },
+                    { name: 'hire_date', type: 'TEXT', key: '' },
+                    { name: 'phone', type: 'TEXT', key: '' },
+                    { name: 'notes', type: 'TEXT', key: '' },
+                    { name: 'street', type: 'TEXT', key: '' },
+                    { name: 'city', type: 'TEXT', key: '' },
+                    { name: 'region', type: 'TEXT', key: '' },
+                    { name: 'postal_code', type: 'TEXT', key: '' },
+                    { name: 'country', type: 'TEXT', key: '' },
+                    { name: 'reports_to', type: 'TEXT', key: '' }
+                ]},
+                { name: 'customers', cols: [
+                    { name: 'customer_id', type: 'TEXT', key: 'pk' },
+                    { name: 'company_name', type: 'TEXT', key: '' },
+                    { name: 'contact_name', type: 'TEXT', key: '' },
+                    { name: 'contact_title', type: 'TEXT', key: '' },
+                    { name: 'phone', type: 'TEXT', key: '' },
+                    { name: 'fax', type: 'TEXT', key: '' },
+                    { name: 'street', type: 'TEXT', key: '' },
+                    { name: 'city', type: 'TEXT', key: '' },
+                    { name: 'region', type: 'TEXT', key: '' },
+                    { name: 'postal_code', type: 'TEXT', key: '' },
+                    { name: 'country', type: 'TEXT', key: '' }
+                ]},
+                { name: 'products', cols: [
+                    { name: 'category_id', type: 'TEXT', key: 'pk' },
+                    { name: 'supplier_id', type: 'TEXT', key: 'pk' },
+                    { name: 'product_id', type: 'TEXT', key: 'ck' },
+                    { name: 'product_name', type: 'TEXT', key: '' },
+                    { name: 'unit_price', type: 'DOUBLE', key: '' },
+                    { name: 'units_in_stock', type: 'INT', key: '' },
+                    { name: 'discontinued', type: 'BOOLEAN', key: '' },
+                    { name: 'quantity_per_unit', type: 'TEXT', key: '' }
+                ]},
+                { name: 'orders', cols: [
+                    { name: 'customer_id', type: 'TEXT', key: 'pk' },
+                    { name: 'order_date', type: 'TEXT', key: 'ck' },
+                    { name: 'order_id', type: 'TEXT', key: 'ck' },
+                    { name: 'required_date', type: 'TEXT', key: '' },
+                    { name: 'shipped_date', type: 'TEXT', key: '' },
+                    { name: 'freight', type: 'DOUBLE', key: '' },
+                    { name: 'ship_name', type: 'TEXT', key: '' },
+                    { name: 'ship_address', type: 'TEXT', key: '' },
+                    { name: 'ship_city', type: 'TEXT', key: '' },
+                    { name: 'ship_region', type: 'TEXT', key: '' },
+                    { name: 'ship_postal_code', type: 'TEXT', key: '' },
+                    { name: 'ship_country', type: 'TEXT', key: '' },
+                    { name: 'employee_id', type: 'TEXT', key: '' },
+                    { name: 'shipper_id', type: 'TEXT', key: '' }
+                ]},
+                { name: 'order_details', cols: [
+                    { name: 'order_id', type: 'TEXT', key: 'pk' },
+                    { name: 'product_id', type: 'TEXT', key: 'pk' },
+                    { name: 'unit_price', type: 'DOUBLE', key: '' },
+                    { name: 'quantity', type: 'INT', key: '' },
+                    { name: 'discount', type: 'DOUBLE', key: '' }
+                ]}
+            ];
+            let html = '<div class="chebotko-diagram">';
+            tables.forEach(t => {
+                html += '<div class="chebotko-table"><div class="chebotko-header">' + t.name + '</div>';
+                html += '<table class="chebotko-cols">';
+                t.cols.forEach(c => {
+                    let marker = '';
+                    if (c.key === 'pk') marker = '<span class="ck-marker pk">K&#x2191;</span>';
+                    else if (c.key === 'ck') marker = '<span class="ck-marker ck">C&#x2191;</span>';
+                    html += '<tr><td class="ck-marker-cell">' + marker + '</td>';
+                    html += '<td class="ck-name">' + c.name + '</td>';
+                    html += '<td class="ck-type">' + c.type + '</td></tr>';
+                });
+                html += '</table></div>';
+            });
+            html += '</div>';
+            return html;
+        }
+
+        // Load Source Schemas on page load
+        loadSourceSchemas();
     </script>
 </body>
 </html>'''
+    # Inject dynamic content from config.py
+    html = html.replace('<!-- DROPDOWN_OPTIONS -->', _build_dropdown_options())
+    html = html.replace('// INJECT_CONFIG', _build_config_js())
+    return html
 
 
 def main():

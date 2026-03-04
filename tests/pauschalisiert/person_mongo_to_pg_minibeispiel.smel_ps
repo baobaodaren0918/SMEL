@@ -55,7 +55,7 @@ RENAME_PS ATTRIBUTE _id TO person_id IN person
 -- ============================================
 UNNEST_PS person.address:street,city AS address WITH person.person_id TO address.person_id
 ADD_PS KEY address.address_id AS String
-ADD_PS REFERENCE address.person_id REFERENCES person(person_id) WITH CARDINALITY ONE_TO_ONE
+ADD_PS CONSTRAINT address.person_id REFERENCES person(person_id) WITH CARDINALITY ONE_TO_ONE
 -- Result:
 -- person: { person_id, name{vorname,nachname}, age,
 --           employment{position,company{name,address{street,city}}}, tags[], knows[] }
@@ -67,7 +67,7 @@ ADD_PS REFERENCE address.person_id REFERENCES person(person_id) WITH CARDINALITY
 -- Note: company{...} shows the nested object structure to transfer
 UNNEST_PS person.employment:position, company{name, address{street, city}} AS employment WITH person.person_id TO employment.person_id
 ADD_PS KEY employment.employment_id AS String
-ADD_PS REFERENCE employment.person_id REFERENCES person(person_id) WITH CARDINALITY ONE_TO_ONE
+ADD_PS CONSTRAINT employment.person_id REFERENCES person(person_id) WITH CARDINALITY ONE_TO_ONE
 -- Result:
 -- person: { person_id, name{vorname,nachname}, age, tags[], knows[] }
 -- address: { address_id, person_id, street, city }
@@ -80,7 +80,7 @@ ADD_PS REFERENCE employment.person_id REFERENCES person(person_id) WITH CARDINAL
 -- Note: address{...} shows the nested object structure to transfer
 UNNEST_PS employment.company:name, address{street, city} AS company WITH employment.employment_id TO company.employment_id
 ADD_PS KEY company.company_id AS String
-ADD_PS REFERENCE company.employment_id REFERENCES employment(employment_id) WITH CARDINALITY ONE_TO_ONE
+ADD_PS CONSTRAINT company.employment_id REFERENCES employment(employment_id) WITH CARDINALITY ONE_TO_ONE
 -- Result:
 -- person: { person_id, name{vorname,nachname}, age, tags[], knows[] }
 -- address: { address_id, person_id, street, city }
@@ -93,7 +93,7 @@ ADD_PS REFERENCE company.employment_id REFERENCES employment(employment_id) WITH
 -- ============================================
 UNNEST_PS company.address:street,city AS company_address WITH company.company_id TO company_address.company_id
 ADD_PS KEY company_address.company_address_id AS String
-ADD_PS REFERENCE company_address.company_id REFERENCES company(company_id) WITH CARDINALITY ONE_TO_ONE
+ADD_PS CONSTRAINT company_address.company_id REFERENCES company(company_id) WITH CARDINALITY ONE_TO_ONE
 -- Result:
 -- person: { person_id, name{vorname,nachname}, age, tags[], knows[] }
 -- address: { address_id, person_id, street, city }
@@ -108,7 +108,7 @@ SPLIT_PS person INTO person:person_id, name, age, knows; person_tag:person_id, t
 UNWIND_PS person_tag.tags
 RENAME_PS ATTRIBUTE tags TO tag_value IN person_tag
 ADD_PS KEY person_tag.person_tag_id AS String
-ADD_PS REFERENCE person_tag.person_id REFERENCES person(person_id) WITH CARDINALITY ONE_TO_MANY
+ADD_PS CONSTRAINT person_tag.person_id REFERENCES person(person_id) WITH CARDINALITY ONE_TO_MANY
 -- Result:
 -- person: { person_id, name{vorname,nachname}, age, knows[] }
 -- address, employment, company, company_address: (unchanged)
@@ -120,8 +120,8 @@ ADD_PS REFERENCE person_tag.person_id REFERENCES person(person_id) WITH CARDINAL
 SPLIT_PS person INTO person:person_id, name, age; person_knows:person_id, knows
 UNWIND_PS person_knows.knows
 RENAME_PS ATTRIBUTE knows TO knows_person_id IN person_knows
-ADD_PS REFERENCE person_knows.person_id REFERENCES person(person_id) WITH CARDINALITY ONE_TO_MANY
-ADD_PS REFERENCE person_knows.knows_person_id REFERENCES person(person_id) WITH CARDINALITY ONE_TO_MANY
+ADD_PS CONSTRAINT person_knows.person_id REFERENCES person(person_id) WITH CARDINALITY ONE_TO_MANY
+ADD_PS CONSTRAINT person_knows.knows_person_id REFERENCES person(person_id) WITH CARDINALITY ONE_TO_MANY
 ADD_PS KEY (person_id, knows_person_id) TO person_knows
 -- Result:
 -- person: { person_id, name{vorname,nachname}, age }
@@ -133,7 +133,7 @@ ADD_PS KEY (person_id, knows_person_id) TO person_knows
 FLATTEN_PS person.name
 RENAME_PS ATTRIBUTE name_vorname TO vorname IN person
 RENAME_PS ATTRIBUTE name_nachname TO nachname IN person
-CAST_PS person.age TO Integer
+CAST_PS ATTRIBUTE person.age TO Integer
 -- Final Result (7 tables):
 -- person: { person_id, vorname, nachname, age }
 -- address: { address_id, person_id, street, city }

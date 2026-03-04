@@ -1,0 +1,110 @@
+-- SMEL Northwind: PostgreSQL V1 -> PostgreSQL V2 (Specific Operations Version)
+-- Same-model Schema Evolution: Relational -> Relational
+-- V2 Business Scenario: E-commerce platform modernization
+--
+-- Structural changes:
+--   MERGE:  Denormalize categories into products (eliminate JOIN)
+--   SPLIT:  Separate customer identity from contact info (CRM)
+
+MIGRATION northwind_pg1_to_pg2:1.0
+FROM RELATIONAL TO RELATIONAL
+USING northwind_schema:1
+
+-- ============================================
+-- Meta V1 (after Reverse Engineering of northwind_postgresql.sql)
+-- ============================================
+-- categories (category_id [PK], category_name, description)
+-- suppliers (supplier_id [PK], company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country)
+-- shippers (shipper_id [PK], company_name, phone)
+-- employees (employee_id [PK], last_name, first_name, title, birth_date, hire_date, phone, notes, street, city, region, postal_code, country, reports_to [FK->employees])
+-- customers (customer_id [PK], company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country)
+-- products (product_id [PK], product_name, unit_price, units_in_stock, discontinued, quantity_per_unit, supplier_id [FK->suppliers], category_id [FK->categories])
+-- orders (order_id [PK], order_date, required_date, shipped_date, freight, ship_name, ship_address, ship_city, ship_region, ship_postal_code, ship_country, customer_id [FK->customers], employee_id [FK->employees], shipper_id [FK->shippers])
+-- order_details (order_id [PK,FK->orders], product_id [PK,FK->products], unit_price, quantity, discount)
+
+-- ============================================
+-- Phase 1: MERGE categories INTO products (structural)
+-- Business: Eliminate JOIN for product catalog queries
+-- ============================================
+-- Before: categories(category_id, category_name, description)
+--         products(..., category_id [FK->categories])
+-- After:  products(..., category_name, description) -- categories removed
+DELETE_CONSTRAINT products.category_id
+DELETE_ATTRIBUTE products.category_id
+DELETE_PRIMARY_KEY category_id FROM categories
+DELETE_ATTRIBUTE categories.category_id
+MERGE categories, products INTO products
+
+-- ============================================
+-- Phase 2: SPLIT customers -> customers + customer_contacts (structural)
+-- Business: Separate company identity from contact person info
+-- ============================================
+-- Before: customers(customer_id, company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country)
+-- After:  customers(customer_id, company_name, street, city, region, postal_code, country)
+--         customer_contacts(customer_id, contact_name, contact_title, phone, fax)
+SPLIT customers INTO customers:customer_id, company_name, street, city, region, postal_code, country; customer_contacts:customer_id, contact_name, contact_title, phone, fax
+ADD_PRIMARY_KEY customer_id TO customers
+ADD_PRIMARY_KEY customer_contacts.contact_id AS String
+ADD_CONSTRAINT customer_contacts.customer_id REFERENCES customers(customer_id) WITH CARDINALITY ONE_TO_ONE
+
+-- ============================================
+-- Phase 3: suppliers -- RENAME + ADD
+-- ============================================
+RENAME_ATTRIBUTE company_name TO name IN suppliers
+ADD_ATTRIBUTE website TO suppliers WITH TYPE String
+
+-- ============================================
+-- Phase 4: shippers -> carriers (RENAME entity + field)
+-- ============================================
+RENAME_ENTITY shippers TO carriers
+RENAME_ATTRIBUTE company_name TO carrier_name IN carriers
+
+-- ============================================
+-- Phase 5: employees -- simplify + ADD
+-- ============================================
+DELETE_ATTRIBUTE employees.birth_date
+DELETE_ATTRIBUTE employees.notes
+ADD_ATTRIBUTE email TO employees WITH TYPE String
+
+-- ============================================
+-- Phase 6: customer_contacts -- ADD email
+-- ============================================
+ADD_ATTRIBUTE email TO customer_contacts WITH TYPE String
+
+-- ============================================
+-- Phase 7: products -- RENAME + ADD
+-- ============================================
+RENAME_ATTRIBUTE product_name TO name IN products
+ADD_ATTRIBUTE sku TO products WITH TYPE String
+
+-- ============================================
+-- Phase 8: orders -- RENAME + ADD
+-- ============================================
+RENAME_ATTRIBUTE freight TO shipping_cost IN orders
+ADD_ATTRIBUTE status TO orders WITH TYPE String
+
+-- ============================================
+-- Phase 9: order_details -- RENAME
+-- ============================================
+RENAME_ATTRIBUTE discount TO discount_rate IN order_details
+
+-- ============================================
+-- Final Meta V2 (8 entities):
+-- products:           { product_id [PK], name, unit_price, units_in_stock, discontinued, quantity_per_unit, supplier_id [FK], category_name, description, sku }
+-- suppliers:          { supplier_id [PK], name, contact_name, contact_title, phone, fax, street, city, postal_code, country, website }
+-- carriers:           { shipper_id [PK], carrier_name, phone }
+-- employees:          { employee_id [PK], last_name, first_name, title, hire_date, email, phone, street, city, region, postal_code, country, reports_to [FK] }
+-- customers:          { customer_id [PK], company_name, street, city, postal_code, country }
+-- customer_contacts:  { contact_id [PK], customer_id [FK], contact_name, contact_title, phone, fax, email }
+-- orders:             { order_id [PK], order_date, required_date, shipped_date, shipping_cost, ship_name, ship_address, ship_city, ship_region, ship_postal_code, ship_country, customer_id [FK], employee_id [FK], shipper_id [FK], status }
+-- order_details:      { order_id [PK,FK], product_id [PK,FK], unit_price, quantity, discount_rate }
+-- ============================================
+
+-- ============================================
+-- Operation Summary (21 steps):
+--   MERGE: 1              SPLIT: 1
+--   DELETE_CONSTRAINT: 1  ADD_CONSTRAINT: 1
+--   DELETE_PRIMARY_KEY: 1 ADD_PRIMARY_KEY: 2
+--   DELETE_ATTRIBUTE: 4   ADD_ATTRIBUTE: 5
+--   RENAME_ATTRIBUTE: 5   RENAME_ENTITY: 1
+-- ============================================

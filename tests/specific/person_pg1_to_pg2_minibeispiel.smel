@@ -48,7 +48,7 @@ USING person_schema:1
 --         company_address(company_address_id, company_id, street, city)
 -- After:  company(company_id, employment_id, name, street, city)
 DELETE_PRIMARY_KEY company_address_id FROM company_address
-DELETE_REFERENCE company_address.company_id
+DELETE_CONSTRAINT company_address.company_id
 DELETE_ATTRIBUTE company_address.company_address_id
 DELETE_ATTRIBUTE company_address.company_id
 MERGE company, company_address INTO company
@@ -70,7 +70,7 @@ ADD_ATTRIBUTE start_date TO employment WITH TYPE String
 SPLIT person INTO person:person_id, vorname, nachname; person_detail:person_id, age, email, phone
 ADD_PRIMARY_KEY person_id TO person
 ADD_PRIMARY_KEY person_detail.detail_id AS String
-ADD_REFERENCE person_detail.person_id REFERENCES person(person_id) WITH CARDINALITY ONE_TO_ONE
+ADD_CONSTRAINT person_detail.person_id REFERENCES person(person_id) WITH CARDINALITY ONE_TO_ONE
 
 -- ============================================
 -- Phase 4: Internationalize — rename German field names
@@ -95,7 +95,7 @@ RENAME_ATTRIBUTE tag_value TO label IN tag
 -- Phase 7: Type change
 -- age: Integer -> String (support range values like "25-30")
 -- ============================================
-CAST person_detail.age TO String
+CAST_ATTRIBUTE person_detail.age TO String
 
 -- ============================================
 -- Final Meta V2 (7 entities):
@@ -111,7 +111,7 @@ CAST person_detail.age TO String
 -- ============================================
 -- Operation Summary (19 steps):
 --   DELETE_PRIMARY_KEY: 1    ADD_PRIMARY_KEY: 2
---   DELETE_REFERENCE:   1    ADD_REFERENCE:   1
+--   DELETE_CONSTRAINT:   1    ADD_CONSTRAINT:   1
 --   DELETE_ATTRIBUTE:   2    ADD_ATTRIBUTE:    3
 --   MERGE:              1    SPLIT:           1
 --   RENAME_ATTRIBUTE:   5    RENAME_ENTITY:   1

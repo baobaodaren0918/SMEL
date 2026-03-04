@@ -17,11 +17,11 @@ Data Flow:
 import json
 from typing import Dict, Any, Optional, List
 from ..unified_meta_schema import (
-    Database, DatabaseType, EntityType, Attribute,
+    Database, DatabaseType, EntityType, EntityKind, Attribute,
     UniqueConstraint, UniqueProperty, PKTypeEnum,
     Embedded, Cardinality, PrimitiveDataType, PrimitiveType,
     ListDataType, SetDataType, MapDataType,
-    TypeMappings
+    RelationshipType, TypeMappings
 )
 
 
@@ -102,7 +102,10 @@ class MongoDBAdapter:
         # Build full object_name path (from André Conrad)
         # Example: parent_path=["person"], name="address" -> ["person", "address"]
         object_name = parent_path + [name]
-        entity = EntityType(object_name=object_name)
+        entity = EntityType(
+            object_name=object_name,
+            entity_kind=EntityKind.DOCUMENT if is_root else EntityKind.EMBEDDED
+        )
 
         properties = schema.get('properties', {})
         required = set(schema.get('required', []))
@@ -233,6 +236,9 @@ class MongoDBAdapter:
             MongoDB JSON Schema as a dictionary
         """
         # Find root entity (the one that contains others via Embedded relationships)
+        if not database.entity_types:
+            return {"bsonType": "object", "properties": {}}
+
         if root_entity_name is None:
             root_entity_name = cls._find_root_entity(database)
 
@@ -240,7 +246,23 @@ class MongoDBAdapter:
         if not root_entity:
             raise ValueError(f"Root entity '{root_entity_name}' not found")
 
-        return cls._export_entity_to_schema(database, root_entity, is_root=True)
+        schema = cls._export_entity_to_schema(database, root_entity, is_root=True)
+
+        # Add RelationshipType metadata if any exist
+        if database.relationship_types:
+            rel_types_meta = {}
+            for rt_name, rt in database.relationship_types.items():
+                rt_dict = {
+                    "source": rt.source_entity,
+                    "target": rt.target_entity,
+                    "cardinality": rt.cardinality.value if rt.cardinality else "0..n"
+                }
+                if rt.attributes:
+                    rt_dict["properties"] = [attr.attr_name for attr in rt.attributes]
+                rel_types_meta[rt_name] = rt_dict
+            schema["_relationship_types"] = rel_types_meta
+
+        return schema
 
     @classmethod
     def _find_root_entity(cls, database: Database) -> str:
@@ -265,8 +287,8 @@ class MongoDBAdapter:
             if any(isinstance(r, Embedded) for r in entity.relationships):
                 return name
 
-        # Last fallback: first entity
-        return next(iter(database.entity_types.keys()))
+        # Last fallback: first entity (or None if empty)
+        return next(iter(database.entity_types.keys()), None)
 
     @classmethod
     def _export_entity_to_schema(cls, database: Database, entity: EntityType, is_root: bool = False) -> Dict[str, Any]:
@@ -402,6 +424,14 @@ class MongoDBAdapter:
         """Export to formatted JSON string."""
         schema = cls.export_to_json(database, root_entity_name)
         return json.dumps(schema, indent=indent, ensure_ascii=False)
+
+    @classmethod
+    def export(cls, database: Database) -> str:
+        """
+        Convenience method that calls export_to_json_string().
+        Used by the adapter registry for polymorphic export.
+        """
+        return cls.export_to_json_string(database)
 
 
 # =============================================================================

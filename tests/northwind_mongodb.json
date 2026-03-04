@@ -1,0 +1,142 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "orders",
+  "description": "MongoDB Northwind document with 4-level nesting: order→details[]→product→supplier→address, plus ship_destination",
+  "bsonType": "object",
+  "required": ["_id", "customer", "employee", "shipper"],
+  "properties": {
+    "_id": {
+      "bsonType": "string",
+      "description": "Primary key (order_id)"
+    },
+    "order_date": { "bsonType": "string" },
+    "required_date": { "bsonType": "string" },
+    "shipped_date": { "bsonType": "string" },
+    "freight": { "bsonType": "double" },
+    "ship_name": { "bsonType": "string" },
+    "ship_destination": {
+      "bsonType": "object",
+      "description": "Shipping address (level 1)",
+      "properties": {
+        "ship_address": { "bsonType": "string" },
+        "ship_city": { "bsonType": "string" },
+        "ship_region": { "bsonType": "string" },
+        "ship_postal_code": { "bsonType": "string" },
+        "ship_country": { "bsonType": "string" }
+      }
+    },
+    "customer": {
+      "bsonType": "object",
+      "description": "Embedded customer (level 1)",
+      "properties": {
+        "company_name": { "bsonType": "string" },
+        "contact_name": { "bsonType": "string" },
+        "contact_title": { "bsonType": "string" },
+        "phone": { "bsonType": "string" },
+        "fax": { "bsonType": "string" },
+        "address": {
+          "bsonType": "object",
+          "description": "Customer address (level 2)",
+          "properties": {
+            "street": { "bsonType": "string" },
+            "city": { "bsonType": "string" },
+            "region": { "bsonType": "string" },
+            "postal_code": { "bsonType": "string" },
+            "country": { "bsonType": "string" }
+          }
+        }
+      }
+    },
+    "employee": {
+      "bsonType": "object",
+      "description": "Embedded employee (level 1)",
+      "properties": {
+        "last_name": { "bsonType": "string" },
+        "first_name": { "bsonType": "string" },
+        "title": { "bsonType": "string" },
+        "birth_date": { "bsonType": "string" },
+        "hire_date": { "bsonType": "string" },
+        "phone": { "bsonType": "string" },
+        "notes": { "bsonType": "string" },
+        "reports_to": {
+          "bsonType": "string",
+          "description": "Self-reference to another employee"
+        },
+        "address": {
+          "bsonType": "object",
+          "description": "Employee address (level 2)",
+          "properties": {
+            "street": { "bsonType": "string" },
+            "city": { "bsonType": "string" },
+            "region": { "bsonType": "string" },
+            "postal_code": { "bsonType": "string" },
+            "country": { "bsonType": "string" }
+          }
+        }
+      }
+    },
+    "shipper": {
+      "bsonType": "object",
+      "description": "Embedded shipper (level 1)",
+      "properties": {
+        "company_name": { "bsonType": "string" },
+        "phone": { "bsonType": "string" }
+      }
+    },
+    "details": {
+      "bsonType": "array",
+      "description": "Array of order line items (level 1)",
+      "items": {
+        "bsonType": "object",
+        "required": ["product"],
+        "properties": {
+          "unit_price": { "bsonType": "double" },
+          "quantity": { "bsonType": "int" },
+          "discount": { "bsonType": "double" },
+          "product": {
+            "bsonType": "object",
+            "description": "Embedded product (level 2)",
+            "required": ["category", "supplier"],
+            "properties": {
+              "product_name": { "bsonType": "string" },
+              "unit_price": { "bsonType": "double" },
+              "units_in_stock": { "bsonType": "int" },
+              "discontinued": { "bsonType": "bool" },
+              "quantity_per_unit": { "bsonType": "string" },
+              "category": {
+                "bsonType": "object",
+                "description": "Embedded category (level 3)",
+                "properties": {
+                  "category_name": { "bsonType": "string" },
+                  "description": { "bsonType": "string" }
+                }
+              },
+              "supplier": {
+                "bsonType": "object",
+                "description": "Embedded supplier (level 3)",
+                "properties": {
+                  "company_name": { "bsonType": "string" },
+                  "contact_name": { "bsonType": "string" },
+                  "contact_title": { "bsonType": "string" },
+                  "phone": { "bsonType": "string" },
+                  "fax": { "bsonType": "string" },
+                  "address": {
+                    "bsonType": "object",
+                    "description": "Supplier address (level 4 - deepest)",
+                    "properties": {
+                      "street": { "bsonType": "string" },
+                      "city": { "bsonType": "string" },
+                      "region": { "bsonType": "string" },
+                      "postal_code": { "bsonType": "string" },
+                      "country": { "bsonType": "string" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

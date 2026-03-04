@@ -164,7 +164,7 @@ class TypeMappings:
         # String types
         'VARCHAR': PrimitiveType.STRING,
         'CHAR': PrimitiveType.STRING,
-        'TEXT': PrimitiveType.STRING,
+        'TEXT': PrimitiveType.TEXT,
         # Boolean
         'BOOLEAN': PrimitiveType.BOOLEAN,
         'BOOL': PrimitiveType.BOOLEAN,
@@ -194,6 +194,10 @@ class TypeMappings:
         PrimitiveType.UUID: 'UUID',
         PrimitiveType.BINARY: 'BYTEA',
         PrimitiveType.OBJECT_ID: 'VARCHAR',
+        PrimitiveType.INT32: 'INTEGER',
+        PrimitiveType.INT64: 'BIGINT',
+        PrimitiveType.DECIMAL128: 'DECIMAL',
+        PrimitiveType.NULL: 'VARCHAR',
     }
 
     # -------------------------------------------------------------------------
@@ -230,6 +234,101 @@ class TypeMappings:
         PrimitiveType.NULL: 'null',
         PrimitiveType.TEXT: 'string',
         PrimitiveType.OBJECT_ID: 'objectId',
+        PrimitiveType.INT32: 'int',
+        PrimitiveType.INT64: 'long',
+        PrimitiveType.DECIMAL128: 'decimal',
+    }
+
+    # -------------------------------------------------------------------------
+    # Neo4j Mappings
+    # -------------------------------------------------------------------------
+    # JSON type string -> PrimitiveType (for parsing graph schema JSON)
+    NEO4J_TO_PRIMITIVE = {
+        'string':    PrimitiveType.STRING,
+        'integer':   PrimitiveType.INTEGER,
+        'int':       PrimitiveType.INTEGER,
+        'long':      PrimitiveType.LONG,
+        'double':    PrimitiveType.DOUBLE,
+        'float':     PrimitiveType.FLOAT,
+        'boolean':   PrimitiveType.BOOLEAN,
+        'date':      PrimitiveType.DATE,
+        'timestamp': PrimitiveType.TIMESTAMP,
+        'uuid':      PrimitiveType.UUID,
+    }
+
+    # PrimitiveType -> Neo4j type string (for exporting Cypher)
+    PRIMITIVE_TO_NEO4J = {
+        PrimitiveType.STRING:    'string',
+        PrimitiveType.TEXT:      'string',
+        PrimitiveType.INTEGER:   'integer',
+        PrimitiveType.LONG:      'long',
+        PrimitiveType.DOUBLE:    'double',
+        PrimitiveType.FLOAT:     'float',
+        PrimitiveType.BOOLEAN:   'boolean',
+        PrimitiveType.DATE:      'date',
+        PrimitiveType.TIMESTAMP: 'timestamp',
+        PrimitiveType.UUID:      'uuid',
+        PrimitiveType.DECIMAL:   'double',
+        PrimitiveType.BINARY:    'string',
+        PrimitiveType.NULL:      'string',
+        PrimitiveType.OBJECT_ID: 'string',
+        PrimitiveType.INT32:     'integer',
+        PrimitiveType.INT64:     'long',
+        PrimitiveType.DECIMAL128: 'double',
+    }
+
+    # -------------------------------------------------------------------------
+    # Cassandra Mappings
+    # -------------------------------------------------------------------------
+    # CQL type string -> PrimitiveType (for parsing CQL DDL)
+    CASSANDRA_TO_PRIMITIVE = {
+        # String types
+        'TEXT': PrimitiveType.STRING,
+        'VARCHAR': PrimitiveType.STRING,
+        'ASCII': PrimitiveType.STRING,
+        # Integer types
+        'INT': PrimitiveType.INTEGER,
+        'SMALLINT': PrimitiveType.INTEGER,
+        'TINYINT': PrimitiveType.INTEGER,
+        'VARINT': PrimitiveType.INTEGER,
+        # Long types
+        'BIGINT': PrimitiveType.LONG,
+        'COUNTER': PrimitiveType.LONG,
+        # Floating point
+        'DOUBLE': PrimitiveType.DOUBLE,
+        'FLOAT': PrimitiveType.FLOAT,
+        'DECIMAL': PrimitiveType.DECIMAL,
+        # Boolean
+        'BOOLEAN': PrimitiveType.BOOLEAN,
+        # Date/Time
+        'DATE': PrimitiveType.DATE,
+        'TIMESTAMP': PrimitiveType.TIMESTAMP,
+        # UUID
+        'UUID': PrimitiveType.UUID,
+        'TIMEUUID': PrimitiveType.UUID,
+        # Binary
+        'BLOB': PrimitiveType.BINARY,
+    }
+
+    # PrimitiveType -> CQL type string (for exporting CQL DDL)
+    PRIMITIVE_TO_CASSANDRA = {
+        PrimitiveType.STRING:    'TEXT',
+        PrimitiveType.TEXT:      'TEXT',
+        PrimitiveType.INTEGER:   'INT',
+        PrimitiveType.LONG:      'BIGINT',
+        PrimitiveType.DOUBLE:    'DOUBLE',
+        PrimitiveType.FLOAT:     'FLOAT',
+        PrimitiveType.DECIMAL:   'DECIMAL',
+        PrimitiveType.BOOLEAN:   'BOOLEAN',
+        PrimitiveType.DATE:      'DATE',
+        PrimitiveType.TIMESTAMP: 'TIMESTAMP',
+        PrimitiveType.UUID:      'UUID',
+        PrimitiveType.BINARY:    'BLOB',
+        PrimitiveType.OBJECT_ID: 'TEXT',
+        PrimitiveType.NULL:      'TEXT',
+        PrimitiveType.INT32:     'INT',
+        PrimitiveType.INT64:     'BIGINT',
+        PrimitiveType.DECIMAL128: 'DECIMAL',
     }
 
     # -------------------------------------------------------------------------
@@ -298,6 +397,8 @@ class DataType(ABC):
             return SetDataType.from_dict(data)
         elif kind == "map":
             return MapDataType.from_dict(data)
+        elif kind == "tuple":
+            return TupleDataType.from_dict(data)
         raise ValueError(f"Unknown DataType kind: {kind}")
 
 
@@ -319,11 +420,11 @@ class PrimitiveDataType(DataType):
 
     def to_dict(self) -> Dict[str, Any]:
         d = {"kind": "primitive", "type": self.primitive_type.value}
-        if self.max_length:
+        if self.max_length is not None:
             d["max_length"] = self.max_length
-        if self.precision:
+        if self.precision is not None:
             d["precision"] = self.precision
-        if self.scale:
+        if self.scale is not None:
             d["scale"] = self.scale
         return d
 
@@ -399,6 +500,28 @@ class MapDataType(DataType):
         key_type = DataType.from_dict(data.get("key_type", {"kind": "primitive", "type": "string"}))
         value_type = DataType.from_dict(data.get("value_type", {"kind": "primitive", "type": "string"}))
         return cls(key_type=key_type, value_type=value_type)
+
+
+@dataclass
+class TupleDataType(DataType):
+    """Tuple data type: ordered collection of typed elements (from Andre Conrad's paper)."""
+    elem_types: List[DataType] = field(default_factory=list)
+
+    def to_native(self, db: DatabaseType) -> str:
+        inner = ", ".join(e.to_native(db) for e in self.elem_types)
+        if db == DatabaseType.COLUMNAR:
+            return f"tuple<{inner}>"
+        if db == DatabaseType.GRAPH:
+            return f"Tuple<{inner}>"
+        return f"({inner})"
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {"kind": "tuple", "elem_types": [e.to_dict() for e in self.elem_types]}
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'TupleDataType':
+        elem_types = [DataType.from_dict(e) for e in data.get("elem_types", [])]
+        return cls(elem_types=elem_types)
 
 
 # ============================================================================
@@ -607,6 +730,8 @@ class Relationship(ABC):
             return Reference.from_dict(data)
         elif kind in ("aggregate", "embedded"):
             return Embedded.from_dict(data)
+        elif kind == "edge":
+            return Edge.from_dict(data)
         raise ValueError(f"Unknown relationship kind: {kind}")
 
 
@@ -686,59 +811,47 @@ class Embedded(Relationship):
         )
 
 
-# Alias for backward compatibility
-Aggregate = Embedded
-
-
-# ============================================================================
-# STRUCTURAL VARIATION
-# ============================================================================
-
 @dataclass
-class StructuralVariation:
-    variation_id: int
-    attributes: List[Attribute] = field(default_factory=list)
-    relationships: List[Relationship] = field(default_factory=list)
-    count: int = 0
-    first_timestamp: Optional[str] = None
-    last_timestamp: Optional[str] = None
+class Edge(Relationship):
+    """Graph edge relationship (from Andre Conrad's paper Figure 2).
+    References a RelationshipType by name, linking source to target entity.
+    """
+    rel_type_name: str = ""    # Name of the RelationshipType (e.g. "ACTED_IN")
+    source_entity: str = ""    # Source entity name
+    target_entity: str = ""    # Target entity name
 
-    def add_attribute(self, attr: Attribute):
-        if attr not in self.attributes:
-            self.attributes.append(attr)
-
-    def add_relationship(self, rel: Relationship):
-        if rel not in self.relationships:
-            self.relationships.append(rel)
-
-    def get_attribute(self, name: str) -> Optional[Attribute]:
-        return next((a for a in self.attributes if a.attr_name == name), None)
+    def get_target_entity_name(self) -> str:
+        return self.target_entity
 
     def to_dict(self) -> Dict[str, Any]:
         d = {
-            "variation_id": self.variation_id,
-            "attributes": [a.to_dict() for a in self.attributes],
-            "relationships": [r.to_dict() for r in self.relationships],
-            "count": self.count
+            "kind": "edge",
+            "meta_id": self.meta_id,
+            "rel_type_name": self.rel_type_name,
+            "source_entity": self.source_entity,
+            "target_entity": self.target_entity,
+            "cardinality": self.cardinality.value,
+            "is_optional": self.is_optional
         }
-        if self.first_timestamp:
-            d["first_timestamp"] = self.first_timestamp
-        if self.last_timestamp:
-            d["last_timestamp"] = self.last_timestamp
+        if self.description:
+            d["description"] = self.description
         return d
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'StructuralVariation':
-        attrs = [Attribute.from_dict(a) for a in data.get("attributes", [])]
-        rels = [Relationship.from_dict(r) for r in data.get("relationships", [])]
+    def from_dict(cls, data: Dict[str, Any]) -> 'Edge':
         return cls(
-            variation_id=data.get("variation_id", 0),
-            attributes=attrs,
-            relationships=rels,
-            count=data.get("count", 0),
-            first_timestamp=data.get("first_timestamp"),
-            last_timestamp=data.get("last_timestamp")
+            rel_type_name=data.get("rel_type_name", ""),
+            source_entity=data.get("source_entity", ""),
+            target_entity=data.get("target_entity", ""),
+            cardinality=Cardinality.from_symbol(data.get("cardinality", "0..n")),
+            is_optional=data.get("is_optional", True),
+            description=data.get("description"),
+            meta_id=data.get("meta_id", _uid())
         )
+
+
+# Alias for backward compatibility
+Aggregate = Embedded
 
 
 # ============================================================================
@@ -754,7 +867,9 @@ class EntityType:
     constraints: List[Constraint] = field(default_factory=list)
     attributes: List[Attribute] = field(default_factory=list)
     relationships: List[Relationship] = field(default_factory=list)
-    variations: List[StructuralVariation] = field(default_factory=list)
+    to_connection_ids: List[str] = field(default_factory=list)    # from André Conrad: Connector meta_ids pointing TO this entity
+    from_connection_ids: List[str] = field(default_factory=list)  # from André Conrad: Connector meta_ids going FROM this entity
+    labels: List[str] = field(default_factory=list)  # Graph-specific: additional node labels (e.g. Person:Employee)
     description: Optional[str] = None
     meta_id: str = field(default_factory=_uid)
 
@@ -830,19 +945,23 @@ class EntityType:
     def get_aggregates(self) -> List[Embedded]:
         return self.get_embedded()
 
+    def get_edges(self) -> List['Edge']:
+        """Get all edge relationships (graph database)."""
+        return [r for r in self.relationships if isinstance(r, Edge)]
+
     def remove_relationship(self, name: str) -> Optional[Relationship]:
         for i, r in enumerate(self.relationships):
-            rel_name = r.ref_name if isinstance(r, Reference) else r.aggr_name
+            if isinstance(r, Reference):
+                rel_name = r.ref_name
+            elif isinstance(r, Embedded):
+                rel_name = r.aggr_name
+            elif isinstance(r, Edge):
+                rel_name = r.rel_type_name
+            else:
+                continue
             if rel_name == name:
                 return self.relationships.pop(i)
         return None
-
-    # Variation methods
-    def add_variation(self, v: StructuralVariation):
-        self.variations.append(v)
-
-    def get_variation(self, vid: int) -> Optional[StructuralVariation]:
-        return next((v for v in self.variations if v.variation_id == vid), None)
 
     def to_dict(self) -> Dict[str, Any]:
         d = {
@@ -852,10 +971,10 @@ class EntityType:
             "is_root": self.is_root,
             "constraints": [c.to_dict() for c in self.constraints],
             "attributes": [a.to_dict() for a in self.attributes],
-            "relationships": [r.to_dict() for r in self.relationships]
+            "relationships": [r.to_dict() for r in self.relationships],
+            "to_connection_ids": self.to_connection_ids,
+            "from_connection_ids": self.from_connection_ids
         }
-        if self.variations:
-            d["variations"] = [v.to_dict() for v in self.variations]
         if self.description:
             d["description"] = self.description
         return d
@@ -870,7 +989,6 @@ class EntityType:
         constraints = [Constraint.from_dict(c) for c in data.get("constraints", [])]
         attrs = [Attribute.from_dict(a) for a in data.get("attributes", [])]
         rels = [Relationship.from_dict(r) for r in data.get("relationships", [])]
-        variations = [StructuralVariation.from_dict(v) for v in data.get("variations", [])]
 
         # Support both old (en_name) and new (object_name) formats
         object_name = data.get("object_name")
@@ -886,7 +1004,8 @@ class EntityType:
             constraints=constraints,
             attributes=attrs,
             relationships=rels,
-            variations=variations,
+            to_connection_ids=data.get("to_connection_ids", []),
+            from_connection_ids=data.get("from_connection_ids", []),
             description=data.get("description"),
             meta_id=data.get("meta_id", _uid())
         )
@@ -904,6 +1023,7 @@ class RelationshipType:
     target_entity: str = ""  # Entity name (string only)
     attributes: List[Attribute] = field(default_factory=list)
     cardinality: Cardinality = Cardinality.ZERO_TO_MANY
+    bidirectional: Optional[bool] = None  # from Andre Conrad's paper Figure 2
     description: Optional[str] = None
     meta_id: str = field(default_factory=_uid)
 
@@ -929,6 +1049,8 @@ class RelationshipType:
             "attributes": [a.to_dict() for a in self.attributes],
             "cardinality": self.cardinality.value
         }
+        if self.bidirectional is not None:
+            d["bidirectional"] = self.bidirectional
         if self.description:
             d["description"] = self.description
         return d
@@ -942,7 +1064,49 @@ class RelationshipType:
             target_entity=data.get("target_entity", ""),
             attributes=attrs,
             cardinality=Cardinality.from_symbol(data.get("cardinality", "0..n")),
+            bidirectional=data.get("bidirectional"),
             description=data.get("description"),
+            meta_id=data.get("meta_id", _uid())
+        )
+
+
+# ============================================================================
+# CONNECTOR (from André Conrad's code: links two DatabaseObjects with cardinalities)
+# ============================================================================
+
+class ConnectorCardinality(str, Enum):
+    """Cardinality for connector endpoints (from André Conrad's code)."""
+    ONE = "one"
+    MANY = "many"
+
+
+@dataclass
+class Connector:
+    """Connects two EntityTypes with cardinalities (from André Conrad's code).
+    tail = source side, head = target side.
+    """
+    tail_entity_id: str  # meta_id of source EntityType
+    head_entity_id: str  # meta_id of target EntityType
+    tail_cardinality: ConnectorCardinality = ConnectorCardinality.ONE
+    head_cardinality: ConnectorCardinality = ConnectorCardinality.MANY
+    meta_id: str = field(default_factory=_uid)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "meta_id": self.meta_id,
+            "tail_entity_id": self.tail_entity_id,
+            "head_entity_id": self.head_entity_id,
+            "tail_cardinality": self.tail_cardinality.value,
+            "head_cardinality": self.head_cardinality.value
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'Connector':
+        return cls(
+            tail_entity_id=data.get("tail_entity_id", ""),
+            head_entity_id=data.get("head_entity_id", ""),
+            tail_cardinality=ConnectorCardinality(data.get("tail_cardinality", "one")),
+            head_cardinality=ConnectorCardinality(data.get("head_cardinality", "many")),
             meta_id=data.get("meta_id", _uid())
         )
 
@@ -957,6 +1121,7 @@ class Database:
     db_type: DatabaseType = DatabaseType.RELATIONAL
     entity_types: Dict[str, EntityType] = field(default_factory=dict)
     relationship_types: Dict[str, RelationshipType] = field(default_factory=dict)
+    connectors: List[Connector] = field(default_factory=list)
     version: int = 1
     description: Optional[str] = None
     meta_id: str = field(default_factory=_uid)
@@ -997,6 +1162,19 @@ class Database:
     def remove_relationship_type(self, name: str) -> Optional[RelationshipType]:
         return self.relationship_types.pop(name, None)
 
+    # Connector management (from André Conrad's code)
+    def add_connector(self, c: Connector):
+        self.connectors.append(c)
+
+    def get_connector(self, meta_id: str) -> Optional[Connector]:
+        return next((c for c in self.connectors if c.meta_id == meta_id), None)
+
+    def remove_connector(self, meta_id: str) -> Optional[Connector]:
+        for i, c in enumerate(self.connectors):
+            if c.meta_id == meta_id:
+                return self.connectors.pop(i)
+        return None
+
     def increment_version(self) -> int:
         self.version += 1
         return self.version
@@ -1012,6 +1190,8 @@ class Database:
         }
         if self.relationship_types:
             d["relationship_types"] = {n: r.to_dict() for n, r in self.relationship_types.items()}
+        if self.connectors:
+            d["connectors"] = [c.to_dict() for c in self.connectors]
         if self.description:
             d["description"] = self.description
         return d
@@ -1049,6 +1229,11 @@ class Database:
             rel_type = RelationshipType.from_dict(r_data)
             db.add_relationship_type(rel_type)
 
+        # Load connectors
+        for c_data in data.get("connectors", []):
+            connector = Connector.from_dict(c_data)
+            db.add_connector(connector)
+
         return db
 
     @classmethod
@@ -1062,10 +1247,11 @@ UnifiedMetaSchema = Database
 
 __all__ = [
     'DatabaseType', 'EntityKind', 'PrimitiveType', 'PKTypeEnum', 'Cardinality',
-    'DataType', 'PrimitiveDataType', 'ListDataType', 'SetDataType', 'MapDataType',
+    'DataType', 'PrimitiveDataType', 'ListDataType', 'SetDataType', 'MapDataType', 'TupleDataType',
     'Attribute', 'Constraint', 'UniqueProperty', 'ForeignKeyProperty',
     'UniqueConstraint', 'ForeignKeyConstraint',
-    'Relationship', 'Reference', 'Embedded',
-    'StructuralVariation', 'EntityType', 'RelationshipType',
+    'Relationship', 'Reference', 'Embedded', 'Edge',
+    'ConnectorCardinality', 'Connector',
+    'EntityType', 'RelationshipType',
     'Database', 'UnifiedMetaSchema', 'TypeMappings'
 ]

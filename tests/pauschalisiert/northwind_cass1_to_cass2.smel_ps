@@ -1,0 +1,124 @@
+-- SMEL Northwind: Cassandra V1 -> Cassandra V2 (Specific Operations Version)
+-- Same-model Schema Evolution: Columnar -> Columnar
+-- V2 Business Scenario: E-commerce platform modernization
+--
+-- Structural changes:
+--   MERGE:               Denormalize categories into products table
+--   SPLIT:               Separate customer identity from contact info
+--   Repartition orders:  Change partition key from customer_id to order_date
+
+MIGRATION northwind_cass1_to_cass2:1.0
+FROM COLUMNAR TO COLUMNAR
+USING northwind_schema:1
+
+-- ============================================
+-- Meta V1 (after Reverse Engineering of northwind_cassandra.cql)
+-- ============================================
+-- categories (category_id [PARTITION], category_name, description)
+-- suppliers (supplier_id [PARTITION], company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country)
+-- shippers (shipper_id [PARTITION], company_name, phone)
+-- employees (employee_id [PARTITION], last_name, first_name, title, birth_date, hire_date, phone, notes, street, city, region, postal_code, country, reports_to)
+-- customers (customer_id [PARTITION], company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country)
+-- products (category_id [PARTITION], supplier_id [PARTITION], product_id [CLUSTERING], product_name, unit_price, units_in_stock, discontinued, quantity_per_unit, supplier_id)
+-- orders (customer_id [PARTITION], order_date [CLUSTERING], order_id [CLUSTERING], required_date, shipped_date, freight, ship_name, ship_address, ship_city, ship_region, ship_postal_code, ship_country, employee_id, shipper_id)
+-- order_details (order_id [PARTITION], product_id [PARTITION], unit_price, quantity, discount)
+
+-- ============================================
+-- Phase 1: MERGE categories INTO products (structural + repartition)
+-- Cassandra: categories partition key consumed, products repartitioned
+-- ============================================
+-- Before: products PK((category_id, supplier_id), product_id)
+-- After:  products PK((product_id)) with category_name, description added
+DELETE_PS PARTITION KEY (category_id, supplier_id) FROM products
+DELETE_PS CLUSTERING KEY product_id FROM products
+DELETE_PS ATTRIBUTE products.category_id
+DELETE_PS PARTITION KEY category_id FROM categories
+DELETE_PS ATTRIBUTE categories.category_id
+MERGE_PS categories, products INTO products
+ADD_PS PARTITION KEY product_id TO products
+
+-- ============================================
+-- Phase 2: SPLIT customers -> customers + customer_contacts (structural)
+-- ============================================
+-- Before: customers PK((customer_id), ...)
+-- After:  customers PK((customer_id))
+--         customer_contacts PK((customer_id), contact_id)
+SPLIT_PS customers INTO customers:customer_id, company_name, street, city, region, postal_code, country; customer_contacts:customer_id, contact_name, contact_title, phone, fax
+ADD_PS PARTITION KEY customer_id TO customers
+ADD_PS PARTITION KEY customer_id TO customer_contacts
+ADD_PS CLUSTERING KEY contact_id TO customer_contacts
+
+-- ============================================
+-- Phase 3: Repartition orders (query optimization)
+-- Change from customer-based to date-based partitioning
+-- ============================================
+-- Before: orders PK((customer_id), order_date, order_id)
+-- After:  orders PK((order_date), customer_id, order_id)
+DELETE_PS PARTITION KEY customer_id FROM orders
+DELETE_PS CLUSTERING KEY order_date FROM orders
+DELETE_PS CLUSTERING KEY order_id FROM orders
+ADD_PS PARTITION KEY order_date TO orders
+ADD_PS CLUSTERING KEY customer_id TO orders
+ADD_PS CLUSTERING KEY order_id TO orders
+
+-- ============================================
+-- Phase 4: suppliers -- RENAME + ADD
+-- ============================================
+RENAME_PS ATTRIBUTE company_name TO name IN suppliers
+ADD_PS ATTRIBUTE website TO suppliers WITH TYPE String
+
+-- ============================================
+-- Phase 5: shippers -> carriers (RENAME entity + field)
+-- ============================================
+RENAME_PS ENTITY shippers TO carriers
+RENAME_PS ATTRIBUTE company_name TO carrier_name IN carriers
+
+-- ============================================
+-- Phase 6: employees -- simplify + ADD
+-- ============================================
+DELETE_PS ATTRIBUTE employees.birth_date
+DELETE_PS ATTRIBUTE employees.notes
+ADD_PS ATTRIBUTE email TO employees WITH TYPE String
+
+-- ============================================
+-- Phase 7: customer_contacts -- ADD email
+-- ============================================
+ADD_PS ATTRIBUTE email TO customer_contacts WITH TYPE String
+
+-- ============================================
+-- Phase 8: products -- RENAME + ADD
+-- ============================================
+RENAME_PS ATTRIBUTE product_name TO name IN products
+ADD_PS ATTRIBUTE sku TO products WITH TYPE String
+
+-- ============================================
+-- Phase 9: orders -- RENAME + ADD
+-- ============================================
+RENAME_PS ATTRIBUTE freight TO shipping_cost IN orders
+ADD_PS ATTRIBUTE status TO orders WITH TYPE String
+
+-- ============================================
+-- Phase 10: order_details -- RENAME
+-- ============================================
+RENAME_PS ATTRIBUTE discount TO discount_rate IN order_details
+
+-- ============================================
+-- Final Meta V2 (8 entities):
+-- products:           { product_id [PARTITION], name, unit_price, units_in_stock, discontinued, quantity_per_unit, supplier_id, category_name, description, sku }
+-- suppliers:          { supplier_id [PARTITION], name, contact_name, contact_title, phone, fax, street, city, postal_code, country, website }
+-- carriers:           { shipper_id [PARTITION], carrier_name, phone }
+-- employees:          { employee_id [PARTITION], last_name, first_name, title, hire_date, email, phone, street, city, region, postal_code, country, reports_to }
+-- customers:          { customer_id [PARTITION], company_name, street, city, postal_code, country }
+-- customer_contacts:  { customer_id [PARTITION], contact_id [CLUSTERING], contact_name, contact_title, phone, fax, email }
+-- orders:             { order_date [PARTITION], customer_id [CLUSTERING], order_id [CLUSTERING], required_date, shipped_date, shipping_cost, ship_name, ship_address, ship_city, ship_region, ship_postal_code, ship_country, employee_id, shipper_id, status }
+-- order_details:      { order_id [PARTITION], product_id [PARTITION], unit_price, quantity, discount_rate }
+-- ============================================
+
+-- ============================================
+-- Operation Summary (28 steps):
+--   MERGE: 1              SPLIT: 1
+--   DELETE_PARTITION_KEY: 3  ADD_PARTITION_KEY: 3
+--   DELETE_CLUSTERING_KEY: 3 ADD_CLUSTERING_KEY: 3
+--   DELETE_ATTRIBUTE: 5   ADD_ATTRIBUTE: 5
+--   RENAME_ATTRIBUTE: 5   RENAME_ENTITY: 1
+-- ============================================

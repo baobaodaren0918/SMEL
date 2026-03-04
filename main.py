@@ -5,7 +5,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from core import run_migration
-from config import MIGRATION_CONFIGS
+from config import MIGRATION_CONFIGS, DB_TYPE_DISPLAY_NAME, DB_TYPE_EXPORT_LABEL
 
 # ANSI Colors
 GREEN = "\033[92m"
@@ -15,13 +15,8 @@ RED = "\033[91m"
 BOLD = "\033[1m"
 RESET = "\033[0m"
 
-# Menu choice -> config key mapping
-CHOICE_MAP = {
-    "1": "person_d2r_specific",
-    "2": "person_d2r_pauschalisiert",
-    "3": "person_r2d_specific",
-    "4": "person_r2d_pauschalisiert",
-}
+# Menu choice -> config key mapping (auto-generated from MIGRATION_CONFIGS)
+CHOICE_MAP = {str(i): key for i, key in enumerate(MIGRATION_CONFIGS.keys(), 1)}
 
 
 def print_operations(operations_detail):
@@ -52,8 +47,14 @@ def print_schema_comparison(result):
             nest_highlights.add(change[5:])
         elif change.startswith("ADD_REF:"):
             ref_highlights.add(change[8:])
-        elif change.startswith("FLATTEN:"):
-            new_entities.add(change.split(":")[1])
+        elif change.startswith("SPLIT:"):
+            # SPLIT:person->person,person_tag — new entities after the comma
+            parts = change.split("->")
+            if len(parts) == 2:
+                for name in parts[1].split(","):
+                    name = name.strip()
+                    if name and name not in parts[0].split(":")[1].strip():
+                        new_entities.add(name)
 
     total_width = col_width * 2 + 3
     print("\n" + "=" * total_width)
@@ -68,7 +69,10 @@ def print_schema_comparison(result):
     print(" | ".join(h.center(col_width) for h in headers))
     print("-" * total_width)
 
-    all_entities = set(list(meta_v1.keys()) + list(meta_v2.keys()))
+    all_entities = set(
+        k for k in list(meta_v1.keys()) + list(meta_v2.keys())
+        if not k.startswith('__')
+    )
     for entity_name in sorted(all_entities):
         columns = []
         max_lines = 0
@@ -124,25 +128,89 @@ def print_exported_target(result):
     print("=" * 80)
     print()
 
-    if target_type == "Document":
-        print(f"{CYAN}MongoDB JSON Schema:{RESET}")
-    else:
-        print(f"{CYAN}PostgreSQL DDL:{RESET}")
+    label = DB_TYPE_EXPORT_LABEL.get(target_type, f"{target_type} Schema")
+    print(f"{CYAN}{label}:{RESET}")
     print("-" * 80)
     print(exported)
     print("-" * 80)
+
+
+def print_validation(result):
+    """Print two-layer validation results."""
+    v_meta = result.get("validation_meta", {})
+    v_export = result.get("validation_export", {})
+
+    # Skip if both are N/A
+    if v_meta.get("passed") is None and v_export.get("passed") is None:
+        return
+
+    print(f"\n{BOLD}{'=' * 50}")
+    print(" VALIDATION")
+    print(f"{'=' * 50}{RESET}")
+
+    for label, v in [("Layer 1 (SMEL Script)", v_meta), ("Layer 2 (Adapter Export)", v_export)]:
+        passed = v.get("passed")
+        summary = v.get("summary", "N/A")
+        if passed is True:
+            print(f"  {label}: {GREEN}{BOLD}{summary}{RESET}")
+        elif passed is False:
+            print(f"  {label}: {RED}{BOLD}{summary}{RESET}")
+            # Print details for failed validation
+            details = v.get("details", {})
+            if details.get("missing_entities"):
+                print(f"    Missing entities: {', '.join(details['missing_entities'])}")
+            if details.get("extra_entities"):
+                print(f"    Extra entities: {', '.join(details['extra_entities'])}")
+            for ename, ediff in details.get("entity_diffs", {}).items():
+                parts = []
+                attr_d = ediff.get("attributes", {})
+                if attr_d.get("missing"):
+                    parts.append(f"missing attrs: {attr_d['missing']}")
+                if attr_d.get("extra"):
+                    parts.append(f"extra attrs: {attr_d['extra']}")
+                if attr_d.get("type_mismatches"):
+                    for tm in attr_d["type_mismatches"]:
+                        parts.append(f"{tm['attr']}: {tm['actual']} != {tm['expected']}")
+                if attr_d.get("key_mismatches"):
+                    for km in attr_d["key_mismatches"]:
+                        parts.append(f"key mismatch: {km}")
+                constraint_d = ediff.get("constraints", {})
+                if constraint_d.get("missing"):
+                    parts.append(f"missing constraints: {len(constraint_d['missing'])}")
+                if constraint_d.get("extra"):
+                    parts.append(f"extra constraints: {len(constraint_d['extra'])}")
+                ref_d = ediff.get("references", {})
+                if ref_d.get("missing"):
+                    parts.append(f"missing refs: {ref_d['missing']}")
+                if ref_d.get("extra"):
+                    parts.append(f"extra refs: {ref_d['extra']}")
+                emb_d = ediff.get("embedded", {})
+                if emb_d.get("missing"):
+                    parts.append(f"missing embedded: {emb_d['missing']}")
+                if emb_d.get("extra"):
+                    parts.append(f"extra embedded: {emb_d['extra']}")
+                if parts:
+                    print(f"    {YELLOW}{ename}{RESET}: {'; '.join(parts)}")
+        else:
+            print(f"  {label}: {summary}")
+
+    print()
 
 
 def main():
     print(f"\n{BOLD}{'=' * 60}")
     print(" SMEL - Schema Migration & Evolution Language")
     print(f"{'=' * 60}{RESET}")
-    print(f"\n  {CYAN}Document -> Relational:{RESET}")
-    print("  [1] Person: MongoDB -> PostgreSQL (Specific)")
-    print("  [2] Person: MongoDB -> PostgreSQL (Pauschalisiert)")
-    print(f"\n  {CYAN}Relational -> Document:{RESET}")
-    print("  [3] Person: PostgreSQL -> MongoDB (Specific)")
-    print("  [4] Person: PostgreSQL -> MongoDB (Pauschalisiert)")
+    # Auto-generate menu from MIGRATION_CONFIGS, grouped by direction
+    current_direction = None
+    for idx, (key, cfg) in enumerate(MIGRATION_CONFIGS.items(), 1):
+        direction_key = f"{cfg['source_type']}->{cfg['target_type']}"
+        if direction_key != current_direction:
+            current_direction = direction_key
+            src = DB_TYPE_DISPLAY_NAME.get(cfg["source_type"], cfg["source_type"])
+            tgt = DB_TYPE_DISPLAY_NAME.get(cfg["target_type"], cfg["target_type"])
+            print(f"\n  {CYAN}{src} -> {tgt}:{RESET}")
+        print(f"  [{idx}] {cfg['display_name']}")
     print("\n  [0] Exit")
 
     try:
@@ -207,7 +275,10 @@ def main():
     print(f"  Result: {result['stats']['result_count']} entities after {result['operations_count']} operations")
     print(f"  Direction: {source_type} -> {target_type}")
     print(f"\n  {GREEN}{BOLD}[OK] TRANSFORMATION COMPLETE{RESET}")
-    print(f"  {'=' * 30}\n")
+    print(f"  {'=' * 30}")
+
+    # Validation results
+    print_validation(result)
 
     return 0
 
