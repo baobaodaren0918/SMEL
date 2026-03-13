@@ -11,6 +11,7 @@
 --   DELETE_CLUSTERING_KEY:  Remove Cassandra clustering key
 --   ADD_PRIMARY_KEY:        Add relational primary key (simple or composite)
 --   ADD_CONSTRAINT:         Add FK references (relational referential integrity)
+--   CAST_CONSTRAINT:        Cast partition key to relational primary key
 
 MIGRATION northwind_cass_to_pg:1.0
 FROM COLUMNAR TO RELATIONAL
@@ -105,18 +106,20 @@ ADD_CONSTRAINT order_details.product_id REFERENCES products(product_id) WITH CAR
 -- Step 7: Add self-reference FK to employees
 -- ============================================
 -- employees.reports_to references employees(employee_id)
--- ZERO_TO_ONE: an employee may or may not have a manager
-ADD_CONSTRAINT employees.reports_to REFERENCES employees(employee_id) WITH CARDINALITY ZERO_TO_ONE
+-- ZERO_TO_MANY: an employee may or may not have a manager
+ADD_CONSTRAINT employees.reports_to REFERENCES employees(employee_id) WITH CARDINALITY ZERO_TO_MANY
 -- Result:
 -- employees (employee_id [PK], ..., reports_to [FK->employees])
 
 -- ============================================
--- Simple tables: categories, suppliers, shippers, customers
+-- Step 8: CAST Partition Keys to relational Primary Keys
 -- ============================================
--- These tables have simple partition keys and no outbound references.
--- The EntityKind auto-conversion (WIDE_COLUMN_TABLE -> TABLE) handles the
--- PARTITION KEY -> PK transformation automatically.
--- No explicit SMEL operations needed.
+-- Simple tables: PARTITION KEY -> PRIMARY KEY
+CAST_CONSTRAINT categories.category_id TO PRIMARY KEY
+CAST_CONSTRAINT suppliers.supplier_id TO PRIMARY KEY
+CAST_CONSTRAINT shippers.shipper_id TO PRIMARY KEY
+CAST_CONSTRAINT employees.employee_id TO PRIMARY KEY
+CAST_CONSTRAINT customers.customer_id TO PRIMARY KEY
 
 -- ============================================
 -- Final Target (8 relational tables):
@@ -131,8 +134,9 @@ ADD_CONSTRAINT employees.reports_to REFERENCES employees(employee_id) WITH CARDI
 -- ============================================
 
 -- ============================================
--- Operation Summary (16 steps):
+-- Operation Summary (21 steps):
 --   DELETE_PARTITION_KEY:  3    DELETE_CLUSTERING_KEY: 3
 --   ADD_PRIMARY_KEY:       3    ADD_CONSTRAINT:        8
+--   CAST_CONSTRAINT:       5
 --   EntityKind auto-convert: WIDE_COLUMN_TABLE -> TABLE (all 8 tables)
 -- ============================================

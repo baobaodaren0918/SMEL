@@ -3,8 +3,9 @@
 -- V2 Business Scenario: E-commerce platform modernization
 --
 -- Structural changes:
---   FLATTEN:   Flatten category sub-object into product (denormalize, reduce L3->L2)
---   UNFLATTEN: Group customer contact fields into contacts sub-object (reorganize)
+--   FLATTEN:       Flatten category sub-object into product (denormalize, reduce L3->L2)
+--   UNFLATTEN:     Group customer contact fields into contacts sub-object (reorganize)
+--   ADD_EMBEDDED:  Add territories array to employee with nested region (sales territory tracking)
 
 MIGRATION northwind_mongo1_to_mongo2:1.0
 FROM DOCUMENT TO DOCUMENT
@@ -13,7 +14,8 @@ USING northwind_schema:1
 -- ============================================
 -- Meta V1 (after Reverse Engineering of northwind_mongodb.json)
 -- ============================================
--- orders (root) { _id [PK], order_date, required_date, shipped_date, freight, ship_name, ship_city }
+-- orders (root) { _id [PK], order_date, required_date, shipped_date, freight, ship_name }
+--   embedded: ship_destination { ship_address, ship_city, ship_region, ship_postal_code, ship_country }
 --   embedded: customer { company_name, contact_name, contact_title, phone, fax }
 --     embedded: address { street, city, region, postal_code, country }           [L2]
 --   embedded: employee { last_name, first_name, title, birth_date, hire_date, phone, notes, reports_to }
@@ -45,15 +47,22 @@ RENAME_ATTRIBUTE category_description TO description IN product
 UNFLATTEN customer:contact_name, contact_title, phone, fax AS contacts
 
 -- ============================================
--- Phase 3: suppliers -- RENAME + ADD
+-- Phase 3: ADD territories array to employee (new embedded array)
+-- Document equivalent of ADD_ENTITY + M:N: employee gets territories[]
 -- ============================================
-RENAME_ATTRIBUTE company_name TO name IN supplier
-ADD_ATTRIBUTE website TO supplier WITH TYPE String
+-- After: employee { ..., territories[] { territory_id, territory_description, region { ... } } }
+ADD_EMBEDDED territories TO employee WITH CARDINALITY ONE_TO_MANY
+ADD_ATTRIBUTE territory_id TO territories WITH TYPE String
+ADD_ATTRIBUTE territory_description TO territories WITH TYPE String
 
 -- ============================================
--- Phase 4: shipper -- RENAME
+-- Phase 4: ADD region inside territories (nested embedded)
+-- Document equivalent of FK relationship: territory contains its region
 -- ============================================
-RENAME_ATTRIBUTE company_name TO carrier_name IN shipper
+-- After: territories[] { territory_id, territory_description, region { region_id, region_description } }
+ADD_EMBEDDED region TO territories
+ADD_ATTRIBUTE region_id TO region WITH TYPE String
+ADD_ATTRIBUTE region_description TO region WITH TYPE String
 
 -- ============================================
 -- Phase 5: employee -- simplify + ADD
@@ -63,47 +72,35 @@ DELETE_ATTRIBUTE employee.notes
 ADD_ATTRIBUTE email TO employee WITH TYPE String
 
 -- ============================================
--- Phase 6: contacts -- ADD email
--- ============================================
-ADD_ATTRIBUTE email TO contacts WITH TYPE String
-
--- ============================================
--- Phase 7: product -- RENAME + ADD
+-- Phase 6: product + orders -- RENAME + ADD
 -- ============================================
 RENAME_ATTRIBUTE product_name TO name IN product
-ADD_ATTRIBUTE sku TO product WITH TYPE String
-
--- ============================================
--- Phase 8: orders -- RENAME + ADD
--- ============================================
 RENAME_ATTRIBUTE freight TO shipping_cost IN orders
 ADD_ATTRIBUTE status TO orders WITH TYPE String
 
 -- ============================================
--- Phase 9: details (order line items) -- RENAME
--- ============================================
-RENAME_ATTRIBUTE discount TO discount_rate IN details
-
--- ============================================
--- Final Meta V2 (4-level nesting, max L3 after FLATTEN):
--- orders { _id [PK], order_date, required_date, shipped_date, shipping_cost, ship_name, ship_city, status }
+-- Final Meta V2 (max L4 nesting):
+-- orders { _id [PK], order_date, required_date, shipped_date, shipping_cost, ship_name, status }
+--   ship_destination { ship_address, ship_city, ship_region, ship_postal_code, ship_country }
 --   customer { company_name, address { street, city, region, postal_code, country },
---              contacts { contact_name, contact_title, phone, fax, email } }
+--              contacts { contact_name, contact_title, phone, fax } }
 --   employee { last_name, first_name, title, hire_date, email, phone, reports_to,
---              address { street, city, region, postal_code, country } }
---   shipper { carrier_name, phone }
+--              address { street, city, region, postal_code, country },
+--              territories[] { territory_id, territory_description,
+--                              region { region_id, region_description } } }
+--   shipper { company_name, phone }
 --   details[] {
---     unit_price, quantity, discount_rate,
+--     unit_price, quantity, discount,
 --     product { name, unit_price, units_in_stock, discontinued, quantity_per_unit,
---               category_name, description, sku,
---               supplier { name, contact_name, contact_title, phone, fax, website,
+--               category_name, description,
+--               supplier { company_name, contact_name, contact_title, phone, fax,
 --                          address { street, city, region, postal_code, country } } }
 --   }
 -- ============================================
 
 -- ============================================
--- Operation Summary (16 steps):
+-- Operation Summary (16 steps, 6 operation types):
 --   FLATTEN: 1             UNFLATTEN: 1
---   RENAME_ATTRIBUTE: 7    ADD_ATTRIBUTE: 5
---   DELETE_ATTRIBUTE: 2
+--   ADD_EMBEDDED: 2        ADD_ATTRIBUTE: 6
+--   DELETE_ATTRIBUTE: 2    RENAME_ATTRIBUTE: 4
 -- ============================================

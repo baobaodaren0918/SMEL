@@ -111,12 +111,14 @@ ADD_PARTITION_KEY (order_id, product_id) TO order_details
 -- order_details (order_id [PARTITION], product_id [PARTITION], unit_price, quantity, discount)
 
 -- ============================================
--- Simple tables: categories, suppliers, shippers, customers
+-- Step 8: CAST primary keys to Cassandra Partition Keys
 -- ============================================
--- These tables have simple PKs and no outbound FKs.
--- The EntityKind auto-conversion (TABLE -> WIDE_COLUMN_TABLE) handles the
--- PK -> PARTITION KEY transformation automatically.
--- No explicit SMEL operations needed.
+-- Simple tables: PRIMARY KEY -> PARTITION KEY (explicit CAST)
+CAST_CONSTRAINT categories.category_id TO PARTITION KEY
+CAST_CONSTRAINT suppliers.supplier_id TO PARTITION KEY
+CAST_CONSTRAINT shippers.shipper_id TO PARTITION KEY
+CAST_CONSTRAINT employees.employee_id TO PARTITION KEY
+CAST_CONSTRAINT customers.customer_id TO PARTITION KEY
 
 -- ============================================
 -- Final Target (8 wide-column tables):
@@ -131,8 +133,8 @@ ADD_PARTITION_KEY (order_id, product_id) TO order_details
 -- ============================================
 
 -- ============================================
--- Operation Summary (16 steps):
+-- Operation Summary (22 steps, 5 operation types):
 --   DELETE_CONSTRAINT:    8    DELETE_PRIMARY_KEY: 3
 --   ADD_PARTITION_KEY:    3    ADD_CLUSTERING_KEY: 3
---   EntityKind auto-convert: TABLE -> WIDE_COLUMN_TABLE (all 8 tables)
+--   CAST_CONSTRAINT:      5
 -- ============================================

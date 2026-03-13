@@ -20,7 +20,7 @@ import re
 from typing import Dict, List, Optional, Tuple
 from ..unified_meta_schema import (
     Database, DatabaseType, EntityType, EntityKind, Attribute,
-    UniqueConstraint, UniqueProperty, PKTypeEnum,
+    UniqueConstraint, ForeignKeyConstraint, UniqueProperty, ForeignKeyProperty, PKTypeEnum,
     Reference, Cardinality, PrimitiveDataType, PrimitiveType,
     ListDataType, SetDataType, MapDataType,
     RelationshipType, TypeMappings
@@ -393,13 +393,53 @@ class PostgreSQLAdapter:
                 attr = entity.get_attribute(ref_name)
                 is_optional = attr.is_optional if attr else True
 
+                # Determine cardinality from SQL structure:
+                #   FK + NOT NULL + no UNIQUE -> 1..n (ONE_TO_MANY)
+                #   FK + nullable + no UNIQUE -> 0..n (ZERO_TO_MANY)
+                #   FK + NOT NULL + UNIQUE    -> 1..1 (ONE_TO_ONE)
+                #   FK + nullable + UNIQUE    -> 0..1 (ZERO_TO_ONE)
+                is_unique = False
+                if attr:
+                    # Check if FK column has a standalone UNIQUE constraint
+                    for c in entity.constraints:
+                        if (isinstance(c, UniqueConstraint) and not c.is_primary_key
+                                and len(c.unique_properties) == 1
+                                and c.unique_properties[0].property_id == attr.meta_id):
+                            is_unique = True
+                            break
+                    # Check if FK column is the sole PK (single-column PK = unique)
+                    if not is_unique:
+                        pk = entity.get_primary_key()
+                        if (pk and len(pk.unique_properties) == 1
+                                and pk.unique_properties[0].property_id == attr.meta_id):
+                            is_unique = True
+
+                if is_unique:
+                    cardinality = Cardinality.ONE_TO_ONE if not is_optional else Cardinality.ZERO_TO_ONE
+                else:
+                    cardinality = Cardinality.ONE_TO_MANY if not is_optional else Cardinality.ZERO_TO_MANY
+
                 reference = Reference(
                     ref_name=ref_name,
                     refs_to=target_name,
-                    cardinality=Cardinality.ONE_TO_ONE,
+                    cardinality=cardinality,
                     is_optional=is_optional
                 )
                 entity.add_relationship(reference)
+
+                # Also create ForeignKeyConstraint for consistency with SMEL ADD_CONSTRAINT
+                if attr:
+                    target_pk = target.get_primary_key()
+                    if target_pk and target_pk.unique_properties:
+                        target_up_id = target_pk.unique_properties[0].meta_id
+                        fk_prop = ForeignKeyProperty(
+                            property_id=attr.meta_id,
+                            points_to_unique_property_id=target_up_id
+                        )
+                        entity.add_constraint(ForeignKeyConstraint(
+                            is_managed=True,
+                            foreign_key_properties=[fk_prop]
+                        ))
 
     @staticmethod
     def load_from_file(file_path: str, db_name: str = None) -> Database:

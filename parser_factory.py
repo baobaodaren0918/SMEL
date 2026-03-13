@@ -4,7 +4,7 @@ Parser Factory - Auto-select parser based on file extension
 This module provides a unified entry point for parsing SMEL files.
 It automatically selects the appropriate parser based on file extension:
 - .smel     -> SMEL_Specific parser
-- .smel_ps  -> SMEL_Pauschalisiert parser
+- .smel_gen -> SMEL_Generalized parser
 """
 import sys
 from pathlib import Path
@@ -20,12 +20,12 @@ from grammar.specific.SMEL_SpecificLexer import SMEL_SpecificLexer
 from grammar.specific.SMEL_SpecificParser import SMEL_SpecificParser
 from grammar.specific.SMEL_SpecificListener import SMEL_SpecificListener
 
-from grammar.pauschalisiert.SMEL_PauschalisiertLexer import SMEL_PauschalisiertLexer
-from grammar.pauschalisiert.SMEL_PauschalisiertParser import SMEL_PauschalisiertParser
-from grammar.pauschalisiert.SMEL_PauschalisiertListener import SMEL_PauschalisiertListener
+from grammar.generalized.SMEL_GeneralizedLexer import SMEL_GeneralizedLexer
+from grammar.generalized.SMEL_GeneralizedParser import SMEL_GeneralizedParser
+from grammar.generalized.SMEL_GeneralizedListener import SMEL_GeneralizedListener
 
 # Import custom listeners
-from smel_listeners import SMELSpecificListener, SMELPauschalisiertListener
+from smel_listeners import SMELSpecificListener, SMELGeneralizedListener
 
 
 class SyntaxErrorListener(ErrorListener):
@@ -48,18 +48,18 @@ def detect_grammar_type(file_path: str) -> str:
         file_path: Path to SMEL file
 
     Returns:
-        Grammar type: 'specific' or 'pauschalisiert'
+        Grammar type: 'specific' or 'generalized'
     """
     path = Path(file_path)
     suffix = path.suffix.lower()
 
-    if suffix == '.smel_ps':
-        return 'pauschalisiert'
+    if suffix == '.smel_gen':
+        return 'generalized'
     elif suffix == '.smel':
         # .smel files use the specific grammar
         return 'specific'
     else:
-        raise ValueError(f"Unknown file extension: {suffix}. Expected .smel or .smel_ps")
+        raise ValueError(f"Unknown file extension: {suffix}. Expected .smel or .smel_gen")
 
 
 def get_parser_components(grammar_type: str):
@@ -67,17 +67,17 @@ def get_parser_components(grammar_type: str):
     Get Lexer, Parser, and base Listener classes for the specified grammar.
 
     Args:
-        grammar_type: 'specific' or 'pauschalisiert'
+        grammar_type: 'specific' or 'generalized'
 
     Returns:
         Tuple of (Lexer class, Parser class, Listener base class)
     """
     if grammar_type == 'specific':
         return SMEL_SpecificLexer, SMEL_SpecificParser, SMEL_SpecificListener
-    elif grammar_type == 'pauschalisiert':
-        return SMEL_PauschalisiertLexer, SMEL_PauschalisiertParser, SMEL_PauschalisiertListener
+    elif grammar_type == 'generalized':
+        return SMEL_GeneralizedLexer, SMEL_GeneralizedParser, SMEL_GeneralizedListener
     else:
-        raise ValueError(f"Unknown grammar type: {grammar_type}. Expected 'specific' or 'pauschalisiert'")
+        raise ValueError(f"Unknown grammar type: {grammar_type}. Expected 'specific' or 'generalized'")
 
 
 def parse_smel_file(file_path: str, listener_class):
@@ -165,7 +165,7 @@ def parse_smel_auto(file_path: str):
     3. Parses the file and returns operations
 
     Args:
-        file_path: Path to SMEL file (.smel or .smel_ps)
+        file_path: Path to SMEL file (.smel or .smel_gen)
 
     Returns:
         Tuple of (context, operations, errors)
@@ -182,10 +182,10 @@ def parse_smel_auto(file_path: str):
     # Select appropriate custom listener
     if grammar_type == 'specific':
         ListenerClass = SMELSpecificListener
-    elif grammar_type == 'pauschalisiert':
-        ListenerClass = SMELPauschalisiertListener
+    elif grammar_type == 'generalized':
+        ListenerClass = SMELGeneralizedListener
     else:
-        raise ValueError(f"Unknown grammar type: {grammar_type}. Expected 'specific' or 'pauschalisiert'")
+        raise ValueError(f"Unknown grammar type: {grammar_type}. Expected 'specific' or 'generalized'")
 
     # Create input stream
     input_stream = FileStream(file_path, encoding='utf-8')

@@ -193,13 +193,23 @@ RENAME_ATTRIBUTE ship_destination_ship_country TO ship_country IN orders
 -- employees: { employee_id, last_name, first_name, title, birth_date, hire_date, phone, notes, street, city, region, postal_code, country, reports_to }
 
 -- ============================================
--- Step 10: Restructure keys for Cassandra (complex tables)
+-- Step 10: CAST primary keys to Cassandra Partition Keys
+-- ============================================
+-- Simple tables: PRIMARY KEY -> PARTITION KEY (explicit for Cassandra target)
+CAST_CONSTRAINT categories.category_id TO PARTITION KEY
+CAST_CONSTRAINT suppliers.supplier_id TO PARTITION KEY
+CAST_CONSTRAINT shippers.shipper_id TO PARTITION KEY
+CAST_CONSTRAINT employees.employee_id TO PARTITION KEY
+CAST_CONSTRAINT customers.customer_id TO PARTITION KEY
+
+-- ============================================
+-- Step 11: Restructure keys for Cassandra (complex tables)
 -- ============================================
 -- Simple tables (categories, suppliers, shippers, customers, employees) have simple PKs
 -- that auto-convert to PARTITION KEYs via EntityKind auto-conversion.
 -- Complex tables need explicit key restructuring.
 
--- 10a: Restructure products keys (PK -> partition + clustering)
+-- 11a: Restructure products keys (PK -> partition + clustering)
 -- Cassandra: partition by category_id (query products by category), cluster by product_id
 DELETE_PRIMARY_KEY product_id FROM products
 ADD_PARTITION_KEY (category_id, supplier_id) TO products
@@ -207,7 +217,7 @@ ADD_CLUSTERING_KEY product_id TO products
 -- Result:
 -- products (category_id [PARTITION], supplier_id [PARTITION], product_id [CLUSTERING], product_name, unit_price, units_in_stock, discontinued, quantity_per_unit, supplier_id)
 
--- 10b: Restructure orders keys (PK -> partition + clustering)
+-- 11b: Restructure orders keys (PK -> partition + clustering)
 -- Cassandra: partition by customer_id (query orders by customer), cluster by order_date, order_id
 DELETE_PRIMARY_KEY order_id FROM orders
 ADD_PARTITION_KEY customer_id TO orders
@@ -216,7 +226,7 @@ ADD_CLUSTERING_KEY order_id TO orders
 -- Result:
 -- orders (customer_id [PARTITION], order_date [CLUSTERING], order_id [CLUSTERING], required_date, shipped_date, freight, ship_name, ship_address, ship_city, ship_region, ship_postal_code, ship_country, employee_id, shipper_id)
 
--- 10c: Restructure order_details keys (add partition + clustering)
+-- 11c: Restructure order_details keys (add partition + clustering)
 -- order_details has order_id and product_id as regular attributes (from UNNEST carry-field)
 -- Cassandra: partition by order_id (query details by order), cluster by product_id
 ADD_PARTITION_KEY (order_id, product_id) TO order_details
@@ -236,13 +246,14 @@ ADD_PARTITION_KEY (order_id, product_id) TO order_details
 -- ============================================
 
 -- ============================================
--- Operation Summary (44 steps):
---   RENAME_ATTRIBUTE: 13  (1 PK rename + 12 FLATTEN renames)
---   UNNEST: 7             (details, customer, employee, shipper, product, supplier, category)
---   FLATTEN: 3            (suppliers.address, customers.address, employees.address)
---   ADD_PRIMARY_KEY: 6    (customers, employees, shippers, products, suppliers, categories)
---   DELETE_ATTRIBUTE: 6   (carry-field cleanup for customers, employees, shippers, products, suppliers, categories)
---   ADD_ATTRIBUTE: 6      (FK fields: customer_id, employee_id, shipper_id, product_id, supplier_id, category_id)
+-- Operation Summary (49 steps):
+--   RENAME_ATTRIBUTE: 13   (1 PK rename + 12 FLATTEN renames)
+--   UNNEST: 7              (details, customer, employee, shipper, product, supplier, category)
+--   FLATTEN: 3             (suppliers.address, customers.address, employees.address)
+--   ADD_PRIMARY_KEY: 6     (customers, employees, shippers, products, suppliers, categories)
+--   CAST_CONSTRAINT: 5     (categories, suppliers, shippers, employees, customers -> PARTITION KEY)
+--   DELETE_ATTRIBUTE: 6    (carry-field cleanup for customers, employees, shippers, products, suppliers, categories)
+--   ADD_ATTRIBUTE: 6       (FK fields: customer_id, employee_id, shipper_id, product_id, supplier_id, category_id)
 --   DELETE_PRIMARY_KEY: 2  (products, orders -- before Cassandra key restructuring)
 --   ADD_PARTITION_KEY: 3   (products, orders, order_details)
 --   ADD_CLUSTERING_KEY: 3  (products, orders x2)

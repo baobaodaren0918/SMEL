@@ -10,7 +10,7 @@
 --   TRANSFORM:        Convert relationship to entity (or vice versa)
 --   RENAME_ENTITY:    Rename an entity
 --   ADD_ATTRIBUTE:    Add new attribute to entity
---   DELETE_RELTYPE:   Remove relationship type
+--   DELETE_ENTITY:    Remove relationship type
 --   UNFLATTEN:        Combine flat fields into nested object
 --   NEST:             Embed separate entity into parent as nested object
 --   RENAME_ATTRIBUTE: Rename a field within an entity
@@ -63,7 +63,7 @@ USING northwind_schema:1
 -- ============================================
 -- CONTAINS (orders -> products) with { unit_price, quantity, discount } becomes entity
 -- Then rename from relationship name to table name, add FK columns.
-TRANSFORM CONTAINS TO ENTITY
+TRANSFORM CONTAINS INTO ENTITY
 RENAME_ENTITY CONTAINS TO order_details
 ADD_ATTRIBUTE order_id TO order_details WITH TYPE String
 ADD_ATTRIBUTE product_id TO order_details WITH TYPE String
@@ -74,22 +74,22 @@ ADD_ATTRIBUTE product_id TO order_details WITH TYPE String
 -- Step 2: Delete all relationships and add FK-like attributes
 -- ============================================
 -- REPORTS_TO -> add reports_to field to employees (self-reference)
-DELETE_RELTYPE REPORTS_TO
+DELETE_ENTITY REPORTS_TO
 ADD_ATTRIBUTE reports_to TO employees WITH TYPE String
 -- SUPPLIES -> add supplier_id to products
-DELETE_RELTYPE SUPPLIES
+DELETE_ENTITY SUPPLIES
 ADD_ATTRIBUTE supplier_id TO products WITH TYPE String
 -- PART_OF -> add category_id to products
-DELETE_RELTYPE PART_OF
+DELETE_ENTITY PART_OF
 ADD_ATTRIBUTE category_id TO products WITH TYPE String
 -- PURCHASED -> add customer_id to orders
-DELETE_RELTYPE PURCHASED
+DELETE_ENTITY PURCHASED
 ADD_ATTRIBUTE customer_id TO orders WITH TYPE String
 -- SOLD -> add employee_id to orders
-DELETE_RELTYPE SOLD
+DELETE_ENTITY SOLD
 ADD_ATTRIBUTE employee_id TO orders WITH TYPE String
 -- SHIPPED_VIA -> add shipper_id to orders
-DELETE_RELTYPE SHIPPED_VIA
+DELETE_ENTITY SHIPPED_VIA
 ADD_ATTRIBUTE shipper_id TO orders WITH TYPE String
 -- Result:
 -- employees: { ..., reports_to }
@@ -178,6 +178,7 @@ NEST order_details:unit_price, quantity, discount, product{product_name, unit_pr
 -- Step 11: Rename PK for MongoDB convention
 -- ============================================
 RENAME_ATTRIBUTE order_id TO _id IN orders
+CAST_CONSTRAINT orders._id TO DOCUMENT_ID
 -- Final Result:
 -- orders: {
 --   _id,
@@ -198,9 +199,9 @@ RENAME_ATTRIBUTE order_id TO _id IN orders
 -- }
 
 -- ============================================
--- Operation Summary (27 steps, 7 operation types):
+-- Operation Summary (28 steps, 8 operation types):
 --   TRANSFORM:         1    RENAME_ENTITY:     1
---   ADD_ATTRIBUTE:      8    DELETE_RELTYPE:    6
+--   ADD_ATTRIBUTE:      8    DELETE_ENTITY:     6
 --   UNFLATTEN:          3    NEST:              7
---   RENAME_ATTRIBUTE:   1
+--   RENAME_ATTRIBUTE:   1    CAST_CONSTRAINT:   1
 -- ============================================

@@ -1,0 +1,109 @@
+{
+  "bsonType": "object",
+  "required": [
+    "_id",
+    "knows",
+    "employment",
+    "address",
+    "name"
+  ],
+  "properties": {
+    "_id": {
+      "bsonType": "string",
+      "maxLength": 255
+    },
+    "age": {
+      "bsonType": "string"
+    },
+    "tags": {
+      "bsonType": "array",
+      "items": {
+        "bsonType": "string"
+      }
+    },
+    "knows": {
+      "bsonType": "array",
+      "items": {
+        "bsonType": "string"
+      }
+    },
+    "employment": {
+      "bsonType": "array",
+      "description": "employment array",
+      "items": {
+        "bsonType": "object",
+        "required": [
+          "company"
+        ],
+        "properties": {
+          "position": {
+            "bsonType": "string",
+            "maxLength": 255
+          },
+          "company": {
+            "bsonType": "array",
+            "description": "company array",
+            "items": {
+              "bsonType": "object",
+              "required": [
+                "address"
+              ],
+              "properties": {
+                "name": {
+                  "bsonType": "string",
+                  "maxLength": 255
+                },
+                "address": {
+                  "bsonType": "array",
+                  "description": "address array",
+                  "items": {
+                    "bsonType": "object",
+                    "properties": {
+                      "street": {
+                        "bsonType": "string",
+                        "maxLength": 255
+                      },
+                      "city": {
+                        "bsonType": "string",
+                        "maxLength": 255
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "address": {
+      "bsonType": "object",
+      "properties": {
+        "street": {
+          "bsonType": "string",
+          "maxLength": 255
+        },
+        "city": {
+          "bsonType": "string",
+          "maxLength": 255
+        }
+      }
+    },
+    "name": {
+      "bsonType": "object",
+      "properties": {
+        "vorname": {
+          "bsonType": "string",
+          "maxLength": 255
+        },
+        "nachname": {
+          "bsonType": "string",
+          "maxLength": 255
+        }
+      }
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "person",
+  "description": "MongoDB document schema for person"
+}

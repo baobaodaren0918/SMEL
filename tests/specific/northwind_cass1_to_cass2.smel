@@ -6,6 +6,7 @@
 --   MERGE:               Denormalize categories into products table
 --   SPLIT:               Separate customer identity from contact info
 --   Repartition orders:  Change partition key from customer_id to order_date
+--   ADD_ENTITY:          Create region, territories, employee_territories (with composite partition key)
 
 MIGRATION northwind_cass1_to_cass2:1.0
 FROM COLUMNAR TO COLUMNAR
@@ -19,7 +20,7 @@ USING northwind_schema:1
 -- shippers (shipper_id [PARTITION], company_name, phone)
 -- employees (employee_id [PARTITION], last_name, first_name, title, birth_date, hire_date, phone, notes, street, city, region, postal_code, country, reports_to)
 -- customers (customer_id [PARTITION], company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country)
--- products (category_id [PARTITION], supplier_id [PARTITION], product_id [CLUSTERING], product_name, unit_price, units_in_stock, discontinued, quantity_per_unit, supplier_id)
+-- products (category_id [PARTITION], supplier_id [PARTITION], product_id [CLUSTERING], product_name, unit_price, units_in_stock, discontinued, quantity_per_unit)
 -- orders (customer_id [PARTITION], order_date [CLUSTERING], order_id [CLUSTERING], required_date, shipped_date, freight, ship_name, ship_address, ship_city, ship_region, ship_postal_code, ship_country, employee_id, shipper_id)
 -- order_details (order_id [PARTITION], product_id [PARTITION], unit_price, quantity, discount)
 
@@ -62,63 +63,65 @@ ADD_CLUSTERING_KEY customer_id TO orders
 ADD_CLUSTERING_KEY order_id TO orders
 
 -- ============================================
--- Phase 4: suppliers -- RENAME + ADD
+-- Phase 4: ADD region (new entity)
+-- Business: Sales territory management -- geographic regions
 -- ============================================
-RENAME_ATTRIBUTE company_name TO name IN suppliers
-ADD_ATTRIBUTE website TO suppliers WITH TYPE String
+ADD_ENTITY region WITH ATTRIBUTES (region_id String, region_description String)
+ADD_PARTITION_KEY region_id TO region
 
 -- ============================================
--- Phase 5: shippers -> carriers (RENAME entity + field)
+-- Phase 5: ADD territories (new entity)
+-- Business: Sales territories within regions
 -- ============================================
-RENAME_ENTITY shippers TO carriers
-RENAME_ATTRIBUTE company_name TO carrier_name IN carriers
+ADD_ENTITY territories WITH ATTRIBUTES (territory_id String, territory_description String, region_id String)
+ADD_PARTITION_KEY territory_id TO territories
 
 -- ============================================
--- Phase 6: employees -- simplify + ADD
+-- Phase 6: ADD employee_territories (composite partition key)
+-- Business: Assign employees to sales territories
+-- Cassandra: composite partition key (employee_id, region_id) + clustering key territory_id
+-- ============================================
+ADD_ENTITY employee_territories
+ADD_ATTRIBUTE employee_id TO employee_territories WITH TYPE String
+ADD_ATTRIBUTE region_id TO employee_territories WITH TYPE String
+ADD_ATTRIBUTE territory_id TO employee_territories WITH TYPE String
+ADD_PARTITION_KEY (employee_id, region_id) TO employee_territories
+ADD_CLUSTERING_KEY territory_id TO employee_territories
+
+-- ============================================
+-- Phase 7: employees -- simplify
 -- ============================================
 DELETE_ATTRIBUTE employees.birth_date
 DELETE_ATTRIBUTE employees.notes
 ADD_ATTRIBUTE email TO employees WITH TYPE String
 
 -- ============================================
--- Phase 7: customer_contacts -- ADD email
--- ============================================
-ADD_ATTRIBUTE email TO customer_contacts WITH TYPE String
-
--- ============================================
--- Phase 8: products -- RENAME + ADD
+-- Phase 8: products + orders -- RENAME + ADD
 -- ============================================
 RENAME_ATTRIBUTE product_name TO name IN products
-ADD_ATTRIBUTE sku TO products WITH TYPE String
-
--- ============================================
--- Phase 9: orders -- RENAME + ADD
--- ============================================
 RENAME_ATTRIBUTE freight TO shipping_cost IN orders
 ADD_ATTRIBUTE status TO orders WITH TYPE String
 
 -- ============================================
--- Phase 10: order_details -- RENAME
--- ============================================
-RENAME_ATTRIBUTE discount TO discount_rate IN order_details
-
--- ============================================
--- Final Meta V2 (8 entities):
--- products:           { product_id [PARTITION], name, unit_price, units_in_stock, discontinued, quantity_per_unit, supplier_id, category_name, description, sku }
--- suppliers:          { supplier_id [PARTITION], name, contact_name, contact_title, phone, fax, street, city, postal_code, country, website }
--- carriers:           { shipper_id [PARTITION], carrier_name, phone }
--- employees:          { employee_id [PARTITION], last_name, first_name, title, hire_date, email, phone, street, city, region, postal_code, country, reports_to }
--- customers:          { customer_id [PARTITION], company_name, street, city, postal_code, country }
--- customer_contacts:  { customer_id [PARTITION], contact_id [CLUSTERING], contact_name, contact_title, phone, fax, email }
--- orders:             { order_date [PARTITION], customer_id [CLUSTERING], order_id [CLUSTERING], required_date, shipped_date, shipping_cost, ship_name, ship_address, ship_city, ship_region, ship_postal_code, ship_country, employee_id, shipper_id, status }
--- order_details:      { order_id [PARTITION], product_id [PARTITION], unit_price, quantity, discount_rate }
+-- Final Meta V2 (10 entities):
+-- products:              { product_id [PARTITION], name, unit_price, units_in_stock, discontinued, quantity_per_unit, supplier_id, category_name, description }
+-- suppliers:             { supplier_id [PARTITION], company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country }
+-- shippers:              { shipper_id [PARTITION], company_name, phone }
+-- employees:             { employee_id [PARTITION], last_name, first_name, title, hire_date, email, phone, street, city, region, postal_code, country, reports_to }
+-- customers:             { customer_id [PARTITION], company_name, street, city, region, postal_code, country }
+-- customer_contacts:     { customer_id [PARTITION], contact_id [CLUSTERING], contact_name, contact_title, phone, fax }
+-- orders:                { order_date [PARTITION], customer_id [CLUSTERING], order_id [CLUSTERING], required_date, shipped_date, shipping_cost, ship_name, ship_address, ship_city, ship_region, ship_postal_code, ship_country, employee_id, shipper_id, status }
+-- order_details:         { order_id [PARTITION], product_id [PARTITION], unit_price, quantity, discount }
+-- region:                { region_id [PARTITION], region_description }
+-- territories:           { territory_id [PARTITION], territory_description, region_id }
+-- employee_territories:  { employee_id [PARTITION], region_id [PARTITION], territory_id [CLUSTERING] }
 -- ============================================
 
 -- ============================================
--- Operation Summary (28 steps):
+-- Operation Summary (33 steps, 10 operation types):
 --   MERGE: 1              SPLIT: 1
---   DELETE_PARTITION_KEY: 3  ADD_PARTITION_KEY: 3
---   DELETE_CLUSTERING_KEY: 3 ADD_CLUSTERING_KEY: 3
---   DELETE_ATTRIBUTE: 5   ADD_ATTRIBUTE: 5
---   RENAME_ATTRIBUTE: 5   RENAME_ENTITY: 1
+--   ADD_ENTITY: 3         ADD_ATTRIBUTE: 5
+--   ADD_PARTITION_KEY: 7  ADD_CLUSTERING_KEY: 4
+--   DELETE_PARTITION_KEY: 3  DELETE_CLUSTERING_KEY: 3
+--   DELETE_ATTRIBUTE: 4   RENAME_ATTRIBUTE: 2
 -- ============================================

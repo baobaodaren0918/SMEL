@@ -17,7 +17,7 @@
 
 // Node: employees
 // Key: employee_id
-// Properties: employee_id (string), last_name (string), first_name (string), title (string), birth_date (string), hire_date (string), phone (string), notes (string), street (string), city (string), region (string), postal_code (string), country (string)
+// Properties: employee_id (string), last_name (string), first_name (string), title (string), birth_date (date), hire_date (date), phone (string), notes (string), street (string), city (string), region (string), postal_code (string), country (string)
 
 // Node: customers
 // Key: customer_id
@@ -29,25 +29,25 @@
 
 // Node: orders
 // Key: order_id
-// Properties: order_id (string), order_date (string), required_date (string), shipped_date (string), freight (double), ship_name (string), ship_address (string), ship_city (string), ship_region (string), ship_postal_code (string), ship_country (string)
+// Properties: order_id (string), order_date (date), required_date (date), shipped_date (date), freight (double), ship_name (string), ship_address (string), ship_city (string), ship_region (string), ship_postal_code (string), ship_country (string)
 
 // Relationship: SUPPLIES (suppliers -> products)
-// Per supplier: 0..n products; Per product: 1..1 supplier (NOT NULL)
+// Per supplier: 0..n products; Per product: 0..n suppliers
 
 // Relationship: PART_OF (products -> categories)
-// Per product: 1..1 category (NOT NULL); Per category: 0..n products
+// Per product: 0..n categories; Per category: 0..n products
 
 // Relationship: PURCHASED (customers -> orders)
-// Per customer: 0..n orders; Per order: 1..1 customer (NOT NULL)
+// Per customer: 0..n orders; Per order: 0..n customers
 
 // Relationship: SOLD (employees -> orders)
-// Per employee: 0..n orders; Per order: 1..1 employee (NOT NULL)
+// Per employee: 0..n orders; Per order: 0..n employees
 
 // Relationship: SHIPPED_VIA (orders -> shippers)
-// Per order: 1..1 shipper (NOT NULL); Per shipper: 0..n orders
+// Per order: 0..n shippers; Per shipper: 0..n orders
 
 // Relationship: REPORTS_TO (employees -> employees)
-// Per employee: 0..1 manager (nullable)
+// Per employee: 0..n managers
 
 // Relationship: CONTAINS (orders -> products)
 // Properties: unit_price (double), quantity (integer), discount (double)

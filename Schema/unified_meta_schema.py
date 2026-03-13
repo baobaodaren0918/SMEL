@@ -52,9 +52,11 @@ class PrimitiveType(str, Enum):
 
 class PKTypeEnum(str, Enum):
     """Primary key type for different database systems (from André Conrad)."""
-    SIMPLE = "simple"           # Standard primary key
+    SIMPLE = "simple"           # Relational PRIMARY KEY
     PARTITION = "partition"     # Cassandra partition key
     CLUSTERING = "clustering"   # Cassandra clustering key
+    NODE_KEY = "node_key"       # Neo4j NODE KEY
+    DOCUMENT_ID = "document_id" # MongoDB DOCUMENT_ID
 
 
 class Cardinality(str, Enum):
@@ -93,44 +95,13 @@ class Cardinality(str, Enum):
 # TYPE MAPPINGS
 # ============================================================================
 
-_TYPE_MAPS = {
-    DatabaseType.RELATIONAL: {
-        PrimitiveType.STRING: "VARCHAR(255)", PrimitiveType.TEXT: "TEXT", PrimitiveType.INTEGER: "INTEGER",
-        PrimitiveType.LONG: "BIGINT", PrimitiveType.DOUBLE: "DOUBLE PRECISION", PrimitiveType.FLOAT: "REAL",
-        PrimitiveType.DECIMAL: "DECIMAL", PrimitiveType.BOOLEAN: "BOOLEAN", PrimitiveType.DATE: "DATE",
-        PrimitiveType.TIMESTAMP: "TIMESTAMP", PrimitiveType.UUID: "UUID",
-        PrimitiveType.BINARY: "BYTEA", PrimitiveType.NULL: "NULL", PrimitiveType.OBJECT_ID: "VARCHAR(24)",
-        PrimitiveType.INT32: "INTEGER", PrimitiveType.INT64: "BIGINT", PrimitiveType.DECIMAL128: "DECIMAL",
-    },
-    DatabaseType.DOCUMENT: {
-        PrimitiveType.STRING: "string", PrimitiveType.TEXT: "string", PrimitiveType.INTEGER: "int",
-        PrimitiveType.LONG: "long", PrimitiveType.DOUBLE: "double", PrimitiveType.FLOAT: "double",
-        PrimitiveType.DECIMAL: "decimal", PrimitiveType.BOOLEAN: "bool", PrimitiveType.DATE: "date",
-        PrimitiveType.TIMESTAMP: "timestamp", PrimitiveType.UUID: "binData",
-        PrimitiveType.BINARY: "binData", PrimitiveType.NULL: "null", PrimitiveType.OBJECT_ID: "objectId",
-        PrimitiveType.INT32: "int", PrimitiveType.INT64: "long", PrimitiveType.DECIMAL128: "decimal",
-    },
-    DatabaseType.GRAPH: {
-        PrimitiveType.STRING: "String", PrimitiveType.TEXT: "String", PrimitiveType.INTEGER: "Integer",
-        PrimitiveType.LONG: "Long", PrimitiveType.DOUBLE: "Double", PrimitiveType.FLOAT: "Float",
-        PrimitiveType.DECIMAL: "Double", PrimitiveType.BOOLEAN: "Boolean", PrimitiveType.DATE: "Date",
-        PrimitiveType.TIMESTAMP: "DateTime", PrimitiveType.UUID: "String",
-        PrimitiveType.BINARY: "ByteArray", PrimitiveType.NULL: "null", PrimitiveType.OBJECT_ID: "String",
-        PrimitiveType.INT32: "Integer", PrimitiveType.INT64: "Long", PrimitiveType.DECIMAL128: "Double",
-    },
-    DatabaseType.COLUMNAR: {
-        PrimitiveType.STRING: "text", PrimitiveType.TEXT: "text", PrimitiveType.INTEGER: "int",
-        PrimitiveType.LONG: "bigint", PrimitiveType.DOUBLE: "double", PrimitiveType.FLOAT: "float",
-        PrimitiveType.DECIMAL: "decimal", PrimitiveType.BOOLEAN: "boolean", PrimitiveType.DATE: "date",
-        PrimitiveType.TIMESTAMP: "timestamp", PrimitiveType.UUID: "uuid",
-        PrimitiveType.BINARY: "blob", PrimitiveType.NULL: "text", PrimitiveType.OBJECT_ID: "text",
-        PrimitiveType.INT32: "int", PrimitiveType.INT64: "bigint", PrimitiveType.DECIMAL128: "decimal",
-    },
-}
+# DatabaseType -> TypeMappings PRIMITIVE_TO_* dict (single source of truth)
+_NATIVE_TYPE_REGISTRY: Dict[DatabaseType, Dict] = {}  # populated after TypeMappings class
 
 
 def _get_native_type(ptype: PrimitiveType, db: DatabaseType) -> str:
-    return _TYPE_MAPS[db][ptype]
+    """Get native type string from PrimitiveType, using TypeMappings as single source."""
+    return _NATIVE_TYPE_REGISTRY[db].get(ptype, 'VARCHAR')
 
 
 # ============================================================================
@@ -365,6 +336,13 @@ class TypeMappings:
         PrimitiveType.BINARY: 'binData',
         PrimitiveType.OBJECT_ID: 'objectId',
     }
+
+
+# Populate _NATIVE_TYPE_REGISTRY from TypeMappings (single source of truth)
+_NATIVE_TYPE_REGISTRY[DatabaseType.RELATIONAL] = TypeMappings.PRIMITIVE_TO_POSTGRESQL
+_NATIVE_TYPE_REGISTRY[DatabaseType.DOCUMENT] = TypeMappings.PRIMITIVE_TO_MONGODB
+_NATIVE_TYPE_REGISTRY[DatabaseType.GRAPH] = TypeMappings.PRIMITIVE_TO_NEO4J
+_NATIVE_TYPE_REGISTRY[DatabaseType.COLUMNAR] = TypeMappings.PRIMITIVE_TO_CASSANDRA
 
 
 # ============================================================================
@@ -870,6 +848,9 @@ class EntityType:
     to_connection_ids: List[str] = field(default_factory=list)    # from André Conrad: Connector meta_ids pointing TO this entity
     from_connection_ids: List[str] = field(default_factory=list)  # from André Conrad: Connector meta_ids going FROM this entity
     labels: List[str] = field(default_factory=list)  # Graph-specific: additional node labels (e.g. Person:Employee)
+    source_entity: Optional[str] = None  # EDGE only: source node entity name
+    target_entity: Optional[str] = None  # EDGE only: target node entity name
+    edge_cardinality: Optional[Cardinality] = None  # EDGE only: relationship cardinality
     description: Optional[str] = None
     meta_id: str = field(default_factory=_uid)
 
@@ -975,6 +956,12 @@ class EntityType:
             "to_connection_ids": self.to_connection_ids,
             "from_connection_ids": self.from_connection_ids
         }
+        if self.source_entity is not None:
+            d["source_entity"] = self.source_entity
+        if self.target_entity is not None:
+            d["target_entity"] = self.target_entity
+        if self.edge_cardinality is not None:
+            d["edge_cardinality"] = self.edge_cardinality.value
         if self.description:
             d["description"] = self.description
         return d
@@ -997,6 +984,9 @@ class EntityType:
             en_name = data.get("en_name", "")
             object_name = en_name.split(".") if en_name else [""]
 
+        edge_card_str = data.get("edge_cardinality")
+        edge_cardinality = Cardinality.from_symbol(edge_card_str) if edge_card_str else None
+
         return cls(
             object_name=object_name,
             entity_kind=kind,
@@ -1006,6 +996,9 @@ class EntityType:
             relationships=rels,
             to_connection_ids=data.get("to_connection_ids", []),
             from_connection_ids=data.get("from_connection_ids", []),
+            source_entity=data.get("source_entity"),
+            target_entity=data.get("target_entity"),
+            edge_cardinality=edge_cardinality,
             description=data.get("description"),
             meta_id=data.get("meta_id", _uid())
         )
@@ -1120,7 +1113,6 @@ class Database:
     db_name: str
     db_type: DatabaseType = DatabaseType.RELATIONAL
     entity_types: Dict[str, EntityType] = field(default_factory=dict)
-    relationship_types: Dict[str, RelationshipType] = field(default_factory=dict)
     connectors: List[Connector] = field(default_factory=list)
     version: int = 1
     description: Optional[str] = None
@@ -1152,15 +1144,23 @@ class Database:
                 return self.entity_types.pop(key, None)
         return None
 
-    # RelationshipType management (Neo4j)
-    def add_relationship_type(self, r: RelationshipType):
-        self.relationship_types[r.rel_name] = r
+    # RelationshipType management (derived from EDGE entities)
+    @property
+    def relationship_types(self) -> Dict[str, EntityType]:
+        """Get all EDGE entities as relationship types (computed view)."""
+        return {name: e for name, e in self.entity_types.items() if e.entity_kind == EntityKind.EDGE}
 
-    def get_relationship_type(self, name: str) -> Optional[RelationshipType]:
-        return self.relationship_types.get(name)
+    def get_relationship_type(self, name: str) -> Optional[EntityType]:
+        """Get EDGE entity by name."""
+        entity = self.get_entity_type(name)
+        return entity if entity and entity.entity_kind == EntityKind.EDGE else None
 
-    def remove_relationship_type(self, name: str) -> Optional[RelationshipType]:
-        return self.relationship_types.pop(name, None)
+    def remove_relationship_type(self, name: str) -> Optional[EntityType]:
+        """Remove EDGE entity by name."""
+        entity = self.get_entity_type(name)
+        if entity and entity.entity_kind == EntityKind.EDGE:
+            return self.remove_entity_type(name)
+        return None
 
     # Connector management (from André Conrad's code)
     def add_connector(self, c: Connector):
@@ -1188,8 +1188,15 @@ class Database:
             "version": self.version,
             "entity_types": {n: e.to_dict() for n, e in self.entity_types.items()}
         }
-        if self.relationship_types:
-            d["relationship_types"] = {n: r.to_dict() for n, r in self.relationship_types.items()}
+        edge_entities = self.relationship_types
+        if edge_entities:
+            d["relationship_types"] = {n: {
+                "rel_name": e.name,
+                "source_entity": e.source_entity or "",
+                "target_entity": e.target_entity or "",
+                "attributes": [a.to_dict() for a in e.attributes],
+                "cardinality": (e.edge_cardinality or Cardinality.ZERO_TO_MANY).value
+            } for n, e in edge_entities.items()}
         if self.connectors:
             d["connectors"] = [c.to_dict() for c in self.connectors]
         if self.description:
@@ -1224,10 +1231,21 @@ class Database:
             entity = EntityType.from_dict(e_data)
             db.add_entity_type(entity)
 
-        # Load relationship types
+        # Load relationship types as EDGE entities
         for r_data in data.get("relationship_types", {}).values():
-            rel_type = RelationshipType.from_dict(r_data)
-            db.add_relationship_type(rel_type)
+            rel_name = r_data.get("rel_name", "")
+            attrs = [Attribute.from_dict(a) for a in r_data.get("attributes", [])]
+            card_str = r_data.get("cardinality", "0..n")
+            edge_entity = EntityType(
+                object_name=[rel_name],
+                entity_kind=EntityKind.EDGE,
+                source_entity=r_data.get("source_entity", ""),
+                target_entity=r_data.get("target_entity", ""),
+                edge_cardinality=Cardinality.from_symbol(card_str),
+                attributes=attrs,
+                meta_id=r_data.get("meta_id", _uid())
+            )
+            db.add_entity_type(edge_entity)
 
         # Load connectors
         for c_data in data.get("connectors", []):
@@ -1252,6 +1270,6 @@ __all__ = [
     'UniqueConstraint', 'ForeignKeyConstraint',
     'Relationship', 'Reference', 'Embedded', 'Edge',
     'ConnectorCardinality', 'Connector',
-    'EntityType', 'RelationshipType',
+    'EntityType',
     'Database', 'UnifiedMetaSchema', 'TypeMappings'
 ]

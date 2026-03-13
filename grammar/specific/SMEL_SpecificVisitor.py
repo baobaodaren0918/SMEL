@@ -1,4 +1,4 @@
-# Generated from grammar/SMEL_Specific.g4 by ANTLR 4.13.2
+# Generated from grammar/specific/SMEL_Specific.g4 by ANTLR 4.13.2
 from antlr4 import *
 if "." in __name__:
     from .SMEL_SpecificParser import SMEL_SpecificParser
@@ -214,21 +214,6 @@ class SMEL_SpecificVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
-    # Visit a parse tree produced by SMEL_SpecificParser#remove_unique_key.
-    def visitRemove_unique_key(self, ctx:SMEL_SpecificParser.Remove_unique_keyContext):
-        return self.visitChildren(ctx)
-
-
-    # Visit a parse tree produced by SMEL_SpecificParser#remove_foreign_key.
-    def visitRemove_foreign_key(self, ctx:SMEL_SpecificParser.Remove_foreign_keyContext):
-        return self.visitChildren(ctx)
-
-
-    # Visit a parse tree produced by SMEL_SpecificParser#remove_label.
-    def visitRemove_label(self, ctx:SMEL_SpecificParser.Remove_labelContext):
-        return self.visitChildren(ctx)
-
-
     # Visit a parse tree produced by SMEL_SpecificParser#rename_attribute.
     def visitRename_attribute(self, ctx:SMEL_SpecificParser.Rename_attributeContext):
         return self.visitChildren(ctx)
@@ -236,21 +221,6 @@ class SMEL_SpecificVisitor(ParseTreeVisitor):
 
     # Visit a parse tree produced by SMEL_SpecificParser#rename_entity.
     def visitRename_entity(self, ctx:SMEL_SpecificParser.Rename_entityContext):
-        return self.visitChildren(ctx)
-
-
-    # Visit a parse tree produced by SMEL_SpecificParser#add_reltype.
-    def visitAdd_reltype(self, ctx:SMEL_SpecificParser.Add_reltypeContext):
-        return self.visitChildren(ctx)
-
-
-    # Visit a parse tree produced by SMEL_SpecificParser#delete_reltype.
-    def visitDelete_reltype(self, ctx:SMEL_SpecificParser.Delete_reltypeContext):
-        return self.visitChildren(ctx)
-
-
-    # Visit a parse tree produced by SMEL_SpecificParser#rename_reltype.
-    def visitRename_reltype(self, ctx:SMEL_SpecificParser.Rename_reltypeContext):
         return self.visitChildren(ctx)
 
 
@@ -349,6 +319,11 @@ class SMEL_SpecificVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
+    # Visit a parse tree produced by SMEL_SpecificParser#cast_entity.
+    def visitCast_entity(self, ctx:SMEL_SpecificParser.Cast_entityContext):
+        return self.visitChildren(ctx)
+
+
     # Visit a parse tree produced by SMEL_SpecificParser#recard.
     def visitRecard(self, ctx:SMEL_SpecificParser.RecardContext):
         return self.visitChildren(ctx)
@@ -386,6 +361,16 @@ class SMEL_SpecificVisitor(ParseTreeVisitor):
 
     # Visit a parse tree produced by SMEL_SpecificParser#withAttributesClause.
     def visitWithAttributesClause(self, ctx:SMEL_SpecificParser.WithAttributesClauseContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by SMEL_SpecificParser#attributeDefList.
+    def visitAttributeDefList(self, ctx:SMEL_SpecificParser.AttributeDefListContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by SMEL_SpecificParser#attributeDef.
+    def visitAttributeDef(self, ctx:SMEL_SpecificParser.AttributeDefContext):
         return self.visitChildren(ctx)
 
 

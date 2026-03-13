@@ -1,0 +1,98 @@
+-- SMEL Northwind: PostgreSQL V1 -> PostgreSQL V2 (Generalized Operations Version)
+-- Same-model Schema Evolution: Relational -> Relational
+-- V2 Business Scenario: E-commerce platform modernization
+--
+-- Structural changes:
+--   MERGE:      Denormalize categories into products (eliminate JOIN)
+--   SPLIT:      Separate customer identity from contact info (CRM)
+--   ADD_ENTITY: Create region, territories, employee_territories (sales territory tracking)
+
+MIGRATION northwind_pg1_to_pg2:1.0
+FROM RELATIONAL TO RELATIONAL
+USING northwind_schema:1
+
+-- ============================================
+-- Meta V1 (after Reverse Engineering of northwind_postgresql.sql)
+-- ============================================
+-- categories (category_id [PK], category_name, description)
+-- suppliers (supplier_id [PK], company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country)
+-- shippers (shipper_id [PK], company_name, phone)
+-- employees (employee_id [PK], last_name, first_name, title, birth_date, hire_date, phone, notes, street, city, region, postal_code, country, reports_to [FK->employees])
+-- customers (customer_id [PK], company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country)
+-- products (product_id [PK], product_name, unit_price, units_in_stock, discontinued, quantity_per_unit, supplier_id [FK->suppliers], category_id [FK->categories])
+-- orders (order_id [PK], order_date, required_date, shipped_date, freight, ship_name, ship_address, ship_city, ship_region, ship_postal_code, ship_country, customer_id [FK->customers], employee_id [FK->employees], shipper_id [FK->shippers])
+-- order_details (order_id [PK,FK->orders], product_id [PK,FK->products], unit_price, quantity, discount)
+
+-- ============================================
+-- Phase 1: MERGE categories INTO products (structural)
+-- Business: Eliminate JOIN for product catalog queries
+-- ============================================
+DELETE CONSTRAINT products.category_id
+DELETE ATTRIBUTE products.category_id
+DELETE PRIMARY KEY category_id FROM categories
+DELETE ATTRIBUTE categories.category_id
+MERGE categories, products INTO products
+
+-- ============================================
+-- Phase 2: SPLIT customers -> customers + customer_contacts (structural)
+-- Business: Separate company identity from contact person info
+-- ============================================
+SPLIT customers INTO customers:customer_id, company_name, street, city, region, postal_code, country; customer_contacts:customer_id, contact_name, contact_title, phone, fax
+ADD KEY customer_id TO customers
+ADD KEY customer_contacts.contact_id AS String
+ADD CONSTRAINT customer_contacts.customer_id REFERENCES customers(customer_id) WITH CARDINALITY ONE_TO_MANY
+
+-- ============================================
+-- Phase 3: ADD region (new entity)
+-- Business: Sales territory management -- geographic regions
+-- ============================================
+ADD ENTITY region WITH ATTRIBUTES (region_id String, region_description String)
+ADD KEY region_id TO region
+
+-- ============================================
+-- Phase 4: ADD territories (new entity, FK -> region)
+-- Business: Sales territories within regions
+-- ============================================
+ADD ENTITY territories WITH ATTRIBUTES (territory_id String, territory_description String, region_id String)
+ADD KEY territory_id TO territories
+ADD CONSTRAINT territories.region_id REFERENCES region(region_id) WITH CARDINALITY ONE_TO_MANY
+
+-- ============================================
+-- Phase 5: ADD employee_territories (M:N junction table)
+-- Business: Assign employees to sales territories
+-- ============================================
+ADD ENTITY employee_territories
+ADD ATTRIBUTE employee_id TO employee_territories WITH TYPE String
+ADD ATTRIBUTE territory_id TO employee_territories WITH TYPE String
+ADD KEY (employee_id, territory_id) TO employee_territories
+ADD CONSTRAINT employee_territories.employee_id REFERENCES employees(employee_id) WITH CARDINALITY ONE_TO_MANY
+ADD CONSTRAINT employee_territories.territory_id REFERENCES territories(territory_id) WITH CARDINALITY ONE_TO_MANY
+
+-- ============================================
+-- Phase 6: employees -- simplify
+-- ============================================
+DELETE ATTRIBUTE employees.birth_date
+DELETE ATTRIBUTE employees.notes
+ADD ATTRIBUTE email TO employees WITH TYPE String
+
+-- ============================================
+-- Phase 7: products + orders -- RENAME + ADD
+-- ============================================
+RENAME ATTRIBUTE product_name TO name IN products
+RENAME ATTRIBUTE freight TO shipping_cost IN orders
+ADD ATTRIBUTE status TO orders WITH TYPE String
+
+-- ============================================
+-- Final Meta V2 (10 entities):
+-- products:              { product_id [PK], name, unit_price, units_in_stock, discontinued, quantity_per_unit, supplier_id [FK], category_name, description }
+-- suppliers:             { supplier_id [PK], company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country }
+-- shippers:              { shipper_id [PK], company_name, phone }
+-- employees:             { employee_id [PK], last_name, first_name, title, hire_date, email, phone, street, city, region, postal_code, country, reports_to [FK] }
+-- customers:             { customer_id [PK], company_name, street, city, region, postal_code, country }
+-- customer_contacts:     { contact_id [PK], customer_id [FK], contact_name, contact_title, phone, fax }
+-- orders:                { order_id [PK], order_date, required_date, shipped_date, shipping_cost, ship_name, ship_address, ship_city, ship_region, ship_postal_code, ship_country, customer_id [FK], employee_id [FK], shipper_id [FK], status }
+-- order_details:         { order_id [PK,FK], product_id [PK,FK], unit_price, quantity, discount }
+-- region:                { region_id [PK], region_description }
+-- territories:           { territory_id [PK], territory_description, region_id [FK->region] }
+-- employee_territories:  { employee_id [PK,FK], territory_id [PK,FK] }
+-- ============================================

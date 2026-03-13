@@ -1,0 +1,282 @@
+{
+  "bsonType": "object",
+  "required": [
+    "_id",
+    "customer",
+    "employee",
+    "shipper",
+    "details",
+    "ship_destination"
+  ],
+  "properties": {
+    "_id": {
+      "bsonType": "string"
+    },
+    "order_date": {
+      "bsonType": "date"
+    },
+    "required_date": {
+      "bsonType": "date"
+    },
+    "shipped_date": {
+      "bsonType": "date"
+    },
+    "shipping_cost": {
+      "bsonType": "double"
+    },
+    "ship_name": {
+      "bsonType": "string"
+    },
+    "ship_destination": {
+      "bsonType": "object",
+      "properties": {
+        "ship_address": {
+          "bsonType": "string"
+        },
+        "ship_city": {
+          "bsonType": "string"
+        },
+        "ship_region": {
+          "bsonType": "string"
+        },
+        "ship_postal_code": {
+          "bsonType": "string"
+        },
+        "ship_country": {
+          "bsonType": "string"
+        }
+      }
+    },
+    "status": {
+      "bsonType": "string"
+    },
+    "customer": {
+      "bsonType": "object",
+      "required": [
+        "contacts",
+        "address"
+      ],
+      "properties": {
+        "company_name": {
+          "bsonType": "string"
+        },
+        "address": {
+          "bsonType": "object",
+          "properties": {
+            "street": {
+              "bsonType": "string"
+            },
+            "city": {
+              "bsonType": "string"
+            },
+            "region": {
+              "bsonType": "string"
+            },
+            "postal_code": {
+              "bsonType": "string"
+            },
+            "country": {
+              "bsonType": "string"
+            }
+          }
+        },
+        "contacts": {
+          "bsonType": "object",
+          "properties": {
+            "contact_name": {
+              "bsonType": "string"
+            },
+            "contact_title": {
+              "bsonType": "string"
+            },
+            "phone": {
+              "bsonType": "string"
+            },
+            "fax": {
+              "bsonType": "string"
+            }
+          }
+        }
+      }
+    },
+    "employee": {
+      "bsonType": "object",
+      "required": ["address", "territories"],
+      "properties": {
+        "last_name": {
+          "bsonType": "string"
+        },
+        "first_name": {
+          "bsonType": "string"
+        },
+        "title": {
+          "bsonType": "string"
+        },
+        "hire_date": {
+          "bsonType": "date"
+        },
+        "phone": {
+          "bsonType": "string"
+        },
+        "reports_to": {
+          "bsonType": "string"
+        },
+        "email": {
+          "bsonType": "string"
+        },
+        "address": {
+          "bsonType": "object",
+          "properties": {
+            "street": {
+              "bsonType": "string"
+            },
+            "city": {
+              "bsonType": "string"
+            },
+            "region": {
+              "bsonType": "string"
+            },
+            "postal_code": {
+              "bsonType": "string"
+            },
+            "country": {
+              "bsonType": "string"
+            }
+          }
+        },
+        "territories": {
+          "bsonType": "array",
+          "description": "territories array",
+          "items": {
+            "bsonType": "object",
+            "required": ["region"],
+            "properties": {
+              "territory_id": {
+                "bsonType": "string"
+              },
+              "territory_description": {
+                "bsonType": "string"
+              },
+              "region": {
+                "bsonType": "object",
+                "properties": {
+                  "region_id": {
+                    "bsonType": "string"
+                  },
+                  "region_description": {
+                    "bsonType": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "shipper": {
+      "bsonType": "object",
+      "properties": {
+        "company_name": {
+          "bsonType": "string"
+        },
+        "phone": {
+          "bsonType": "string"
+        }
+      }
+    },
+    "details": {
+      "bsonType": "array",
+      "description": "details array",
+      "items": {
+        "bsonType": "object",
+        "required": [
+          "product"
+        ],
+        "properties": {
+          "unit_price": {
+            "bsonType": "double"
+          },
+          "quantity": {
+            "bsonType": "int"
+          },
+          "discount": {
+            "bsonType": "double"
+          },
+          "product": {
+            "bsonType": "object",
+            "required": [
+              "supplier"
+            ],
+            "properties": {
+              "name": {
+                "bsonType": "string"
+              },
+              "unit_price": {
+                "bsonType": "double"
+              },
+              "units_in_stock": {
+                "bsonType": "int"
+              },
+              "discontinued": {
+                "bsonType": "bool"
+              },
+              "quantity_per_unit": {
+                "bsonType": "string"
+              },
+              "category_name": {
+                "bsonType": "string"
+              },
+              "description": {
+                "bsonType": "string"
+              },
+              "supplier": {
+                "bsonType": "object",
+                "required": ["address"],
+                "properties": {
+                  "company_name": {
+                    "bsonType": "string"
+                  },
+                  "contact_name": {
+                    "bsonType": "string"
+                  },
+                  "contact_title": {
+                    "bsonType": "string"
+                  },
+                  "phone": {
+                    "bsonType": "string"
+                  },
+                  "fax": {
+                    "bsonType": "string"
+                  },
+                  "address": {
+                    "bsonType": "object",
+                    "properties": {
+                      "street": {
+                        "bsonType": "string"
+                      },
+                      "city": {
+                        "bsonType": "string"
+                      },
+                      "region": {
+                        "bsonType": "string"
+                      },
+                      "postal_code": {
+                        "bsonType": "string"
+                      },
+                      "country": {
+                        "bsonType": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "orders",
+  "description": "MongoDB document schema for orders"
+}

@@ -1,7 +1,7 @@
 """
 SMEL Parser Test Script
 Tests parsing of SMEL migration scripts using the parser factory.
-Supports both SMEL_Specific (.smel) and SMEL_Pauschalisiert (.smel_ps) grammars.
+Supports both SMEL_Specific (.smel) and SMEL_Generalized (.smel_gen) grammars.
 """
 import sys
 import os
@@ -18,7 +18,7 @@ def parse_smel_file(filepath: str, verbose: bool = True) -> tuple:
     Parse a SMEL file and return success status and any errors.
 
     Args:
-        filepath: Path to the .smel or .smel_ps file
+        filepath: Path to the .smel or .smel_gen file
         verbose: Whether to print detailed information
 
     Returns:
@@ -94,15 +94,40 @@ def count_operations(operations: list) -> dict:
     return counts
 
 
+# =============================================================================
+# pytest-compatible test functions
+# =============================================================================
+import pytest
+
+_tests_dir = Path(__file__).parent
+_smel_files = sorted(_tests_dir.glob("**/*.smel"))
+_smel_gen_files = sorted(_tests_dir.glob("**/*.smel_gen"))
+
+
+@pytest.mark.parametrize("filepath", _smel_files, ids=[f.name for f in _smel_files])
+def test_parse_specific(filepath):
+    """Test parsing of Specific grammar (.smel) files."""
+    success, context, operations, errors = parse_smel_file(str(filepath), verbose=False)
+    assert success, f"Parse failed for {filepath.name}: {errors}"
+    assert len(operations) > 0, f"No operations parsed from {filepath.name}"
+
+
+@pytest.mark.parametrize("filepath", _smel_gen_files, ids=[f.name for f in _smel_gen_files])
+def test_parse_generalized(filepath):
+    """Test parsing of Generalized grammar (.smel_gen) files."""
+    success, context, operations, errors = parse_smel_file(str(filepath), verbose=False)
+    assert success, f"Parse failed for {filepath.name}: {errors}"
+    assert len(operations) > 0, f"No operations parsed from {filepath.name}"
+
+
+# =============================================================================
+# Standalone execution (python tests/test_parser.py)
+# =============================================================================
 def main():
     """Main test function."""
-    # Get test files directory
-    tests_dir = Path(__file__).parent
+    tests_dir = _tests_dir
 
-    # Test files - scan for .smel and .smel_ps files
-    test_files = []
-    test_files.extend(tests_dir.glob("**/*.smel"))
-    test_files.extend(tests_dir.glob("**/*.smel_ps"))
+    test_files = sorted(list(_smel_files) + list(_smel_gen_files))
 
     if not test_files:
         print("No test files found in tests directory")
@@ -111,7 +136,7 @@ def main():
 
     results = []
 
-    for filepath in sorted(test_files):
+    for filepath in test_files:
         success, context, operations, errors = parse_smel_file(str(filepath), verbose=True)
         results.append((filepath.name, success, errors))
 

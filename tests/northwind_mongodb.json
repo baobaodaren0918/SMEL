@@ -3,15 +3,15 @@
   "title": "orders",
   "description": "MongoDB Northwind document with 4-level nesting: order→details[]→product→supplier→address, plus ship_destination",
   "bsonType": "object",
-  "required": ["_id", "customer", "employee", "shipper"],
+  "required": ["_id", "customer", "employee", "shipper", "details", "ship_destination"],
   "properties": {
     "_id": {
       "bsonType": "string",
       "description": "Primary key (order_id)"
     },
-    "order_date": { "bsonType": "string" },
-    "required_date": { "bsonType": "string" },
-    "shipped_date": { "bsonType": "string" },
+    "order_date": { "bsonType": "date" },
+    "required_date": { "bsonType": "date" },
+    "shipped_date": { "bsonType": "date" },
     "freight": { "bsonType": "double" },
     "ship_name": { "bsonType": "string" },
     "ship_destination": {
@@ -28,6 +28,7 @@
     "customer": {
       "bsonType": "object",
       "description": "Embedded customer (level 1)",
+      "required": ["address"],
       "properties": {
         "company_name": { "bsonType": "string" },
         "contact_name": { "bsonType": "string" },
@@ -50,12 +51,13 @@
     "employee": {
       "bsonType": "object",
       "description": "Embedded employee (level 1)",
+      "required": ["address"],
       "properties": {
         "last_name": { "bsonType": "string" },
         "first_name": { "bsonType": "string" },
         "title": { "bsonType": "string" },
-        "birth_date": { "bsonType": "string" },
-        "hire_date": { "bsonType": "string" },
+        "birth_date": { "bsonType": "date" },
+        "hire_date": { "bsonType": "date" },
         "phone": { "bsonType": "string" },
         "notes": { "bsonType": "string" },
         "reports_to": {
@@ -114,6 +116,7 @@
               "supplier": {
                 "bsonType": "object",
                 "description": "Embedded supplier (level 3)",
+                "required": ["address"],
                 "properties": {
                   "company_name": { "bsonType": "string" },
                   "contact_name": { "bsonType": "string" },

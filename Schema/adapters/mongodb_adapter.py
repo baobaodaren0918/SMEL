@@ -186,7 +186,7 @@ class MongoDBAdapter:
                     constraint = UniqueConstraint(
                         is_primary_key=True,
                         is_managed=True,
-                        unique_properties=[UniqueProperty(primary_key_type=PKTypeEnum.SIMPLE, property_id=attr.meta_id)]
+                        unique_properties=[UniqueProperty(primary_key_type=PKTypeEnum.DOCUMENT_ID, property_id=attr.meta_id)]
                     )
                     entity.add_constraint(constraint)
 

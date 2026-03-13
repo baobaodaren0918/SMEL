@@ -12,7 +12,7 @@
 --   ADD_ATTRIBUTE:   Add FK attribute to entity (graph edge replaced by FK column)
 --   ADD_CONSTRAINT:  Add FK constraint (re-establish relational references)
 --   ADD_PRIMARY_KEY: Add composite PK to junction table
---   DELETE_RELTYPE:  Remove relationship type (graph edge no longer needed)
+--   DELETE_ENTITY:   Remove relationship type (graph edge no longer needed)
 -- Note: Neo4j source already uses lowercase entity names (categories, suppliers, etc.)
 
 MIGRATION northwind_neo4j_to_pg:1.0
@@ -57,7 +57,7 @@ USING northwind_schema:1
 -- The CONTAINS relationship carries properties (unit_price, quantity, discount).
 -- TRANSFORM converts it to an entity, preserving those properties.
 -- Then rename from relationship name to table name, add FK columns and composite PK.
-TRANSFORM CONTAINS TO ENTITY
+TRANSFORM CONTAINS INTO ENTITY
 RENAME_ENTITY CONTAINS TO order_details
 ADD_ATTRIBUTE order_id TO order_details WITH TYPE String
 ADD_ATTRIBUTE product_id TO order_details WITH TYPE String
@@ -71,7 +71,7 @@ ADD_PRIMARY_KEY (order_id, product_id) TO order_details
 -- Step 2: orders -- PURCHASED relationship -> customer_id FK
 -- ============================================
 -- PURCHASED (customers -> orders) becomes a customer_id FK column in orders.
-DELETE_RELTYPE PURCHASED
+DELETE_ENTITY PURCHASED
 ADD_ATTRIBUTE customer_id TO orders WITH TYPE String
 ADD_CONSTRAINT orders.customer_id REFERENCES customers(customer_id) WITH CARDINALITY ONE_TO_MANY
 -- Result:
@@ -81,7 +81,7 @@ ADD_CONSTRAINT orders.customer_id REFERENCES customers(customer_id) WITH CARDINA
 -- Step 3: orders -- SOLD relationship -> employee_id FK
 -- ============================================
 -- SOLD (employees -> orders) becomes an employee_id FK column in orders.
-DELETE_RELTYPE SOLD
+DELETE_ENTITY SOLD
 ADD_ATTRIBUTE employee_id TO orders WITH TYPE String
 ADD_CONSTRAINT orders.employee_id REFERENCES employees(employee_id) WITH CARDINALITY ONE_TO_MANY
 -- Result:
@@ -91,7 +91,7 @@ ADD_CONSTRAINT orders.employee_id REFERENCES employees(employee_id) WITH CARDINA
 -- Step 4: orders -- SHIPPED_VIA relationship -> shipper_id FK
 -- ============================================
 -- SHIPPED_VIA (orders -> shippers) becomes a shipper_id FK column in orders.
-DELETE_RELTYPE SHIPPED_VIA
+DELETE_ENTITY SHIPPED_VIA
 ADD_ATTRIBUTE shipper_id TO orders WITH TYPE String
 ADD_CONSTRAINT orders.shipper_id REFERENCES shippers(shipper_id) WITH CARDINALITY ONE_TO_MANY
 -- Result:
@@ -101,7 +101,7 @@ ADD_CONSTRAINT orders.shipper_id REFERENCES shippers(shipper_id) WITH CARDINALIT
 -- Step 5: products -- SUPPLIES relationship -> supplier_id FK
 -- ============================================
 -- SUPPLIES (suppliers -> products) becomes a supplier_id FK column in products.
-DELETE_RELTYPE SUPPLIES
+DELETE_ENTITY SUPPLIES
 ADD_ATTRIBUTE supplier_id TO products WITH TYPE String
 ADD_CONSTRAINT products.supplier_id REFERENCES suppliers(supplier_id) WITH CARDINALITY ONE_TO_MANY
 -- Result:
@@ -111,7 +111,7 @@ ADD_CONSTRAINT products.supplier_id REFERENCES suppliers(supplier_id) WITH CARDI
 -- Step 6: products -- PART_OF relationship -> category_id FK
 -- ============================================
 -- PART_OF (products -> categories) becomes a category_id FK column in products.
-DELETE_RELTYPE PART_OF
+DELETE_ENTITY PART_OF
 ADD_ATTRIBUTE category_id TO products WITH TYPE String
 ADD_CONSTRAINT products.category_id REFERENCES categories(category_id) WITH CARDINALITY ONE_TO_MANY
 -- Result:
@@ -121,13 +121,24 @@ ADD_CONSTRAINT products.category_id REFERENCES categories(category_id) WITH CARD
 -- Step 7: employees -- REPORTS_TO relationship -> reports_to FK (self-reference)
 -- ============================================
 -- REPORTS_TO (employees -> employees) becomes a reports_to FK column
--- referencing the same employees table (self-reference with ZERO_TO_ONE
+-- referencing the same employees table (self-reference with ZERO_TO_MANY
 -- cardinality since not every employee has a manager).
-DELETE_RELTYPE REPORTS_TO
+DELETE_ENTITY REPORTS_TO
 ADD_ATTRIBUTE reports_to TO employees WITH TYPE String
-ADD_CONSTRAINT employees.reports_to REFERENCES employees(employee_id) WITH CARDINALITY ZERO_TO_ONE
+ADD_CONSTRAINT employees.reports_to REFERENCES employees(employee_id) WITH CARDINALITY ZERO_TO_MANY
 -- Result:
 -- employees: { employee_id [PK], last_name, first_name, title, birth_date, hire_date, phone, notes, street, city, region, postal_code, country, reports_to [FK->employees] }
+
+-- ============================================
+-- Step 8: CAST Node Keys to relational Primary Keys
+-- ============================================
+CAST_CONSTRAINT categories.category_id TO PRIMARY KEY
+CAST_CONSTRAINT suppliers.supplier_id TO PRIMARY KEY
+CAST_CONSTRAINT shippers.shipper_id TO PRIMARY KEY
+CAST_CONSTRAINT employees.employee_id TO PRIMARY KEY
+CAST_CONSTRAINT customers.customer_id TO PRIMARY KEY
+CAST_CONSTRAINT products.product_id TO PRIMARY KEY
+CAST_CONSTRAINT orders.order_id TO PRIMARY KEY
 
 -- ============================================
 -- Final Meta V2 (8 tables, 8 FK constraints):
@@ -144,8 +155,9 @@ ADD_CONSTRAINT employees.reports_to REFERENCES employees(employee_id) WITH CARDI
 -- ============================================
 
 -- ============================================
--- Operation Summary (25 steps, 6 operation types):
---   RENAME_ENTITY:   1    ADD_ATTRIBUTE:   8
---   ADD_CONSTRAINT:  8    DELETE_RELTYPE:  6
---   ADD_PRIMARY_KEY: 1    TRANSFORM:       1
+-- Operation Summary (32 steps, 7 operation types):
+--   RENAME_ENTITY:    1    ADD_ATTRIBUTE:     8
+--   ADD_CONSTRAINT:   8    DELETE_ENTITY:     6
+--   ADD_PRIMARY_KEY:  1    TRANSFORM:         1
+--   CAST_CONSTRAINT:  7
 -- ============================================

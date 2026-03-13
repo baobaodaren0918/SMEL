@@ -10,7 +10,7 @@ Data Flow:
   Neo4j Graph JSON                       Unified Meta Schema
   ─────────────────────────────────────────────────────────────
   Node label "Person"              ->     EntityType(entity_kind=VERTEX)
-  Relationship type "ACTED_IN"     ->     RelationshipType + Edge
+  Relationship type "ACTED_IN"     ->     EntityType(EDGE) + Edge
   Property { "type": "string" }    ->     PrimitiveType.STRING
   primary_key field                ->     UniqueConstraint (is_primary_key=True)
 
@@ -22,7 +22,7 @@ from typing import Dict, Any, Optional, List
 from ..unified_meta_schema import (
     Database, DatabaseType, EntityType, EntityKind, Attribute,
     UniqueConstraint, UniqueProperty, PKTypeEnum,
-    RelationshipType, Edge, Cardinality, PrimitiveDataType, PrimitiveType,
+    Edge, Cardinality, PrimitiveDataType, PrimitiveType,
     TypeMappings
 )
 
@@ -115,21 +115,20 @@ class Neo4jAdapter:
                     ),
                     "Movie": EntityType(...)
                 },
-                relationship_types={
-                    "ACTED_IN": RelationshipType(
-                        rel_name="ACTED_IN",
+                    "ACTED_IN": EntityType(
+                        object_name=["ACTED_IN"],
+                        entity_kind=EntityKind.EDGE,
                         source_entity="Person",
                         target_entity="Movie",
                         attributes=[Attribute("role", STRING)],
-                        cardinality=ZERO_TO_MANY
+                        edge_cardinality=ZERO_TO_MANY
                     )
-                }
             )
 
         Processing Flow:
             1. Create Database with db_type=GRAPH
             2. Parse each node -> EntityType(entity_kind=VERTEX)
-            3. Parse each relationship -> RelationshipType + Edge on source entity
+            3. Parse each relationship -> EntityType(EDGE) + Edge on source entity
         """
         self.database = Database(db_name=db_name, db_type=DatabaseType.GRAPH)
 
@@ -139,7 +138,7 @@ class Neo4jAdapter:
             entity = self._parse_node(node_def)
             self.database.add_entity_type(entity)
 
-        # Step 2: Parse relationships -> RelationshipType + Edge
+        # Step 2: Parse relationships -> EntityType(EDGE) + Edge
         relationships = schema.get("relationships", [])
         for rel_def in relationships:
             self._parse_relationship(rel_def)
@@ -202,7 +201,7 @@ class Neo4jAdapter:
                     is_managed=True,
                     unique_properties=[
                         UniqueProperty(
-                            primary_key_type=PKTypeEnum.SIMPLE,
+                            primary_key_type=PKTypeEnum.NODE_KEY,
                             property_id=attr.meta_id
                         )
                     ]
@@ -213,10 +212,10 @@ class Neo4jAdapter:
 
     def _parse_relationship(self, rel_def: Dict[str, Any]):
         """
-        Parse a single relationship definition into RelationshipType and Edge.
+        Parse a single relationship definition into EntityType(EDGE) and Edge.
 
         Creates two things:
-          1. RelationshipType on Database (schema-level edge definition)
+          1. EntityType(EDGE) on Database (schema-level edge definition)
           2. Edge on source EntityType's relationships list (instance-level link)
 
         Example:
@@ -228,7 +227,7 @@ class Neo4jAdapter:
                 "cardinality": "0..n"
             }
 
-            -> RelationshipType("ACTED_IN", source="Person", target="Movie", ...)
+            -> EntityType(EDGE)("ACTED_IN", source="Person", target="Movie", ...)
             -> Edge on Person entity (rel_type_name="ACTED_IN", target="Movie")
         """
         rel_name = rel_def.get("type", "RELATED_TO")
@@ -252,20 +251,21 @@ class Neo4jAdapter:
             )
             rel_attributes.append(attr)
 
-        # Create RelationshipType (schema-level definition)
-        rel_type = RelationshipType(
-            rel_name=rel_name,
+        # Create EDGE EntityType (schema-level definition)
+        edge_entity = EntityType(
+            object_name=[rel_name],
+            entity_kind=EntityKind.EDGE,
             source_entity=source_label,
             target_entity=target_label,
-            attributes=rel_attributes,
-            cardinality=cardinality
+            edge_cardinality=cardinality,
+            attributes=rel_attributes
         )
-        self.database.add_relationship_type(rel_type)
+        self.database.add_entity_type(edge_entity)
 
         # Create Edge on source entity's relationships list
         source_entity = self.database.get_entity_type(source_label)
         if not source_entity:
-            print(f"[WARNING] Neo4j relationship '{rel_name}': source entity '{source_label}' not found, Edge not created")
+            print(f"[NOTICE] Neo4j relationship '{rel_name}': source entity '{source_label}' not found, Edge not created")
         if source_entity:
             # Optionality is derived from cardinality minimum:
             # 0..1, 0..n → optional (minimum 0), 1..1, 1..n → required (minimum 1)
@@ -346,9 +346,9 @@ class Neo4jAdapter:
                         j += 1
                         continue
 
-                    # CREATE CONSTRAINT ... REQUIRE n.<field> IS UNIQUE (executable format)
+                    # CREATE CONSTRAINT ... REQUIRE n.<field> IS UNIQUE/NODE KEY (executable format)
                     constraint_match = re.match(
-                        r'CREATE CONSTRAINT .+ FOR \(n:[\w:]+\) REQUIRE n\.(\w+) IS UNIQUE;',
+                        r'CREATE CONSTRAINT .+ FOR \(n:[\w:]+\) REQUIRE n\.(\w+) IS (?:UNIQUE|NODE KEY);',
                         next_line
                     )
                     if constraint_match:
@@ -508,11 +508,12 @@ class Neo4jAdapter:
                 node_lines = cls._export_node(entity)
                 lines.extend(node_lines)
 
-        # Export relationship types
-        for rel_type in database.relationship_types.values():
-            lines.append("")
-            rel_lines = cls._export_relationship(rel_type)
-            lines.extend(rel_lines)
+        # Export relationship types (EDGE entities)
+        for entity in database.entity_types.values():
+            if entity.entity_kind == EntityKind.EDGE:
+                lines.append("")
+                rel_lines = cls._export_relationship(entity)
+                lines.extend(rel_lines)
 
         return "\n".join(lines)
 
@@ -534,17 +535,27 @@ class Neo4jAdapter:
         label_display = label + (''.join(f':{l}' for l in extra_labels) if extra_labels else '')
         lines.append(f"// Node: {label_display}")
 
-        # Generate uniqueness constraint for primary key attribute
+        # Generate constraint for primary key attribute(s)
         pk_constraint = entity.get_primary_key()
         if pk_constraint and pk_constraint.unique_properties:
+            pk_attrs = []
             for up in pk_constraint.unique_properties:
                 pk_attr = entity.get_attribute_by_id(up.property_id)
                 if pk_attr:
-                    constraint_name = f"{label.lower()}_{pk_attr.attr_name}_unique"
-                    lines.append(
-                        f"CREATE CONSTRAINT {constraint_name} IF NOT EXISTS "
-                        f"FOR (n:{label_display}) REQUIRE n.{pk_attr.attr_name} IS UNIQUE;"
-                    )
+                    pk_attrs.append(pk_attr.attr_name)
+            if len(pk_attrs) == 1:
+                constraint_name = f"{label.lower()}_{pk_attrs[0]}_unique"
+                lines.append(
+                    f"CREATE CONSTRAINT {constraint_name} IF NOT EXISTS "
+                    f"FOR (n:{label_display}) REQUIRE n.{pk_attrs[0]} IS NODE KEY;"
+                )
+            elif len(pk_attrs) > 1:
+                constraint_name = f"{label.lower()}_pk"
+                props = ", ".join(f"n.{a}" for a in pk_attrs)
+                lines.append(
+                    f"CREATE CONSTRAINT {constraint_name} IF NOT EXISTS "
+                    f"FOR (n:{label_display}) REQUIRE ({props}) IS NODE KEY;"
+                )
 
         # Generate property comment listing all properties with types
         if entity.attributes:
@@ -559,9 +570,9 @@ class Neo4jAdapter:
         return lines
 
     @classmethod
-    def _export_relationship(cls, rel_type: RelationshipType) -> List[str]:
+    def _export_relationship(cls, edge_entity: EntityType) -> List[str]:
         """
-        Export a single relationship type to Cypher comments.
+        Export a single EDGE entity type to Cypher comments.
 
         Example Output:
             // Relationship: ACTED_IN (Person -> Movie)
@@ -570,14 +581,14 @@ class Neo4jAdapter:
         """
         lines = []
         lines.append(
-            f"// Relationship: {rel_type.rel_name} "
-            f"({rel_type.source_entity} -> {rel_type.target_entity})"
+            f"// Relationship: {edge_entity.name} "
+            f"({edge_entity.source_entity} -> {edge_entity.target_entity})"
         )
 
         # List relationship properties if any
-        if rel_type.attributes:
+        if edge_entity.attributes:
             prop_strs = []
-            for attr in rel_type.attributes:
+            for attr in edge_entity.attributes:
                 type_str = cls.REVERSE_TYPE_MAP.get(
                     attr.data_type.primitive_type, "string"
                 ) if isinstance(attr.data_type, PrimitiveDataType) else "string"
@@ -585,7 +596,8 @@ class Neo4jAdapter:
             lines.append(f"// Properties: {', '.join(prop_strs)}")
 
         # Cardinality comment
-        lines.append(f"// Cardinality: {rel_type.cardinality.value}")
+        cardinality = edge_entity.edge_cardinality or Cardinality.ZERO_TO_MANY
+        lines.append(f"// Cardinality: {cardinality.value}")
 
         return lines
 
@@ -686,14 +698,14 @@ class Neo4jAdapter:
 #       )
 #   }
 #   database.relationship_types = {
-#       "ACTED_IN": RelationshipType(
+#       "ACTED_IN": EntityType(EDGE)(
 #           rel_name="ACTED_IN",
 #           source_entity="Person",
 #           target_entity="Movie",
 #           attributes=[Attribute("role", STRING)],
 #           cardinality=ZERO_TO_MANY
 #       ),
-#       "DIRECTED": RelationshipType(
+#       "DIRECTED": EntityType(EDGE)(
 #           rel_name="DIRECTED",
 #           source_entity="Person",
 #           target_entity="Movie",

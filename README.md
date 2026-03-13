@@ -8,7 +8,7 @@ SMEL (Schema Migration & Evolution Language) provides a unified approach to:
 - Define schema transformations across 4 heterogeneous database models
 - Support cross-model migration between all model pairs (R↔D, R↔G, R↔C, D↔G, D↔C, G↔C)
 - Support same-model schema evolution (R2R, D2D, G2G, C2C)
-- Validate migration correctness through two-layer automated validation
+- Validate migration correctness through three-layer automated validation
 
 ## Supported Database Models
 
@@ -44,7 +44,7 @@ pip install -r requirements.txt
 ### Web Interface
 ```bash
 python web_server.py
-# Opens at http://localhost:5586
+# Opens at http://localhost:5594
 ```
 
 The web interface provides:
@@ -64,14 +64,11 @@ from core import run_migration
 
 # Cross-model migration (Northwind)
 result = run_migration('northwind_r2d_specific')    # Relational -> Document
-result = run_migration('northwind_d2g_pauschalisiert')  # Document -> Graph
+result = run_migration('northwind_d2g_generalized')  # Document -> Graph
 result = run_migration('northwind_g2c_specific')    # Graph -> Columnar
 
 # Same-model evolution (Northwind)
 result = run_migration('northwind_r2r_specific')    # Relational V1 -> V2
-
-# Person mini-example
-result = run_migration('person_d2r_specific')       # Document -> Relational
 
 print(result['exported_target'])     # Generated target schema
 print(result['validation_meta'])     # Layer 1 validation result
@@ -81,7 +78,10 @@ print(result['validation_export'])   # Layer 2 validation result
 ### Run Tests
 ```bash
 python tests/test_full_flow.py
-# Tests all 40 migration configs (8 Person + 32 Northwind)
+# Tests all 32 Northwind migration configs (8 same-model + 24 cross-model)
+
+python tests/test_full_flow.py --only r2d
+# Run only tests matching a prefix
 ```
 
 ## Migration Matrix
@@ -95,25 +95,32 @@ python tests/test_full_flow.py
 | **Graph →** | G2R | G2D | G2G | G2C |
 | **Columnar →** | C2R | C2D | C2G | C2C |
 
-Each direction has both **Specific** (`.smel`) and **Pauschalisiert** (`.smel_ps`) grammar variants.
+Each direction has both **Specific** (`.smel`) and **Generalized** (`.smel_gen`) grammar variants.
 
-### Test Datasets
+### Test Dataset: Northwind
 
-| Dataset | Entities | Configs | Description |
-|---------|----------|---------|-------------|
-| **Person** | 7 entities | 8 (4 directions × 2 grammars) | Simple example: person with nested address, employment, company |
-| **Northwind** | 8 entities | 32 (16 directions × 2 grammars) | Full example: orders, products, customers, employees, etc. |
-| **Total** | — | **40 configs** | — |
+The **Northwind** dataset (8 entities: orders, products, customers, employees, categories, suppliers, shippers, order_details) serves as the primary test corpus. It exists as 4 independent native schema files — one per database model:
+
+| Native File | Model | Format |
+|-------------|-------|--------|
+| `northwind_postgresql.sql` | Relational | SQL DDL |
+| `northwind_mongodb.json` | Document | JSON Schema |
+| `northwind_neo4j.cypher` | Graph | Cypher |
+| `northwind_cassandra.cql` | Columnar | CQL |
+
+These 4 files produce **32 migration configs** (16 directions × 2 grammar variants), tested automatically via `test_full_flow.py`.
 
 ## Project Structure
 
 ```
 SMEL/
 ├── grammar/
-│   ├── SMEL_Specific.g4              # Specific operations grammar
-│   ├── SMEL_Pauschalisiert.g4        # Generalized operations grammar
-│   ├── specific/                      # Generated ANTLR parser (Specific)
-│   ├── pauschalisiert/                # Generated ANTLR parser (Pauschalisiert)
+│   ├── specific/                      # Specific grammar + generated parser
+│   │   ├── SMEL_Specific.g4
+│   │   └── generate_parser.bat
+│   ├── generalized/                   # Generalized grammar + generated parser
+│   │   ├── SMEL_Generalized.g4
+│   │   └── generate_parser.bat
 │   └── antlr-4.13.2-complete.jar
 ├── Schema/
 │   ├── unified_meta_schema.py         # Unified Meta-Schema (M-Model)
@@ -133,10 +140,10 @@ SMEL/
 │   ├── specific/                      # Specific grammar scripts (.smel)
 │   │   ├── person_*.smel              # 4 Person scripts (D2R, R2D, R2R, D2D)
 │   │   └── northwind_*.smel           # 16 Northwind scripts (full 4×4 matrix)
-│   ├── pauschalisiert/                # Pauschalisiert grammar scripts (.smel_ps)
-│   │   ├── person_*.smel_ps           # 4 Person scripts
-│   │   └── northwind_*.smel_ps        # 16 Northwind scripts
-│   └── test_full_flow.py              # Automated test for all 40 configs
+│   ├── generalized/                   # Generalized grammar scripts (.smel_gen)
+│   │   ├── person_*.smel_gen          # 4 Person scripts
+│   │   └── northwind_*.smel_gen       # 16 Northwind scripts
+│   └── test_full_flow.py              # Automated test for all 32 Northwind configs
 ├── config.py                          # Migration registry & configuration
 ├── core.py                            # Migration engine (SchemaTransformer)
 ├── smel_listeners.py                  # ANTLR listeners for both grammars
@@ -152,25 +159,34 @@ SMEL/
 ### End-to-End Pipeline
 
 ```
- Source Schema          SMEL Script           Unified Meta-Schema            Target Schema
- (SQL/JSON/             (.smel/.smel_ps)      (M-Model)                      (SQL/JSON/
-  Cypher/CQL)                                                                 Cypher/CQL)
- ─────────────         ─────────────────     ───────────────────            ─────────────
-      │                       │                     │                             ▲
-      ▼                       ▼                     ▼                             │
- ┌──────────┐          ┌──────────────┐      ┌──────────┐    ┌──────────┐  ┌──────────┐
- │ Step 1   │          │   Step 2     │      │  Step 3  │    │  Step 3  │  │  Step 4  │
- │ Reverse  │─────────►│   SMEL       │─────►│  Meta V1 │───►│  Meta V2 │─►│ Forward  │
- │ Engineer │          │   Parsing    │      │          │    │          │  │ Engineer │
- └──────────┘          └──────────────┘      └──────────┘    └──────────┘  └──────────┘
-                                                                                │
-                                              ┌──────────────────────────────────┘
-                                              ▼
-                                        ┌──────────┐
-                                        │  Step 5  │
-                                        │Validation│
-                                        │ (2-Layer)│
-                                        └──────────┘
+ Source Schema        SMEL Script (.smel/.smel_gen)         Target Schema
+ (SQL/JSON/                      │                          (SQL/JSON/
+  Cypher/CQL)                    │                           Cypher/CQL)
+      │                          ▼                                ▲
+      │                   ┌──────────────┐                        │
+      │                   │   Step 2     │                        │
+      │                   │ SMEL Parsing │                        │
+      │                   │  (ANTLR4)    │                        │
+      │                   └──────┬───────┘                        │
+      ▼                     Operations                            │
+ ┌──────────┐  Meta V1  ┌──────────────┐  Meta V2  ┌──────────┐  │
+ │ Step 1   │──────────►│   Step 3     │──────────►│  Step 4  │──┘
+ │ Reverse  │           │Transformation│           │ Forward  │
+ │ Engineer │           │ (apply ops)  │           │ Engineer │
+ └──────────┘           └──────────────┘           └──────────┘
+                               │                        │
+                               ▼                        ▼
+                        ┌─────────────┐          ┌─────────────┐
+                        │   Step 5    │          │   Step 5    │
+                        │  Layer 1    │          │  Layer 2    │
+                        │ Validation  │          │ Validation  │
+                        │(Meta V2 vs  │          │(Export → RE │
+                        │ expected)   │          │ vs expected)│
+                        └─────────────┘          └─────────────┘
+
+ Layer 0: Execution check — no skipped ops, non-empty result
+ Layer 1: Meta V2 result  ←compare→  Expected target (parsed from native file)
+ Layer 2: Exported target ←RE parse→ Round-trip Meta  ←compare→  Expected target
 ```
 
 #### Step 1: Reverse Engineering — Source Schema → Meta V1
@@ -188,9 +204,9 @@ Each adapter maps native types to unified `PrimitiveType` enums (e.g., `VARCHAR(
 
 #### Step 2: SMEL Parsing — Script → Operation List
 
-Parses `.smel` or `.smel_ps` files into executable `Operation` objects via ANTLR4.
+Parses `.smel` or `.smel_gen` files into executable `Operation` objects via ANTLR4.
 
-1. File extension determines grammar: `.smel` → `SMEL_Specific.g4`, `.smel_ps` → `SMEL_Pauschalisiert.g4`
+1. File extension determines grammar: `.smel` → `specific/SMEL_Specific.g4`, `.smel_gen` → `generalized/SMEL_Generalized.g4`
 2. ANTLR lexer/parser builds a parse tree
 3. Custom listener walks the tree, creating `Operation(op_type, params)` objects
 
@@ -209,16 +225,91 @@ Converts the transformed M-Model back into a native schema format.
 | Neo4j | `Neo4jAdapter` | `export_to_cypher()` |
 | Cassandra | `CassandraAdapter` | `export_to_cql()` |
 
-#### Step 5: Two-Layer Validation
+#### Step 5: Three-Layer Validation
 
-Automated validation for cross-model Northwind migrations (24 configs):
+Every migration is automatically validated through three independent layers. Each layer isolates a different class of defects.
 
-| Layer | File | What it proves | Method |
-|-------|------|---------------|--------|
-| **Layer 1** | `validate_meta.py` | SMEL script correctness | Compare Meta V2 result against expected target (parsed from native file) |
-| **Layer 2** | `validate_export.py` | Adapter FE correctness | Parse exported target back → compare against expected target (round-trip) |
+```
+Layer 0   Execution check (no errors, no skipped ops, non-empty result)
+          ──────────────────────────────────────────────────────────────
 
-Validation compares: entity names, attributes (name, type), constraints (PK structure), references, embedded relationships, edges, and relationship types. Cardinality and key_type differences are reported as warnings rather than failures.
+Layer 1   SMEL Script Correctness (validate_meta.py)
+          ──────────────────────────────────────────────────────────────
+          Meta V2 (raw)  ←── compare ──→  Expected Meta
+                                            ▲
+                                            │  Adapter RE
+                                            │
+                                          Target native file
+
+Layer 2   Adapter FE Correctness (validate_export.py)
+          ──────────────────────────────────────────────────────────────
+          Meta V2 ──► Adapter FE ──► Exported Target (text)
+                                          │
+                                          │  Adapter RE  (round-trip)
+                                          ▼
+                                     Round-trip Meta  ←── compare ──→  Expected Meta
+                                                                         ▲
+                                                                         │  Adapter RE
+                                                                         │
+                                                                       Target native file
+```
+
+| Layer | File | What it proves | Fails when |
+|-------|------|---------------|------------|
+| **Layer 0** | `core.py` | Pipeline executes without errors | Any operation is skipped, throws an exception, or produces no entities |
+| **Layer 1** | `validate_meta.py` | SMEL script transforms the schema correctly | Meta V2 diverges from the expected target schema (wrong ops, missing entities, etc.) |
+| **Layer 2** | `validate_export.py` | Adapter FE serializes Meta V2 correctly | Exported text → RE round-trip diverges from expected (serialization or parsing bug) |
+
+**How `compare_meta_schemas()` works:** Both layers share the same comparison function. It checks entity names, attribute names and types, constraints (PK structure), references (name, target), embedded relationships, edges, and relationship types. Cardinality differences and key-type representation differences (e.g., `SERIAL` vs `STRING`) are reported as **warnings** rather than hard failures.
+
+##### Where does the "Expected Meta" come from?
+
+The expected target is always derived from a **native schema file** parsed through the adapter's reverse engineering. The file selection depends on the migration type:
+
+```
+_resolve_target_file(config_key, target_type)
+│
+├── Same-model (R2R, D2D, G2G, C2C)
+│   └── Uses auto-generated target file
+│       e.g., tests/northwind_r2r_target.sql
+│       (generated by running the migration once and saving the FE output)
+│
+└── Cross-model (R2D, D2R, R2G, ... all 12 directions)
+    └── Uses the original native file of the TARGET model
+        e.g., R2D → tests/northwind_mongodb.json
+              D2G → tests/northwind_neo4j.cypher
+              G2C → tests/northwind_cassandra.cql
+```
+
+##### Cross-Model Closed Loop
+
+For cross-model migrations, the 4 original Northwind files form a **closed validation loop** — each file serves as both source (for outgoing migrations) and expected target (for incoming migrations):
+
+```
+         northwind_postgresql.sql
+              ▲            │
+     R is     │            │  R is
+    target    │            │  source
+              │            ▼
+ northwind_cassandra.cql ←──→ northwind_mongodb.json
+              ▲            │
+     C is     │            │  D is
+    target    │            │  source
+              │            ▼
+         northwind_neo4j.cypher
+```
+
+This means:
+- `northwind_postgresql.sql` is the **expected target** for D2R, G2R, C2R
+- `northwind_mongodb.json` is the **expected target** for R2D, G2D, C2D
+- `northwind_neo4j.cypher` is the **expected target** for R2G, D2G, C2G
+- `northwind_cassandra.cql` is the **expected target** for R2C, D2C, G2C
+
+No manually written ground truth is needed for cross-model validation — the original hand-crafted schema files ARE the ground truth.
+
+##### Document Target Normalization
+
+When the target model is **Document** (MongoDB), a special normalization step is applied in Layer 1. The raw Meta V2 uses flat entity names (e.g., `orders`, `ship_destination`) from SMEL operations, but the MongoDB adapter's reverse engineering produces path-based names (e.g., `orders`, `orders.ship_destination`). The `_normalize_to_paths()` function converts flat names to match the adapter's naming convention before comparison.
 
 ### The Unified Meta-Schema (M-Model)
 
@@ -323,19 +414,19 @@ SMEL provides two functionally equivalent grammars:
 | Grammar | File Extension | Example |
 |---------|---------------|---------|
 | **Specific** | `.smel` | `ADD_ATTRIBUTE name TO person WITH TYPE String` |
-| **Pauschalisiert** | `.smel_ps` | `ADD_PS ATTRIBUTE name TO person WITH TYPE String` |
+| **Generalized** | `.smel_gen` | `ADD ATTRIBUTE name TO person WITH TYPE String` |
 
 Keyword mapping examples:
 
-| Specific | Pauschalisiert |
-|----------|----------------|
-| `RENAME_ENTITY` | `RENAME_PS ENTITY` |
-| `ADD_ATTRIBUTE` | `ADD_PS ATTRIBUTE` |
-| `DELETE_CONSTRAINT` | `DELETE_PS CONSTRAINT` |
-| `ADD_PRIMARY_KEY` | `ADD_PS KEY` |
-| `ADD_PARTITION_KEY` | `ADD_PS PARTITION KEY` |
-| `ADD_CLUSTERING_KEY` | `ADD_PS CLUSTERING KEY` |
-| `NEST` / `UNNEST` / `MERGE` / `SPLIT` | `NEST_PS` / `UNNEST_PS` / `MERGE_PS` / `SPLIT_PS` |
+| Specific | Generalized |
+|----------|-------------|
+| `RENAME_ENTITY` | `RENAME ENTITY` |
+| `ADD_ATTRIBUTE` | `ADD ATTRIBUTE` |
+| `DELETE_CONSTRAINT` | `DELETE CONSTRAINT` |
+| `ADD_PRIMARY_KEY` | `ADD KEY` |
+| `ADD_PARTITION_KEY` | `ADD PARTITION KEY` |
+| `ADD_CLUSTERING_KEY` | `ADD CLUSTERING KEY` |
+| `NEST` / `UNNEST` / `MERGE` / `SPLIT` | `NEST` / `UNNEST` / `MERGE` / `SPLIT` |
 
 ## SMEL Script Examples
 
@@ -422,8 +513,13 @@ CAST person_detail.age TO String
 After modifying `.g4` grammar files:
 
 ```bash
-java -jar grammar/antlr-4.13.2-complete.jar -Dlanguage=Python3 -visitor -listener -o grammar/specific grammar/SMEL_Specific.g4
-java -jar grammar/antlr-4.13.2-complete.jar -Dlanguage=Python3 -visitor -listener -o grammar/pauschalisiert grammar/SMEL_Pauschalisiert.g4
+# From grammar/specific/ directory:
+cd grammar/specific && java -jar ..\antlr-4.13.2-complete.jar -Dlanguage=Python3 -visitor SMEL_Specific.g4
+
+# From grammar/generalized/ directory:
+cd grammar/generalized && java -jar ..\antlr-4.13.2-complete.jar -Dlanguage=Python3 -visitor SMEL_Generalized.g4
+
+# Or simply run the .bat file in each directory
 ```
 
 ## License

@@ -3,8 +3,9 @@
 -- V2 Business Scenario: E-commerce platform modernization
 --
 -- Structural changes:
---   MERGE:  Denormalize categories into products (eliminate JOIN)
---   SPLIT:  Separate customer identity from contact info (CRM)
+--   MERGE:      Denormalize categories into products (eliminate JOIN)
+--   SPLIT:      Separate customer identity from contact info (CRM)
+--   ADD_ENTITY: Create region, territories, employee_territories (sales territory tracking)
 
 MIGRATION northwind_pg1_to_pg2:1.0
 FROM RELATIONAL TO RELATIONAL
@@ -41,70 +42,72 @@ MERGE categories, products INTO products
 -- ============================================
 -- Before: customers(customer_id, company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country)
 -- After:  customers(customer_id, company_name, street, city, region, postal_code, country)
---         customer_contacts(customer_id, contact_name, contact_title, phone, fax)
+--         customer_contacts(contact_id, customer_id, contact_name, contact_title, phone, fax)
 SPLIT customers INTO customers:customer_id, company_name, street, city, region, postal_code, country; customer_contacts:customer_id, contact_name, contact_title, phone, fax
 ADD_PRIMARY_KEY customer_id TO customers
 ADD_PRIMARY_KEY customer_contacts.contact_id AS String
-ADD_CONSTRAINT customer_contacts.customer_id REFERENCES customers(customer_id) WITH CARDINALITY ONE_TO_ONE
+ADD_CONSTRAINT customer_contacts.customer_id REFERENCES customers(customer_id) WITH CARDINALITY ONE_TO_MANY
 
 -- ============================================
--- Phase 3: suppliers -- RENAME + ADD
+-- Phase 3: ADD region (new entity)
+-- Business: Sales territory management -- geographic regions
 -- ============================================
-RENAME_ATTRIBUTE company_name TO name IN suppliers
-ADD_ATTRIBUTE website TO suppliers WITH TYPE String
+ADD_ENTITY region WITH ATTRIBUTES (region_id String, region_description String)
+ADD_PRIMARY_KEY region_id TO region
 
 -- ============================================
--- Phase 4: shippers -> carriers (RENAME entity + field)
+-- Phase 4: ADD territories (new entity, FK -> region)
+-- Business: Sales territories within regions
 -- ============================================
-RENAME_ENTITY shippers TO carriers
-RENAME_ATTRIBUTE company_name TO carrier_name IN carriers
+ADD_ENTITY territories WITH ATTRIBUTES (territory_id String, territory_description String, region_id String)
+ADD_PRIMARY_KEY territory_id TO territories
+ADD_CONSTRAINT territories.region_id REFERENCES region(region_id) WITH CARDINALITY ONE_TO_MANY
 
 -- ============================================
--- Phase 5: employees -- simplify + ADD
+-- Phase 5: ADD employee_territories (M:N junction table)
+-- Business: Assign employees to sales territories
+-- ============================================
+ADD_ENTITY employee_territories
+ADD_ATTRIBUTE employee_id TO employee_territories WITH TYPE String
+ADD_ATTRIBUTE territory_id TO employee_territories WITH TYPE String
+ADD_PRIMARY_KEY (employee_id, territory_id) TO employee_territories
+ADD_CONSTRAINT employee_territories.employee_id REFERENCES employees(employee_id) WITH CARDINALITY ONE_TO_MANY
+ADD_CONSTRAINT employee_territories.territory_id REFERENCES territories(territory_id) WITH CARDINALITY ONE_TO_MANY
+
+-- ============================================
+-- Phase 6: employees -- simplify
 -- ============================================
 DELETE_ATTRIBUTE employees.birth_date
 DELETE_ATTRIBUTE employees.notes
 ADD_ATTRIBUTE email TO employees WITH TYPE String
 
 -- ============================================
--- Phase 6: customer_contacts -- ADD email
--- ============================================
-ADD_ATTRIBUTE email TO customer_contacts WITH TYPE String
-
--- ============================================
--- Phase 7: products -- RENAME + ADD
+-- Phase 7: products + orders -- RENAME + ADD
 -- ============================================
 RENAME_ATTRIBUTE product_name TO name IN products
-ADD_ATTRIBUTE sku TO products WITH TYPE String
-
--- ============================================
--- Phase 8: orders -- RENAME + ADD
--- ============================================
 RENAME_ATTRIBUTE freight TO shipping_cost IN orders
 ADD_ATTRIBUTE status TO orders WITH TYPE String
 
 -- ============================================
--- Phase 9: order_details -- RENAME
--- ============================================
-RENAME_ATTRIBUTE discount TO discount_rate IN order_details
-
--- ============================================
--- Final Meta V2 (8 entities):
--- products:           { product_id [PK], name, unit_price, units_in_stock, discontinued, quantity_per_unit, supplier_id [FK], category_name, description, sku }
--- suppliers:          { supplier_id [PK], name, contact_name, contact_title, phone, fax, street, city, postal_code, country, website }
--- carriers:           { shipper_id [PK], carrier_name, phone }
--- employees:          { employee_id [PK], last_name, first_name, title, hire_date, email, phone, street, city, region, postal_code, country, reports_to [FK] }
--- customers:          { customer_id [PK], company_name, street, city, postal_code, country }
--- customer_contacts:  { contact_id [PK], customer_id [FK], contact_name, contact_title, phone, fax, email }
--- orders:             { order_id [PK], order_date, required_date, shipped_date, shipping_cost, ship_name, ship_address, ship_city, ship_region, ship_postal_code, ship_country, customer_id [FK], employee_id [FK], shipper_id [FK], status }
--- order_details:      { order_id [PK,FK], product_id [PK,FK], unit_price, quantity, discount_rate }
+-- Final Meta V2 (10 entities):
+-- products:              { product_id [PK], name, unit_price, units_in_stock, discontinued, quantity_per_unit, supplier_id [FK], category_name, description }
+-- suppliers:             { supplier_id [PK], company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country }
+-- shippers:              { shipper_id [PK], company_name, phone }
+-- employees:             { employee_id [PK], last_name, first_name, title, hire_date, email, phone, street, city, region, postal_code, country, reports_to [FK] }
+-- customers:             { customer_id [PK], company_name, street, city, region, postal_code, country }
+-- customer_contacts:     { contact_id [PK], customer_id [FK], contact_name, contact_title, phone, fax }
+-- orders:                { order_id [PK], order_date, required_date, shipped_date, shipping_cost, ship_name, ship_address, ship_city, ship_region, ship_postal_code, ship_country, customer_id [FK], employee_id [FK], shipper_id [FK], status }
+-- order_details:         { order_id [PK,FK], product_id [PK,FK], unit_price, quantity, discount }
+-- region:                { region_id [PK], region_description }
+-- territories:           { territory_id [PK], territory_description, region_id [FK->region] }
+-- employee_territories:  { employee_id [PK,FK], territory_id [PK,FK] }
 -- ============================================
 
 -- ============================================
--- Operation Summary (21 steps):
+-- Operation Summary (26 steps, 10 operation types):
 --   MERGE: 1              SPLIT: 1
---   DELETE_CONSTRAINT: 1  ADD_CONSTRAINT: 1
---   DELETE_PRIMARY_KEY: 1 ADD_PRIMARY_KEY: 2
---   DELETE_ATTRIBUTE: 4   ADD_ATTRIBUTE: 5
---   RENAME_ATTRIBUTE: 5   RENAME_ENTITY: 1
+--   ADD_ENTITY: 3         ADD_ATTRIBUTE: 4
+--   ADD_PRIMARY_KEY: 5    ADD_CONSTRAINT: 4
+--   DELETE_CONSTRAINT: 1  DELETE_PRIMARY_KEY: 1
+--   DELETE_ATTRIBUTE: 4   RENAME_ATTRIBUTE: 2
 -- ============================================

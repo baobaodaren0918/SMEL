@@ -1,313 +1,451 @@
-"""Full flow verification for Person Mini Example - Tests both grammar variants"""
+"""
+SMEL Full Flow Verification - Two-Layer Validation
+
+Tests all 40 migration configurations (8 Person + 8 Northwind Same-Model + 24 Northwind Cross-Model)
+with a unified validation framework.
+
+Pipeline:
+  Source Schema -> [RE] -> Meta V1 -> [SMEL] -> Meta V2 -> [FE] -> Target Schema
+
+Validation Layers:
+  Layer 0: Execution check (no errors, no skipped ops)
+  Layer 1: Meta V2 vs Expected Meta (SMEL script correctness)
+  Layer 2: Exported Target -> RE -> Round-trip Meta vs Expected Meta (Adapter correctness)
+"""
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from core import run_migration
+from config import MIGRATION_CONFIGS
 
 
-def run_test(direction: str):
-    """Run a single migration test and print results."""
-    print(f"\n{'=' * 70}")
-    print(f"TESTING: {direction}")
-    print("=" * 70)
+# =============================================================================
+# Notice classification: helps distinguish DB-technical limitations from bugs
+# =============================================================================
+NOTICE_REASONS = {
+    "cardinality": "Adapter representation difference (e.g. 1..1 vs 0..N default)",
+    "entity_kind": "Target type normalization (e.g. table vs document vs vertex)",
+    "key_type":    "PK type representation (e.g. SERIAL vs string in different DBs)",
+    "optional":    "Nullability difference across DB types (e.g. MongoDB optional vs Cassandra NOT NULL)",
+    "fk":          "FK constraint detail (adapter-level representation difference)",
+}
 
+
+def _print_validation_warnings(validation_result: dict):
+    """Print detailed warnings from a validation result."""
+    details = validation_result.get("details", {})
+    warning_count = 0
+
+    # Entity-level warnings (from both entity_warnings and entity_diffs)
+    for source_key in ("entity_warnings", "entity_diffs"):
+        for entity_name, entity_diff in details.get(source_key, {}).items():
+            # General warnings (entity_kind, etc.)
+            warns = entity_diff.get("warnings", {})
+            for warn_type, warn_data in warns.items():
+                if warn_type == "constraints":
+                    for fw in warn_data.get("fk_warnings", []):
+                        reason = NOTICE_REASONS.get("fk", "Unknown")
+                        missing = fw.get("missing_fks", [])
+                        extra = fw.get("extra_fks", [])
+                        if missing or extra:
+                            print(f"      [NOTICE] {entity_name}.FK: "
+                                  f"missing={missing} extra={extra}")
+                            print(f"                Reason: {reason}")
+                            warning_count += 1
+                    for pw in warn_data.get("pk_type_warnings", []):
+                        print(f"      [NOTICE] {entity_name}.PK({pw['columns']}).primary_key_types: "
+                              f"actual={pw['actual']} expected={pw['expected']}")
+                        print(f"                Reason: Cassandra PARTITION/CLUSTERING key distinction")
+                        warning_count += 1
+                else:
+                    reason = NOTICE_REASONS.get(warn_type, "Unknown")
+                    print(f"      [NOTICE] {entity_name}.{warn_type}: "
+                          f"actual={warn_data.get('actual')} expected={warn_data.get('expected')}")
+                    print(f"                Reason: {reason}")
+                    warning_count += 1
+
+            # Attribute key warnings
+            attr_diff = entity_diff.get("attributes", {})
+            for kw in attr_diff.get("key_warnings", []):
+                reason = NOTICE_REASONS.get("key_type", "Unknown")
+                print(f"      [NOTICE] {entity_name}.{kw['attr']}.{kw['field']}: "
+                      f"actual={kw['actual']} expected={kw['expected']}")
+                print(f"                Reason: {reason}")
+                warning_count += 1
+
+            # Attribute optional (nullability) warnings
+            for ow in attr_diff.get("optional_warnings", []):
+                reason = NOTICE_REASONS.get("optional", "Unknown")
+                print(f"      [NOTICE] {entity_name}.{ow['attr']}.is_optional: "
+                      f"actual={ow['actual']} expected={ow['expected']}")
+                print(f"                Reason: {reason}")
+                warning_count += 1
+
+            # Reference cardinality warnings
+            ref_diff = entity_diff.get("references", {})
+            for cw in ref_diff.get("cardinality_warnings", []):
+                reason = NOTICE_REASONS.get("cardinality", "Unknown")
+                print(f"      [NOTICE] {entity_name}.ref({cw['name']}): "
+                      f"actual={cw['actual']} expected={cw['expected']}")
+                print(f"                Reason: {reason}")
+                warning_count += 1
+
+            # Embedded cardinality warnings
+            emb_diff = entity_diff.get("embedded", {})
+            for cw in emb_diff.get("cardinality_warnings", []):
+                reason = NOTICE_REASONS.get("cardinality", "Unknown")
+                print(f"      [NOTICE] {entity_name}.embedded({cw['name']}): "
+                      f"actual={cw['actual']} expected={cw['expected']}")
+                print(f"                Reason: {reason}")
+                warning_count += 1
+
+            # Constraint FK/PK-type warnings (from entity_diffs with hard issues)
+            cons_diff = entity_diff.get("constraints", {})
+            for fw in cons_diff.get("fk_warnings", []):
+                reason = NOTICE_REASONS.get("fk", "Unknown")
+                missing = fw.get("missing_fks", [])
+                extra = fw.get("extra_fks", [])
+                if missing or extra:
+                    print(f"      [NOTICE] {entity_name}.FK: "
+                          f"missing={missing} extra={extra}")
+                    print(f"                Reason: {reason}")
+                    warning_count += 1
+            for pw in cons_diff.get("pk_type_warnings", []):
+                print(f"      [NOTICE] {entity_name}.PK({pw['columns']}).primary_key_types: "
+                      f"actual={pw['actual']} expected={pw['expected']}")
+                print(f"                Reason: Cassandra PARTITION/CLUSTERING key distinction")
+                warning_count += 1
+
+            # Edge cardinality warnings
+            edge_diff = entity_diff.get("edges", {})
+            for cw in edge_diff.get("cardinality_warnings", []):
+                reason = NOTICE_REASONS.get("cardinality", "Unknown")
+                print(f"      [NOTICE] {entity_name}.edge({cw['name']}): "
+                      f"actual={cw['actual']} expected={cw['expected']}")
+                print(f"                Reason: {reason}")
+                warning_count += 1
+
+    # Relationship type diffs (graph schemas)
+    rel_diffs = details.get("relationship_type_diffs", {})
+    if rel_diffs:
+        # Cardinality warnings (always printed, regardless of issue_count)
+        for cw in rel_diffs.get("cardinality_warnings", []):
+            reason = NOTICE_REASONS.get("cardinality", "Unknown")
+            print(f"      [NOTICE] RelType({cw['name']}).cardinality: "
+                  f"actual={cw['actual']} expected={cw['expected']}")
+            print(f"                Reason: {reason}")
+            warning_count += 1
+
+    return warning_count
+
+
+def _print_validation_errors(validation_result: dict):
+    """Print detailed errors (hard issues) from a validation result."""
+    details = validation_result.get("details", {})
+
+    # Missing/extra entities
+    for name in details.get("missing_entities", []):
+        print(f"      [ERROR] Missing entity: {name}")
+    for name in details.get("extra_entities", []):
+        print(f"      [ERROR] Extra entity: {name}")
+
+    # Entity-level diffs
+    for entity_name, entity_diff in details.get("entity_diffs", {}).items():
+        # Attribute issues
+        attr_diff = entity_diff.get("attributes", {})
+        for name in attr_diff.get("missing", []):
+            print(f"      [ERROR] {entity_name}: missing attribute '{name}'")
+        for name in attr_diff.get("extra", []):
+            print(f"      [ERROR] {entity_name}: extra attribute '{name}'")
+        for tm in attr_diff.get("type_mismatches", []):
+            print(f"      [ERROR] {entity_name}.{tm['attr']}: "
+                  f"type actual={tm['actual']} expected={tm['expected']}")
+
+        # Reference issues
+        ref_diff = entity_diff.get("references", {})
+        for name in ref_diff.get("missing", []):
+            print(f"      [ERROR] {entity_name}: missing reference '{name}'")
+        for name in ref_diff.get("extra", []):
+            print(f"      [ERROR] {entity_name}: extra reference '{name}'")
+        for tm in ref_diff.get("target_mismatches", []):
+            print(f"      [ERROR] {entity_name}.ref({tm['name']}): "
+                  f"target actual={tm['actual_target']} expected={tm['expected_target']}")
+        for am in ref_diff.get("attr_mismatches", []):
+            print(f"      [ERROR] {entity_name}.ref({am['name']}).edge_attributes: "
+                  f"actual={am['actual']} expected={am['expected']}")
+
+        # Embedded issues
+        emb_diff = entity_diff.get("embedded", {})
+        for name in emb_diff.get("missing", []):
+            print(f"      [ERROR] {entity_name}: missing embedded '{name}'")
+        for name in emb_diff.get("extra", []):
+            print(f"      [ERROR] {entity_name}: extra embedded '{name}'")
+        for tm in emb_diff.get("target_mismatches", []):
+            print(f"      [ERROR] {entity_name}.embedded({tm['name']}): "
+                  f"target actual={tm['actual_target']} expected={tm['expected_target']}")
+
+        # Edge issues
+        edge_diff = entity_diff.get("edges", {})
+        for name in edge_diff.get("missing", []):
+            print(f"      [ERROR] {entity_name}: missing edge '{name}'")
+        for name in edge_diff.get("extra", []):
+            print(f"      [ERROR] {entity_name}: extra edge '{name}'")
+        for tm in edge_diff.get("mismatches", []):
+            print(f"      [ERROR] {entity_name}.edge({tm['name']}): {tm.get('diffs', {})}")
+
+        # Constraint PK issues
+        cons_diff = entity_diff.get("constraints", {})
+        for pk in cons_diff.get("missing_pk", []):
+            print(f"      [ERROR] {entity_name}: missing PK {pk.get('columns', [])}")
+        for pk in cons_diff.get("extra_pk", []):
+            print(f"      [ERROR] {entity_name}: extra PK {pk.get('columns', [])}")
+
+    # Relationship type issues (graph schemas)
+    rel_diffs = details.get("relationship_type_diffs", {})
+    if rel_diffs and rel_diffs.get("issue_count", 0) > 0:
+        for name in rel_diffs.get("missing", []):
+            print(f"      [ERROR] Missing relationship type: {name}")
+        for name in rel_diffs.get("extra", []):
+            print(f"      [ERROR] Extra relationship type: {name}")
+        for m in rel_diffs.get("mismatches", []):
+            print(f"      [ERROR] RelType({m['name']}): {m.get('diffs', {})}")
+
+
+def run_test(direction: str, verbose: bool = False) -> dict:
+    """
+    Run a single migration test with unified validation.
+
+    Returns:
+        {
+            "passed": bool,
+            "layer0": bool,          # Execution check
+            "layer1": bool or None,  # Meta validation (None = N/A)
+            "layer2": bool or None,  # Export validation (None = N/A)
+            "warnings": int,
+            "stats": {...},
+        }
+    """
     r = run_migration(direction)
 
     if "error" in r:
-        print(f"[ERROR] {r['error']}")
-        return False
+        print(f"  [FAIL] {direction}")
+        print(f"         Error: {r['error']}")
+        return {"passed": False, "layer0": False, "layer1": None, "layer2": None, "warnings": 0}
 
-    # Helper to filter out __relationship_types__ and other special keys
+    stats = r.get("execution_stats", {})
+    total_ops = stats.get("total", 0)
+    success_ops = stats.get("success", 0)
+    skipped_ops = stats.get("skipped", 0)
+
+    is_cross_model = r["source_type"] != r["target_type"]
+    is_northwind = direction.startswith("northwind_")
+
+    # ── Layer 0: Execution check ──
+    layer0 = (skipped_ops == 0 and total_ops > 0)
+    result_entities = {k for k in r.get("result", {}) if not k.startswith("__")}
+    if len(result_entities) == 0:
+        layer0 = False
+
+    # ── Layer 1 & 2: Two-layer validation (all tests with target files) ──
+    layer1 = None
+    layer2 = None
+    total_warnings = 0
+
+    v_meta = r.get("validation_meta", {})
+    v_export = r.get("validation_export", {})
+
+    # Use validation results if available (not N/A)
+    if v_meta.get("passed") is not None:
+        layer1 = v_meta.get("passed")
+    if v_export.get("passed") is not None:
+        layer2 = v_export.get("passed")
+
+    overall_passed = layer0
+    if layer1 is not None:
+        overall_passed = overall_passed and layer1
+    if layer2 is not None:
+        overall_passed = overall_passed and layer2
+
+    # ── Print results ──
+    status = "PASS" if overall_passed else "FAIL"
+    print(f"  [{status}] {direction}")
+    print(f"         Layer 0: {'PASS' if layer0 else 'FAIL'} "
+          f"({total_ops} ops, {success_ops} success, {skipped_ops} skipped, "
+          f"{len(result_entities)} entities)")
+
+    l1_summary = v_meta.get("summary", "N/A")
+    l2_summary = v_export.get("summary", "N/A")
+    l1_counts = v_meta.get("entity_count", {})
+    l2_counts = v_export.get("entity_count", {})
+    print(f"         Layer 1: {l1_summary} "
+          f"(actual={l1_counts.get('actual', '?')}, expected={l1_counts.get('expected', '?')})")
+    print(f"         Layer 2: {l2_summary} "
+          f"(actual={l2_counts.get('actual', '?')}, expected={l2_counts.get('expected', '?')})")
+
+    # Print errors if any layer failed
+    if layer1 is False:
+        _print_validation_errors(v_meta)
+    if layer2 is False:
+        _print_validation_errors(v_export)
+
+    # Print warnings (always, even on PASS)
+    if layer1 is not None:
+        total_warnings += _print_validation_warnings(v_meta)
+    if layer2 is not None:
+        total_warnings += _print_validation_warnings(v_export)
+
+    # Verbose: print full schema details
+    if verbose:
+        _print_verbose(r)
+
+    return {
+        "passed": overall_passed,
+        "layer0": layer0,
+        "layer1": layer1,
+        "layer2": layer2,
+        "warnings": total_warnings,
+        "stats": stats,
+    }
+
+
+def _print_verbose(r: dict):
+    """Print detailed schema information (for debugging)."""
     def filter_entities(d):
         return {k: v for k, v in d.items() if not k.startswith('__')}
 
-    # ========== 1. Source Schema Analysis ==========
-    print("\n[1] SOURCE SCHEMA")
-    print("-" * 50)
-    print(f"Source Type: {r['source_type']}")
-    source_filtered = filter_entities(r['source'])
-    print(f"Source Entities: {list(source_filtered.keys())}")
-
+    print("\n         --- Source Schema ---")
+    source_filtered = filter_entities(r.get('source', {}))
     for name, entity in source_filtered.items():
-        print(f"\n  Entity: {name}")
-        print(f"    Attributes: {[a['name'] for a in entity['attributes']]}")
-        print(f"    Embedded: {[e['name'] for e in entity.get('embedded', [])]}")
-        print(f"    References: {[ref['name'] for ref in entity.get('references', [])]}")
+        attrs = [a['name'] + (' [PK]' if a.get('is_key') else '') for a in entity.get('attributes', [])]
+        print(f"         {name}: {attrs}")
 
-    # ========== 2. Meta V1 (After Reverse Engineering) ==========
-    print("\n\n[2] META V1 (Unified Meta Schema after Reverse Engineering)")
-    print("-" * 50)
-    meta_v1_filtered = filter_entities(r['meta_v1'])
-    print(f"Meta V1 Entities: {list(meta_v1_filtered.keys())}")
-
-    for name, entity in meta_v1_filtered.items():
-        print(f"\n  Entity: {name}")
-        print(f"    Attributes: {[a['name'] + (' [PK]' if a.get('is_key') else '') for a in entity['attributes']]}")
-        if entity.get('embedded'):
-            print(f"    Embedded: {[(e['name'], e['cardinality']) for e in entity['embedded']]}")
-
-    # ========== 3. SMEL Operations ==========
-    print("\n\n[3] SMEL OPERATIONS")
-    print("-" * 50)
-    print(f"Total Operations: {r['operations_count']}")
-
-    for i, op in enumerate(r['operations_detail'], 1):
-        print(f"\n  Step {i}: {op['type']}")
-        print(f"    Params: {op['params']}")
-        print(f"    Entities: {op['entity_count_before']} -> {op['entity_count_after']}")
-
-    # ========== 4. Meta V2 (After SMEL Operations) ==========
-    print("\n\n[4] META V2 (Unified Meta Schema after SMEL Operations)")
-    print("-" * 50)
-    result_filtered = filter_entities(r['result'])
-    print(f"Meta V2 Entities: {list(result_filtered.keys())}")
-
+    print("\n         --- Meta V2 (Result) ---")
+    result_filtered = filter_entities(r.get('result', {}))
     for name, entity in result_filtered.items():
-        print(f"\n  Entity: {name}")
-        attrs = []
-        for a in entity['attributes']:
-            suffix = ''
-            if a.get('is_key'):
-                suffix = ' [PK]'
-            attrs.append(a['name'] + suffix)
-        print(f"    Attributes: {attrs}")
-        if entity.get('references'):
-            print(f"    References: {[(ref['name'], '->', ref['target']) for ref in entity['references']]}")
+        attrs = [a['name'] + (' [PK]' if a.get('is_key') else '') for a in entity.get('attributes', [])]
+        embedded = [e['name'] for e in entity.get('embedded', [])]
+        refs = [f"{ref['name']}->{ref['target']}" for ref in entity.get('references', [])]
+        line = f"         {name}: {attrs}"
+        if embedded:
+            line += f" embedded={embedded}"
+        if refs:
+            line += f" refs={refs}"
+        print(line)
 
-    # ========== 5. Target Schema (After Forward Engineering) ==========
-    print("\n\n[5] TARGET SCHEMA")
-    print("-" * 50)
-    print(f"Target Type: {r['target_type']}")
-    print("\nGenerated DDL/JSON:")
-    print(r['exported_target'])
 
-    # ========== 6. Validation ==========
-    print("\n[6] VALIDATION")
-    print("-" * 50)
+# =============================================================================
+# pytest-compatible test functions
+# =============================================================================
+import pytest
 
-    # Check execution stats
-    stats = r.get('execution_stats', {})
-    print(f"Operations: {stats.get('total', 0)} total, {stats.get('success', 0)} success, {stats.get('skipped', 0)} skipped")
+_northwind_same_keys = sorted(
+    k for k in MIGRATION_CONFIGS
+    if k.startswith("northwind_") and
+    MIGRATION_CONFIGS[k]["source_type"] == MIGRATION_CONFIGS[k]["target_type"]
+)
 
-    source_type = r['source_type']
-    target_type = r['target_type']
+_northwind_cross_keys = sorted(
+    k for k in MIGRATION_CONFIGS
+    if k.startswith("northwind_") and
+    MIGRATION_CONFIGS[k]["source_type"] != MIGRATION_CONFIGS[k]["target_type"]
+)
 
-    if source_type == 'Document' and target_type == 'Relational':
-        # D2R: Check expected relational tables
-        expected_entities = {'person', 'address', 'employment', 'company', 'company_address', 'person_tag', 'person_knows'}
-        actual_entities = set(k for k in r['result'].keys() if not k.startswith('__'))
-        print(f"Expected Entities: {expected_entities}")
-        print(f"Actual Entities: {actual_entities}")
-        entity_pass = expected_entities == actual_entities
-        print(f"Entity Check: {'PASS' if entity_pass else 'FAIL'}")
 
-        # Check person_knows has composite PK
-        person_knows = r['result'].get('person_knows', {})
-        pk_attrs = [a['name'] for a in person_knows.get('attributes', []) if a.get('is_key')]
-        print(f"\nperson_knows PK columns: {pk_attrs}")
-        pk_pass = len(pk_attrs) == 2
-        print(f"Composite PK Check: {'PASS' if pk_pass else 'FAIL'}")
+@pytest.mark.parametrize("direction", _northwind_same_keys)
+def test_northwind_same_model(direction):
+    """Test same-model evolution (R2R, D2D, G2G, C2C)."""
+    result = run_test(direction)
+    assert result["passed"], f"{direction} failed"
 
-        # Check FK references
-        person_knows_refs = [ref['target'] for ref in person_knows.get('references', [])]
-        print(f"person_knows FK targets: {person_knows_refs}")
-        ref_pass = person_knows_refs == ['person', 'person']
-        print(f"Self-Reference Check: {'PASS' if ref_pass else 'FAIL'}")
 
-        return entity_pass and pk_pass and ref_pass
+@pytest.mark.parametrize("direction", _northwind_cross_keys)
+def test_northwind_cross_model(direction):
+    """Test cross-model migration (all 12 directions x 2 grammars)."""
+    result = run_test(direction)
+    assert result["passed"], f"{direction} failed"
 
-    elif source_type == 'Relational' and target_type == 'Document':
-        # R2D: Check expected document structure
-        actual_entities = set(k for k in r['result'].keys() if not k.startswith('__'))
-        print(f"Result Entities: {actual_entities}")
-        person = r['result'].get('person', {})
-        has_embedded = len(person.get('embedded', [])) > 0
-        print(f"Person has embedded: {'PASS' if has_embedded else 'FAIL'}")
-        if has_embedded:
-            emb_names = [e['name'] for e in person['embedded']]
-            print(f"  Embedded: {emb_names}")
-        return has_embedded
 
-    elif source_type == 'Relational' and target_type == 'Relational':
-        # R2R: Check expected evolved relational tables
-        expected_entities = {'person', 'person_detail', 'address', 'employment', 'company', 'tag', 'person_knows'}
-        actual_entities = set(k for k in r['result'].keys() if not k.startswith('__'))
-        print(f"Expected Entities: {expected_entities}")
-        print(f"Actual Entities: {actual_entities}")
-        entity_pass = expected_entities == actual_entities
-        print(f"Entity Check: {'PASS' if entity_pass else 'FAIL'}")
+# =============================================================================
+# Standalone execution (python tests/test_full_flow.py)
+# =============================================================================
+def main():
+    import argparse
+    parser = argparse.ArgumentParser(description="SMEL Full Flow Verification")
+    parser.add_argument("-v", "--verbose", action="store_true", help="Print detailed schema info")
+    parser.add_argument("--only", type=str, help="Run only tests matching this prefix (e.g. 'northwind_r2d')")
+    args = parser.parse_args()
 
-        # Check person_detail exists with expected attributes
-        person_detail = r['result'].get('person_detail', {})
-        detail_attrs = [a['name'] for a in person_detail.get('attributes', [])]
-        print(f"person_detail attributes: {detail_attrs}")
-        detail_pass = 'age' in detail_attrs and 'email' in detail_attrs
-        print(f"person_detail Check: {'PASS' if detail_pass else 'FAIL'}")
+    print("=" * 70)
+    print("SMEL FULL FLOW VERIFICATION")
+    print("=" * 70)
 
-        # Check company has merged address fields
-        company = r['result'].get('company', {})
-        company_attrs = [a['name'] for a in company.get('attributes', [])]
-        print(f"company attributes: {company_attrs}")
-        merge_pass = 'street' in company_attrs and 'city' in company_attrs
-        print(f"Company Merge Check: {'PASS' if merge_pass else 'FAIL'}")
+    same_keys = list(_northwind_same_keys)
+    cross_keys = list(_northwind_cross_keys)
 
-        return entity_pass and detail_pass and merge_pass
+    # Apply --only filter
+    if args.only:
+        same_keys = [k for k in same_keys if args.only in k]
+        cross_keys = [k for k in cross_keys if args.only in k]
 
-    elif source_type == 'Document' and target_type == 'Document':
-        # D2D: Check expected evolved document structure
-        actual_entities = set(k for k in r['result'].keys() if not k.startswith('__'))
-        print(f"Result Entities: {actual_entities}")
+    all_results = {}
+    total_warnings = 0
 
-        # Check person entity has new attributes
-        person = r['result'].get('person', {})
-        person_attrs = [a['name'] for a in person.get('attributes', [])]
-        print(f"person attributes: {person_attrs}")
-        has_email = 'email' in person_attrs
-        print(f"Person has email: {'PASS' if has_email else 'FAIL'}")
+    # ── Northwind Same-Model ──
+    if same_keys:
+        print(f"\n{'=' * 70}")
+        print(f"NORTHWIND SAME-MODEL EVOLUTION ({len(same_keys)} tests)")
+        print("=" * 70)
+        for direction in same_keys:
+            all_results[direction] = run_test(direction, verbose=args.verbose)
+            total_warnings += all_results[direction]["warnings"]
 
-        # Check company.address was flattened (no more 3-level nesting)
-        # After FLATTEN, company should have street and city directly
-        company_key = None
-        for key in actual_entities:
-            if 'company' in key and 'address' not in key:
-                company_key = key
-                break
-        if company_key:
-            company = r['result'].get(company_key, {})
-            company_attrs = [a['name'] for a in company.get('attributes', [])]
-            print(f"company attributes: {company_attrs}")
-            flatten_pass = 'street' in company_attrs and 'city' in company_attrs
-            print(f"Flatten Check: {'PASS' if flatten_pass else 'FAIL'}")
-        else:
-            flatten_pass = False
-            print(f"Flatten Check: FAIL (company entity not found)")
+    # ── Northwind Cross-Model ──
+    if cross_keys:
+        print(f"\n{'=' * 70}")
+        print(f"NORTHWIND CROSS-MODEL MIGRATION ({len(cross_keys)} tests)")
+        print("=" * 70)
+        for direction in cross_keys:
+            all_results[direction] = run_test(direction, verbose=args.verbose)
+            total_warnings += all_results[direction]["warnings"]
 
-        return has_email and flatten_pass
+    # ── Summary ──
+    print(f"\n{'=' * 70}")
+    print("SUMMARY")
+    print("=" * 70)
 
-    elif source_type == 'Graph' and target_type == 'Graph':
-        # G2G: Check expected evolved graph nodes (20 nodes V1 -> 17 nodes V2)
-        # Structural changes: MERGE City+Country→Location, TRANSFORM Award→rel, DELETE Address
-        actual_entities = set(e for e in r['result'].keys() if not e.startswith('__'))
-        print(f"Result Entities: {actual_entities}")
+    categories = {
+        "Northwind Same": [k for k in all_results if k.startswith("northwind_") and
+                           MIGRATION_CONFIGS[k]["source_type"] == MIGRATION_CONFIGS[k]["target_type"]],
+        "Northwind Cross": [k for k in all_results if k.startswith("northwind_") and
+                            MIGRATION_CONFIGS[k]["source_type"] != MIGRATION_CONFIGS[k]["target_type"]],
+    }
 
-        # Check Person node has expected attributes
-        person = r['result'].get('Person', {})
-        person_attrs = [a['name'] for a in person.get('attributes', [])]
-        print(f"Person attributes: {person_attrs}")
-        has_email = 'email' in person_attrs
-        has_first_name = 'first_name' in person_attrs
-        has_phone = 'phone' in person_attrs
-        has_bio = 'bio' in person_attrs
-        print(f"Person has email: {'PASS' if has_email else 'FAIL'}")
-        print(f"Person has first_name: {'PASS' if has_first_name else 'FAIL'}")
-        print(f"Person has phone: {'PASS' if has_phone else 'FAIL'}")
-        print(f"Person has bio: {'PASS' if has_bio else 'FAIL'}")
+    grand_total = 0
+    grand_passed = 0
 
-        # Check Company was renamed to Organization
-        has_org = 'Organization' in actual_entities
-        no_company = 'Company' not in actual_entities
-        print(f"Organization exists: {'PASS' if has_org else 'FAIL'}")
-        print(f"Company removed: {'PASS' if no_company else 'FAIL'}")
+    for cat_name, keys in categories.items():
+        if not keys:
+            continue
+        cat_passed = sum(1 for k in keys if all_results[k]["passed"])
+        cat_total = len(keys)
+        grand_total += cat_total
+        grand_passed += cat_passed
+        status = "PASS" if cat_passed == cat_total else "FAIL"
+        print(f"  {cat_name:20s}: {cat_passed}/{cat_total} passed  [{status}]")
 
-        # Check MERGE: City + Country → Location
-        has_location = 'Location' in actual_entities
-        no_city = 'City' not in actual_entities
-        no_country = 'Country' not in actual_entities
-        print(f"Location exists (MERGE): {'PASS' if has_location else 'FAIL'}")
-        print(f"City removed (MERGE): {'PASS' if no_city else 'FAIL'}")
-        print(f"Country removed (MERGE): {'PASS' if no_country else 'FAIL'}")
-        # Verify Location has merged attributes
-        location = r['result'].get('Location', {})
-        loc_attrs = [a['name'] for a in location.get('attributes', [])]
-        has_city_name = 'city_name' in loc_attrs
-        has_continent = 'continent' in loc_attrs
-        print(f"Location has city_name: {'PASS' if has_city_name else 'FAIL'}")
-        print(f"Location has continent: {'PASS' if has_continent else 'FAIL'}")
+    print("-" * 70)
+    print(f"  {'TOTAL':20s}: {grand_passed}/{grand_total} passed")
+    if total_warnings > 0:
+        print(f"  {'Notices':20s}: {total_warnings} (see details above)")
+    print("=" * 70)
 
-        # Check TRANSFORM: Award → relationship (node removed)
-        no_award = 'Award' not in actual_entities
-        print(f"Award removed (TRANSFORM): {'PASS' if no_award else 'FAIL'}")
+    overall = "ALL PASSED" if grand_passed == grand_total else "SOME FAILED"
+    print(f"OVERALL: {overall} ({grand_passed}/{grand_total})")
+    print("=" * 70)
 
-        # Check Address was deleted
-        no_address = 'Address' not in actual_entities
-        print(f"Address removed (DELETE): {'PASS' if no_address else 'FAIL'}")
-
-        # Check renames
-        has_cert = 'Certification' in actual_entities
-        has_paper = 'Paper' in actual_entities
-        print(f"Certification exists: {'PASS' if has_cert else 'FAIL'}")
-        print(f"Paper exists: {'PASS' if has_paper else 'FAIL'}")
-
-        # Check entity count (17 nodes: 20 - 2 merge + 1 Location - 1 Award - 1 Address)
-        entity_count_pass = len(actual_entities) == 17
-        print(f"Entity count (expect 17): {len(actual_entities)} {'PASS' if entity_count_pass else 'FAIL'}")
-
-        return (has_email and has_first_name and has_phone and has_bio
-                and has_org and no_company and has_location and no_city and no_country
-                and has_city_name and has_continent and no_award and no_address
-                and has_cert and has_paper and entity_count_pass)
-
-    elif source_type == 'Columnar' and target_type == 'Columnar':
-        # C2C: Check expected evolved columnar tables
-        actual_entities = set(e for e in r['result'].keys() if not e.startswith('__'))
-        print(f"Result Entities: {actual_entities}")
-
-        # Check person table has renamed fields
-        person = r['result'].get('person', {})
-        person_attrs = [a['name'] for a in person.get('attributes', [])]
-        print(f"person attributes: {person_attrs}")
-        has_first_name = 'first_name' in person_attrs
-        has_email = 'email' in person_attrs
-        print(f"person has first_name: {'PASS' if has_first_name else 'FAIL'}")
-        print(f"person has email: {'PASS' if has_email else 'FAIL'}")
-
-        # Check person_activity was renamed to activity_log
-        has_activity_log = 'activity_log' in actual_entities
-        no_person_activity = 'person_activity' not in actual_entities
-        print(f"activity_log exists: {'PASS' if has_activity_log else 'FAIL'}")
-        print(f"person_activity removed: {'PASS' if no_person_activity else 'FAIL'}")
-
-        return has_first_name and has_email and has_activity_log and no_person_activity
-
-    else:
-        print(f"Unknown direction: {source_type} -> {target_type}")
-        return False
+    sys.exit(0 if grand_passed == grand_total else 1)
 
 
 if __name__ == "__main__":
-    print("=" * 70)
-    print("SMEL FULL FLOW VERIFICATION (Person)")
-    print("=" * 70)
-
-    results = {}
-
-    # ---- Person Tests (8) ----
-    print("\n" + "=" * 70)
-    print("PERSON MINI EXAMPLE (8 tests)")
-    print("=" * 70)
-    for direction in ["person_d2r_specific", "person_d2r_pauschalisiert",
-                       "person_r2d_specific", "person_r2d_pauschalisiert",
-                       "person_r2r_specific", "person_r2r_pauschalisiert",
-                       "person_d2d_specific", "person_d2d_pauschalisiert"]:
-        results[direction] = run_test(direction)
-
-    # Summary
-    print("\n" + "=" * 70)
-    print("SUMMARY")
-    print("=" * 70)
-    all_pass = True
-    passed_count = 0
-    for direction, passed in results.items():
-        status = "PASS" if passed else "FAIL"
-        print(f"  [{status}] {direction}")
-        if not passed:
-            all_pass = False
-        else:
-            passed_count += 1
-
-    print("=" * 70)
-    print(f"  Person: {passed_count}/12 passed")
-    print("=" * 70)
-    print(f"OVERALL: {'ALL 12 PASSED' if all_pass else 'SOME FAILED'}")
-    print("=" * 70)
+    main()

@@ -3,7 +3,7 @@ SMEL Listeners - Parsers for all three SMEL grammar variants
 
 This module provides listener implementations for:
 1. SMEL_Specific.g4 - Specific operations version
-2. SMEL_Pauschalisiert.g4 - Generalized operations version
+2. SMEL_Generalized.g4 - Generalized operations version
 3. SMEL.g4 - Original version (legacy)
 
 All listeners share common logic through the BaseSMELListener class.
@@ -18,8 +18,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from grammar.specific.SMEL_SpecificListener import SMEL_SpecificListener
 from grammar.specific.SMEL_SpecificParser import SMEL_SpecificParser
-from grammar.pauschalisiert.SMEL_PauschalisiertListener import SMEL_PauschalisiertListener
-from grammar.pauschalisiert.SMEL_PauschalisiertParser import SMEL_PauschalisiertParser
+from grammar.generalized.SMEL_GeneralizedListener import SMEL_GeneralizedListener
+from grammar.generalized.SMEL_GeneralizedParser import SMEL_GeneralizedParser
 
 
 class OpType(str, Enum):
@@ -49,21 +49,16 @@ class OpType(str, Enum):
     # Key/Constraint operations
     ADD_KEY = "add_key"
     DELETE_KEY = "delete_key"
-    REMOVE_KEY = "remove_key"
     ADD_CONSTRAINT = "add_constraint"
     DELETE_CONSTRAINT = "delete_constraint"
     CAST_CONSTRAINT = "cast_constraint"
+    CAST_ENTITY = "cast_entity"
     # Embedded operations
     ADD_EMBEDDED = "add_embedded"
     DELETE_EMBEDDED = "delete_embedded"
     # Label operations (Graph)
     ADD_LABEL = "add_label"
     DELETE_LABEL = "delete_label"
-    REMOVE_LABEL = "remove_label"
-    # Relationship type operations (Graph)
-    ADD_RELTYPE = "add_reltype"
-    DELETE_RELTYPE = "delete_reltype"
-    RENAME_RELTYPE = "rename_reltype"
     # Schema transformation
     TRANSFORM = "transform"
     MERGE = "merge"
@@ -86,7 +81,7 @@ class Operation:
     """Represents a single SMEL operation."""
     op_type: OpType
     params: Dict[str, Any] = field(default_factory=dict)
-    original_keyword: str = ""  # Original keyword from source (e.g., "FLATTEN_PS", "RENAME_ATTRIBUTE")
+    original_keyword: str = ""  # Original keyword from source (e.g., "FLATTEN", "RENAME_ATTRIBUTE")
 
 
 class BaseSMELListener:
@@ -166,13 +161,19 @@ class BaseSMELListener:
 
     def _parse_entity_clauses(self, clause_list):
         """Parse entity clauses.
-        Returns list of dicts, e.g. [{'type': 'ATTRIBUTES', 'attributes': ['id', 'name']}, {'type': 'KEY', 'key_name': 'id'}]
+        Returns list of dicts, e.g. [{'type': 'ATTRIBUTES', 'attributes': [{'name': 'id', 'data_type': 'String'}, ...]}, {'type': 'KEY', 'key_name': 'id'}]
         """
         result = []
         for clause in clause_list:
             if hasattr(clause, 'withAttributesClause') and clause.withAttributesClause():
-                ids = clause.withAttributesClause().identifierList()
-                result.append({'type': 'ATTRIBUTES', 'attributes': [id.getText() for id in ids.identifier()]})
+                attr_def_list = clause.withAttributesClause().attributeDefList()
+                attrs = []
+                for attr_def in attr_def_list.attributeDef():
+                    attrs.append({
+                        'name': attr_def.identifier().getText(),
+                        'data_type': attr_def.dataType().getText()
+                    })
+                result.append({'type': 'ATTRIBUTES', 'attributes': attrs})
             elif hasattr(clause, 'withKeyClause') and clause.withKeyClause():
                 result.append({'type': 'KEY', 'key_name': clause.withKeyClause().identifier().getText()})
         return result
@@ -228,7 +229,7 @@ class BaseSMELListener:
 
         Args:
             field_list_ctx: The unnestFieldList context from parser
-            parser_module: Either SMEL_SpecificParser or SMEL_PauschalisiertParser
+            parser_module: Either SMEL_SpecificParser or SMEL_GeneralizedParser
 
         Returns:
             tuple: (attributes, nested)
@@ -441,10 +442,19 @@ class SMELSpecificListener(SMEL_SpecificListener, BaseSMELListener):
         }))
 
     def enterAdd_entity(self, ctx):
-        self.operations.append(Operation(OpType.ADD_ENTITY, {
-            "name": ctx.identifier().getText(),
+        identifiers = ctx.identifier()
+        params = {
+            "name": identifiers[0].getText(),
             "clauses": self._parse_entity_clauses(ctx.entityClause())
-        }))
+        }
+        # FROM source TO target (EDGE entity / relationship type)
+        if len(identifiers) >= 3:
+            params["source_entity"] = identifiers[1].getText()
+            params["target_entity"] = identifiers[2].getText()
+        # WITH CARDINALITY
+        if ctx.cardinalityType():
+            params["cardinality"] = ctx.cardinalityType().getText()
+        self.operations.append(Operation(OpType.ADD_ENTITY, params))
 
     def enterAdd_primary_key(self, ctx):
         # New syntax supports: ADD_PRIMARY_KEY address.address_id AS String
@@ -580,32 +590,6 @@ class SMELSpecificListener(SMEL_SpecificListener, BaseSMELListener):
             "entity": identifiers[1].getText() if len(identifiers) > 1 else None
         }))
 
-    # REMOVE operations (non-destructive constraint removal)
-    def enterRemove_unique_key(self, ctx):
-        key_columns, entity_from_path = self._parse_key_columns(ctx.keyColumns())
-        entity_name = ctx.identifier().getText() if ctx.identifier() else entity_from_path
-        self.operations.append(Operation(OpType.REMOVE_KEY, {
-            "key_type": "UNIQUE",
-            "key_columns": key_columns,
-            "entity": entity_name
-        }))
-
-    def enterRemove_foreign_key(self, ctx):
-        key_columns, entity_from_path = self._parse_key_columns(ctx.keyColumns())
-        entity_name = ctx.identifier().getText() if ctx.identifier() else entity_from_path
-        self.operations.append(Operation(OpType.REMOVE_KEY, {
-            "key_type": "FOREIGN",
-            "key_columns": key_columns,
-            "entity": entity_name
-        }))
-
-    def enterRemove_label(self, ctx):
-        identifiers = ctx.identifier() if isinstance(ctx.identifier(), list) else [ctx.identifier()]
-        self.operations.append(Operation(OpType.REMOVE_LABEL, {
-            "label": identifiers[0].getText(),
-            "entity": identifiers[1].getText() if len(identifiers) > 1 else None
-        }))
-
     # RENAME operations
     def enterRename_attribute(self, ctx):
         identifiers = ctx.identifier() if isinstance(ctx.identifier(), list) else [ctx.identifier()]
@@ -687,12 +671,22 @@ class SMELSpecificListener(SMEL_SpecificListener, BaseSMELListener):
             constraint_type = "UNIQUE_KEY"
         elif ct.PARTITION():
             constraint_type = "PARTITION_KEY"
+        elif ct.NODE():
+            constraint_type = "NODE_KEY"
+        elif ct.DOCUMENT_ID():
+            constraint_type = "DOCUMENT_ID"
         else:
             constraint_type = "CLUSTERING_KEY"
         self.operations.append(Operation(OpType.CAST_CONSTRAINT, {
             "target": ctx.qualifiedName().getText(),
             "constraint_type": constraint_type
         }, original_keyword="CAST_CONSTRAINT"))
+
+    def enterCast_entity(self, ctx):
+        self.operations.append(Operation(OpType.CAST_ENTITY, {
+            "target": ctx.identifier().getText(),
+            "entity_kind": ctx.databaseType().getText().upper()
+        }, original_keyword="CAST_ENTITY"))
 
     def enterRecard(self, ctx):
         self.operations.append(Operation(OpType.RECARD, {
@@ -705,49 +699,33 @@ class SMELSpecificListener(SMEL_SpecificListener, BaseSMELListener):
         target_ctx = ctx.transformTarget()
 
         if isinstance(target_ctx, SMEL_SpecificParser.TransformToRelationshipContext):
-            self.operations.append(Operation(OpType.TRANSFORM, {
+            params = {
                 "name": name,
                 "target_type": "RELATIONSHIP",
                 "source_entity": target_ctx.identifier(0).getText(),
                 "target_entity": target_ctx.identifier(1).getText()
-            }, original_keyword="TRANSFORM"))
+            }
+            if target_ctx.cardinalityType():
+                params["cardinality"] = target_ctx.cardinalityType().getText()
+            self.operations.append(Operation(OpType.TRANSFORM, params, original_keyword="TRANSFORM"))
         else:
             self.operations.append(Operation(OpType.TRANSFORM, {
                 "name": name,
                 "target_type": "ENTITY"
             }, original_keyword="TRANSFORM"))
 
-    # RELTYPE operations (Graph database - DB.Rty management)
-    def enterAdd_reltype(self, ctx):
-        identifiers = ctx.identifier()
-        self.operations.append(Operation(OpType.ADD_RELTYPE, {
-            "name": identifiers[0].getText(),
-            "source_entity": identifiers[1].getText(),
-            "target_entity": identifiers[2].getText()
-        }))
 
-    def enterDelete_reltype(self, ctx):
-        self.operations.append(Operation(OpType.DELETE_RELTYPE, {
-            "name": ctx.identifier().getText()
-        }))
-
-    def enterRename_reltype(self, ctx):
-        identifiers = ctx.identifier()
-        self.operations.append(Operation(OpType.RENAME_RELTYPE, {
-            "old_name": identifiers[0].getText(),
-            "new_name": identifiers[1].getText()
-        }))
 
 
 # ==============================================================================
-# SMEL_Pauschalisiert Listener - For SMEL_Pauschalisiert.g4
+# SMEL_Generalized Listener - For SMEL_Generalized.g4
 # ==============================================================================
 
-class SMELPauschalisiertListener(SMEL_PauschalisiertListener, BaseSMELListener):
+class SMELGeneralizedListener(SMEL_GeneralizedListener, BaseSMELListener):
     """
-    Listener for SMEL_Pauschalisiert.g4 grammar.
+    Listener for SMEL_Generalized.g4 grammar.
 
-    Uses generalized keywords like ADD_PS, DELETE_PS, RENAME_PS with type parameters.
+    Uses generalized keywords like ADD, DELETE, RENAME with type parameters.
     Reuses helper methods from BaseSMELListener for common parsing logic.
     """
 
@@ -764,19 +742,19 @@ class SMELPauschalisiertListener(SMEL_PauschalisiertListener, BaseSMELListener):
         self.context.target_db_type = ctx.databaseType(1).getText()
 
     # Structure operations
-    def enterFlatten_ps(self, ctx):
-        # New syntax: FLATTEN_PS qualifiedName
+    def enterFlatten_gen(self, ctx):
+        # New syntax: FLATTEN qualifiedName
         # Flattens nested object fields into parent table (reduce depth by 1)
-        # Example: FLATTEN_PS person.name
+        # Example: FLATTEN person.name
         #   Before: person { name: { vorname, nachname }, age }
         #   After:  person { name_vorname, name_nachname, age }
         self.operations.append(Operation(OpType.FLATTEN, {
             "source": ctx.qualifiedName().getText()
-        }, original_keyword="FLATTEN_PS"))
+        }, original_keyword="FLATTEN"))
 
-    def enterUnflatten_ps(self, ctx):
-        # UNFLATTEN_PS - Combine flat fields into nested object (reverse of FLATTEN)
-        # Example: UNFLATTEN_PS person:vorname, nachname AS name
+    def enterUnflatten_gen(self, ctx):
+        # UNFLATTEN - Combine flat fields into nested object (reverse of FLATTEN)
+        # Example: UNFLATTEN person:vorname, nachname AS name
         #   Before: person { vorname, nachname, age }
         #   After:  person { name: { vorname, nachname }, age }
         entity = ctx.identifier(0).getText()  # person
@@ -786,39 +764,39 @@ class SMELPauschalisiertListener(SMEL_PauschalisiertListener, BaseSMELListener):
             "entity": entity,
             "fields": fields,
             "nested_name": nested_name
-        }, original_keyword="UNFLATTEN_PS"))
+        }, original_keyword="UNFLATTEN"))
 
-    def enterUnwind_ps(self, ctx):
+    def enterUnwind_gen(self, ctx):
         source = ctx.qualifiedName().getText()
         target = ctx.identifier().getText() if ctx.identifier() else None
 
         if target:
-            # Mode 1: Create new table - UNWIND_PS person.tags[] INTO person_tag
+            # Mode 1: Create new table - UNWIND person.tags[] INTO person_tag
             self.operations.append(Operation(OpType.UNWIND, {
                 "mode": "create_table",
                 "source": source,
                 "target": target
-            }, original_keyword="UNWIND_PS"))
+            }, original_keyword="UNWIND"))
         else:
-            # Mode 2: Expand in place - UNWIND_PS person_tag.value
+            # Mode 2: Expand in place - UNWIND person_tag.value
             self.operations.append(Operation(OpType.UNWIND, {
                 "mode": "expand_in_place",
                 "source": source
-            }, original_keyword="UNWIND_PS"))
+            }, original_keyword="UNWIND"))
 
-    def enterWind_ps(self, ctx):
-        # WIND_PS - Convert scalar attribute back to array (reverse of UNWIND)
-        # Syntax: WIND_PS person_tag.tags
-        # Cross-entity movement is handled by MERGE_PS, not WIND_PS.
+    def enterWind_gen(self, ctx):
+        # WIND - Convert scalar attribute back to array (reverse of UNWIND)
+        # Syntax: WIND person_tag.tags
+        # Cross-entity movement is handled by MERGE, not WIND.
         source = ctx.qualifiedName().getText()  # person_tag.tags
         self.operations.append(Operation(OpType.WIND, {
             "source": source
-        }, original_keyword="WIND_PS"))
+        }, original_keyword="WIND"))
 
-    def enterNest_ps(self, ctx):
-        # Syntax: NEST_PS identifier COLON unnestFieldList IN qualifiedName WHERE condition (WITH DELETION)?
-        # Example: NEST_PS address:street,city IN person.address WHERE address.person_id = person.person_id WITH DELETION
-        # Example: NEST_PS address:street,city IN person.address WHERE address.person_id = person.person_id AND address.dept_id = person.dept_id
+    def enterNest_gen(self, ctx):
+        # Syntax: NEST identifier COLON unnestFieldList IN qualifiedName WHERE condition (WITH DELETION)?
+        # Example: NEST address:street,city IN person.address WHERE address.person_id = person.person_id WITH DELETION
+        # Example: NEST address:street,city IN person.address WHERE address.person_id = person.person_id AND address.dept_id = person.dept_id
         source_entity = ctx.identifier().getText()  # address
         target_location = ctx.qualifiedName().getText()  # person.address (single qualifiedName in rule)
         with_deletion = ctx.DELETION() is not None  # WITH DELETION option
@@ -835,7 +813,7 @@ class SMELPauschalisiertListener(SMEL_PauschalisiertListener, BaseSMELListener):
 
         # Parse field list: attributes to embed
         attributes, nested = self._parse_unnest_field_list(
-            ctx.unnestFieldList(), SMEL_PauschalisiertParser)
+            ctx.unnestFieldList(), SMEL_GeneralizedParser)
 
         self.operations.append(Operation(OpType.NEST, {
             "source": source_entity,       # source entity to embed (address)
@@ -847,16 +825,16 @@ class SMELPauschalisiertListener(SMEL_PauschalisiertListener, BaseSMELListener):
             "target_pk": target_pk,        # first join condition right (person.person_id)
             "join_conditions": join_conditions,  # all join conditions
             "with_deletion": with_deletion # delete source after embedding
-        }, original_keyword="NEST_PS"))
+        }, original_keyword="NEST"))
 
-    def enterUnnest_ps(self, ctx):
-        # New syntax: UNNEST_PS qualifiedName COLON unnestFieldList AS identifier (WITH unnestCarryList)?
-        # Example: UNNEST_PS person.address:street,city AS address WITH person.person_id TO address.person_id
+    def enterUnnest_gen(self, ctx):
+        # New syntax: UNNEST qualifiedName COLON unnestFieldList AS identifier (WITH unnestCarryList)?
+        # Example: UNNEST person.address:street,city AS address WITH person.person_id TO address.person_id
         # Example with multiple carry fields:
-        #   UNNEST_PS person.employment:position AS employment
+        #   UNNEST person.employment:position AS employment
         #       WITH person.person_id TO employment.person_id, person.dept_id TO employment.dept_id
         #   - WITH clause: copy fields from source to new table (can carry multiple fields)
-        source_path = ctx.qualifiedName().getText()  # person.address (single qualifiedName in unnest_ps rule)
+        source_path = ctx.qualifiedName().getText()  # person.address (single qualifiedName in unnest_gen rule)
         target_name = ctx.identifier().getText()  # address (identifier after AS)
 
         # Parse carry fields (WITH clause is optional)
@@ -877,7 +855,7 @@ class SMELPauschalisiertListener(SMEL_PauschalisiertListener, BaseSMELListener):
 
         # Parse field list: recursively separate attributes and nested objects
         attributes, nested = self._parse_unnest_field_list(
-            ctx.unnestFieldList(), SMEL_PauschalisiertParser)
+            ctx.unnestFieldList(), SMEL_GeneralizedParser)
 
         self.operations.append(Operation(OpType.UNNEST, {
             "source_path": source_path,
@@ -885,9 +863,9 @@ class SMELPauschalisiertListener(SMEL_PauschalisiertListener, BaseSMELListener):
             "nested": nested,          # Nested objects [{'name': 'company', 'attributes': [...], 'nested': [...]}]
             "target": target_name,
             "carry_fields": carry_fields  # List of fields to copy from source to new table
-        }, original_keyword="UNNEST_PS"))
+        }, original_keyword="UNNEST"))
 
-    # ADD_PS operations - same internal structure as original SMEL
+    # ADD operations - same internal structure as original SMEL
     def enterAttributeAdd(self, ctx):
         self.operations.append(Operation(OpType.ADD_ATTRIBUTE, {
             "name": ctx.identifier(0).getText(),
@@ -896,8 +874,8 @@ class SMELPauschalisiertListener(SMEL_PauschalisiertListener, BaseSMELListener):
         }))
 
     def enterConstraintAdd(self, ctx):
-        # ADD_PS CONSTRAINT entity.field REFERENCES table(column)
-        # Supports explicit entity.field syntax: ADD_PS CONSTRAINT address.person_id REFERENCES person(person_id)
+        # ADD CONSTRAINT entity.field REFERENCES table(column)
+        # Supports explicit entity.field syntax: ADD CONSTRAINT address.person_id REFERENCES person(person_id)
         qualified_name = ctx.qualifiedName().getText()
         parts = qualified_name.split(".")
         if len(parts) == 2:
@@ -914,7 +892,7 @@ class SMELPauschalisiertListener(SMEL_PauschalisiertListener, BaseSMELListener):
             "target_table": identifiers[0].getText(),
             "target_column": identifiers[1].getText(),
             "clauses": self._parse_reference_clauses(ctx.constraintClause())
-        }, original_keyword="ADD_PS CONSTRAINT"))
+        }, original_keyword="ADD CONSTRAINT"))
 
     def enterEmbeddedAdd(self, ctx):
         self.operations.append(Operation(OpType.ADD_EMBEDDED, {
@@ -924,21 +902,30 @@ class SMELPauschalisiertListener(SMEL_PauschalisiertListener, BaseSMELListener):
         }))
 
     def enterEntityAdd(self, ctx):
-        self.operations.append(Operation(OpType.ADD_ENTITY, {
-            "name": ctx.identifier().getText(),
+        identifiers = ctx.identifier()
+        params = {
+            "name": identifiers[0].getText(),
             "clauses": self._parse_entity_clauses(ctx.entityClause())
-        }))
+        }
+        # FROM source TO target (EDGE entity / relationship type)
+        if len(identifiers) >= 3:
+            params["source_entity"] = identifiers[1].getText()
+            params["target_entity"] = identifiers[2].getText()
+        # WITH CARDINALITY
+        if ctx.cardinalityType():
+            params["cardinality"] = ctx.cardinalityType().getText()
+        self.operations.append(Operation(OpType.ADD_ENTITY, params))
 
     def enterKeyAdd(self, ctx):
         # New syntax: keyType? KEY qualifiedName (AS dataType)? (TO identifier)?
-        # Supports explicit entity.field syntax: ADD_PS KEY address.address_id AS String
+        # Supports explicit entity.field syntax: ADD KEY address.address_id AS String
         key_type = ctx.keyType().getText() if ctx.keyType() else "PRIMARY"  # Default to PRIMARY
         data_type = ctx.dataType().getText() if ctx.dataType() else None
         key_columns, entity_from_path = self._parse_key_columns(ctx.keyColumns())
         # Entity priority: explicit TO clause > entity from qualifiedName path
         entity_name = ctx.identifier().getText() if ctx.identifier() else entity_from_path
-        # Build original keyword: ADD_PS [keyType] KEY
-        original_kw = "ADD_PS " + (key_type + " " if key_type != "PRIMARY" else "") + "KEY"
+        # Build original keyword: ADD [keyType] KEY
+        original_kw = "ADD " + (key_type + " " if key_type != "PRIMARY" else "") + "KEY"
         self.operations.append(Operation(OpType.ADD_KEY, {
             "key_type": key_type,
             "key_columns": key_columns,
@@ -954,7 +941,7 @@ class SMELPauschalisiertListener(SMEL_PauschalisiertListener, BaseSMELListener):
             "entity": identifiers[1].getText() if len(identifiers) > 1 else None
         }))
 
-    # DELETE_PS operations
+    # DELETE operations
     def enterAttributeDelete(self, ctx):
         self.operations.append(Operation(OpType.DELETE_ATTRIBUTE, {
             "target": ctx.qualifiedName().getText()
@@ -963,7 +950,7 @@ class SMELPauschalisiertListener(SMEL_PauschalisiertListener, BaseSMELListener):
     def enterConstraintDelete(self, ctx):
         self.operations.append(Operation(OpType.DELETE_CONSTRAINT, {
             "reference": ctx.qualifiedName().getText()
-        }, original_keyword="DELETE_PS CONSTRAINT"))
+        }, original_keyword="DELETE CONSTRAINT"))
 
     def enterEmbeddedDelete(self, ctx):
         self.operations.append(Operation(OpType.DELETE_EMBEDDED, {
@@ -991,40 +978,14 @@ class SMELPauschalisiertListener(SMEL_PauschalisiertListener, BaseSMELListener):
             "entity": identifiers[1].getText() if len(identifiers) > 1 else None
         }))
 
-    # REMOVE_PS operations
-    def enterUniqueKeyRemove(self, ctx):
-        key_columns, entity_from_path = self._parse_key_columns(ctx.keyColumns())
-        entity_name = ctx.identifier().getText() if ctx.identifier() else entity_from_path
-        self.operations.append(Operation(OpType.REMOVE_KEY, {
-            "key_type": "UNIQUE",
-            "key_columns": key_columns,
-            "entity": entity_name
-        }))
-
-    def enterForeignKeyRemove(self, ctx):
-        key_columns, entity_from_path = self._parse_key_columns(ctx.keyColumns())
-        entity_name = ctx.identifier().getText() if ctx.identifier() else entity_from_path
-        self.operations.append(Operation(OpType.REMOVE_KEY, {
-            "key_type": "FOREIGN",
-            "key_columns": key_columns,
-            "entity": entity_name
-        }))
-
-    def enterLabelRemove(self, ctx):
-        identifiers = ctx.identifier() if isinstance(ctx.identifier(), list) else [ctx.identifier()]
-        self.operations.append(Operation(OpType.REMOVE_LABEL, {
-            "label": identifiers[0].getText(),
-            "entity": identifiers[1].getText() if len(identifiers) > 1 else None
-        }))
-
-    # RENAME_PS operations
+    # RENAME operations
     def enterAttributeRename(self, ctx):
         identifiers = ctx.identifier() if isinstance(ctx.identifier(), list) else [ctx.identifier()]
         self.operations.append(Operation(OpType.RENAME, {
             "old_name": identifiers[0].getText(),
             "new_name": identifiers[1].getText() if len(identifiers) > 1 else None,
             "entity": identifiers[2].getText() if len(identifiers) > 2 else None
-        }, original_keyword="RENAME_PS ATTRIBUTE"))
+        }, original_keyword="RENAME ATTRIBUTE"))
 
     def enterEntityRename(self, ctx):
         identifiers = ctx.identifier() if isinstance(ctx.identifier(), list) else [ctx.identifier()]
@@ -1033,28 +994,28 @@ class SMELPauschalisiertListener(SMEL_PauschalisiertListener, BaseSMELListener):
             "new_name": identifiers[1].getText() if len(identifiers) > 1 else None
         }))
 
-    # Simple operations with _PS suffix
-    def enterCopy_ps(self, ctx):
+    # Simple operations
+    def enterCopy_gen(self, ctx):
         if ctx.entityCopy():
             ec = ctx.entityCopy()
             self.operations.append(Operation(OpType.COPY_ENTITY, {
                 "source": ec.identifier(0).getText(),
                 "target": ec.identifier(1).getText()
-            }, original_keyword="COPY_PS ENTITY"))
+            }, original_keyword="COPY ENTITY"))
         else:
             ac = ctx.attributeCopy()
             self.operations.append(Operation(OpType.COPY, {
                 "source": ac.qualifiedName(0).getText(),
                 "target": ac.qualifiedName(1).getText()
-            }, original_keyword="COPY_PS ATTRIBUTE"))
+            }, original_keyword="COPY ATTRIBUTE"))
 
-    def enterMove_ps(self, ctx):
+    def enterMove_gen(self, ctx):
         self.operations.append(Operation(OpType.MOVE, {
             "source": ctx.qualifiedName(0).getText(),
             "target": ctx.qualifiedName(1).getText()
-        }, original_keyword="MOVE_PS ATTRIBUTE"))
+        }, original_keyword="MOVE ATTRIBUTE"))
 
-    def enterMerge_ps(self, ctx):
+    def enterMerge_gen(self, ctx):
         self.operations.append(Operation(OpType.MERGE, {
             "source1": ctx.identifier(0).getText(),
             "source2": ctx.identifier(1).getText(),
@@ -1062,15 +1023,15 @@ class SMELPauschalisiertListener(SMEL_PauschalisiertListener, BaseSMELListener):
             "alias": ctx.identifier(3).getText() if len(ctx.identifier()) > 3 else None
         }))
 
-    def enterSplit_ps(self, ctx):
-        # New syntax: SPLIT_PS identifier INTO splitPartPs (SEMICOLON splitPartPs)+
+    def enterSplit_gen(self, ctx):
+        # New syntax: SPLIT identifier INTO splitPartGen (SEMICOLON splitPartGen)+
         # Vertical partitioning - divides one entity into multiple separate entities
-        # Example: SPLIT_PS person INTO person:person_id, vorname, nachname, age; person_tag:person_id, tags
+        # Example: SPLIT person INTO person:person_id, vorname, nachname, age; person_tag:person_id, tags
         #   Before: person { person_id, vorname, nachname, age, tags[] }
         #   After:  person { person_id, vorname, nachname, age }
         #          person_tag { person_id, tags[] }
         source_entity = ctx.identifier().getText()
-        split_parts = ctx.splitPartPs() if isinstance(ctx.splitPartPs(), list) else [ctx.splitPartPs()]
+        split_parts = ctx.splitPartGen() if isinstance(ctx.splitPartGen(), list) else [ctx.splitPartGen()]
 
         parts = []
         for part in split_parts:
@@ -1084,9 +1045,9 @@ class SMELPauschalisiertListener(SMEL_PauschalisiertListener, BaseSMELListener):
         self.operations.append(Operation(OpType.SPLIT, {
             "source": source_entity,
             "parts": parts
-        }, original_keyword="SPLIT_PS"))
+        }, original_keyword="SPLIT"))
 
-    def enterCast_ps(self, ctx):
+    def enterCast_gen(self, ctx):
         if ctx.constraintCast():
             cc = ctx.constraintCast()
             ct = cc.constraintKeyType()
@@ -1096,59 +1057,53 @@ class SMELPauschalisiertListener(SMEL_PauschalisiertListener, BaseSMELListener):
                 constraint_type = "UNIQUE_KEY"
             elif ct.PARTITION():
                 constraint_type = "PARTITION_KEY"
+            elif ct.NODE():
+                constraint_type = "NODE_KEY"
+            elif ct.DOCUMENT_ID():
+                constraint_type = "DOCUMENT_ID"
             else:
                 constraint_type = "CLUSTERING_KEY"
             self.operations.append(Operation(OpType.CAST_CONSTRAINT, {
                 "target": cc.qualifiedName().getText(),
                 "constraint_type": constraint_type
-            }, original_keyword="CAST_PS CONSTRAINT"))
+            }, original_keyword="CAST CONSTRAINT"))
+        elif ctx.entityCast():
+            ec = ctx.entityCast()
+            self.operations.append(Operation(OpType.CAST_ENTITY, {
+                "target": ec.identifier().getText(),
+                "entity_kind": ec.databaseType().getText().upper()
+            }, original_keyword="CAST ENTITY"))
         else:
             ac = ctx.attributeCast()
             self.operations.append(Operation(OpType.CAST, {
                 "target": ac.qualifiedName().getText(),
                 "type": ac.dataType().getText()
-            }, original_keyword="CAST_PS ATTRIBUTE"))
+            }, original_keyword="CAST ATTRIBUTE"))
 
-    def enterRecard_ps(self, ctx):
+    def enterRecard_gen(self, ctx):
         self.operations.append(Operation(OpType.RECARD, {
             "target": ctx.qualifiedName().getText(),
             "cardinality": ctx.cardinalityType().getText()
-        }, original_keyword="RECARD_PS"))
+        }, original_keyword="RECARD"))
 
-    def enterTransform_ps(self, ctx):
+    def enterTransform_gen(self, ctx):
         name = ctx.identifier().getText()
         target_ctx = ctx.transformTarget()
 
-        if isinstance(target_ctx, SMEL_PauschalisiertParser.TransformToRelationshipContext):
-            self.operations.append(Operation(OpType.TRANSFORM, {
+        if isinstance(target_ctx, SMEL_GeneralizedParser.TransformToRelationshipContext):
+            params = {
                 "name": name,
                 "target_type": "RELATIONSHIP",
                 "source_entity": target_ctx.identifier(0).getText(),
                 "target_entity": target_ctx.identifier(1).getText()
-            }, original_keyword="TRANSFORM_PS"))
+            }
+            if target_ctx.cardinalityType():
+                params["cardinality"] = target_ctx.cardinalityType().getText()
+            self.operations.append(Operation(OpType.TRANSFORM, params, original_keyword="TRANSFORM"))
         else:
             self.operations.append(Operation(OpType.TRANSFORM, {
                 "name": name,
                 "target_type": "ENTITY"
-            }, original_keyword="TRANSFORM_PS"))
+            }, original_keyword="TRANSFORM"))
 
-    # RELTYPE operations (Graph database - DB.Rty management)
-    def enterReltypeAdd(self, ctx):
-        identifiers = ctx.identifier()
-        self.operations.append(Operation(OpType.ADD_RELTYPE, {
-            "name": identifiers[0].getText(),
-            "source_entity": identifiers[1].getText(),
-            "target_entity": identifiers[2].getText()
-        }, original_keyword="ADD_PS RELTYPE"))
 
-    def enterReltypeDelete(self, ctx):
-        self.operations.append(Operation(OpType.DELETE_RELTYPE, {
-            "name": ctx.identifier().getText()
-        }, original_keyword="DELETE_PS RELTYPE"))
-
-    def enterReltypeRename(self, ctx):
-        identifiers = ctx.identifier()
-        self.operations.append(Operation(OpType.RENAME_RELTYPE, {
-            "old_name": identifiers[0].getText(),
-            "new_name": identifiers[1].getText()
-        }, original_keyword="RENAME_PS RELTYPE"))

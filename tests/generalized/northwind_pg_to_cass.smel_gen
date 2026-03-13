@@ -1,0 +1,140 @@
+-- SMEL Northwind: PostgreSQL -> Cassandra (Cross-model Migration)
+-- Relational (3NF with FKs) -> Columnar (query-driven partition/clustering keys)
+-- Direction: northwind_postgresql.sql -> northwind_cassandra.cql
+--
+-- Pipeline: Source PG -> Reverse Engineering -> Meta V1 (Relational)
+--           -> SMEL Operations (this script) -> Meta V2 (Columnar)
+--           -> Forward Engineering -> Target Cassandra
+--
+-- Operation Semantics:
+--   DELETE_CONSTRAINT:    Remove FK references (Cassandra has no FKs)
+--   DELETE_PRIMARY_KEY:   Remove relational PK before adding partition/clustering keys
+--   ADD_PARTITION_KEY:    Define partition key for query-driven data distribution
+--   ADD_CLUSTERING_KEY:   Define clustering key for sort order within partition
+
+MIGRATION northwind_pg_to_cass:1.0
+FROM RELATIONAL TO COLUMNAR
+USING northwind_schema:1
+
+-- ============================================
+-- Source: PostgreSQL 3NF Tables (8 tables)
+-- ============================================
+-- categories     (category_id [PK], category_name, description)
+-- suppliers      (supplier_id [PK], company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country)
+-- shippers       (shipper_id [PK], company_name, phone)
+-- employees      (employee_id [PK], last_name, first_name, title, birth_date, hire_date, phone, notes, street, city, region, postal_code, country, reports_to [FK->employees])
+-- customers      (customer_id [PK], company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country)
+-- products       (product_id [PK], product_name, unit_price, units_in_stock, discontinued, quantity_per_unit, supplier_id [FK->suppliers], category_id [FK->categories])
+-- orders         (order_id [PK], order_date, required_date, shipped_date, freight, ship_name, ship_address, ship_city, ship_region, ship_postal_code, ship_country, customer_id [FK->customers], employee_id [FK->employees], shipper_id [FK->shippers])
+-- order_details  (order_id [PK, FK->orders], product_id [PK, FK->products], unit_price, quantity, discount)
+
+-- ============================================
+-- Target: Cassandra Wide-column Tables (8 tables)
+-- ============================================
+-- categories     (category_id [PARTITION])
+-- suppliers      (supplier_id [PARTITION])
+-- shippers       (shipper_id [PARTITION])
+-- employees      (employee_id [PARTITION], reports_to as plain column)
+-- customers      (customer_id [PARTITION])
+-- products       (category_id [PARTITION], supplier_id [PARTITION], product_id [CLUSTERING], ...)
+-- orders         (customer_id [PARTITION], order_date [CLUSTERING], order_id [CLUSTERING], ...)
+-- order_details  (order_id [PARTITION], product_id [PARTITION], ...)
+
+-- ============================================
+-- Step 1: Remove self-reference FK from employees
+-- ============================================
+-- employees.reports_to references employees(employee_id)
+-- Cassandra has no FK constraints; reports_to becomes a plain column
+DELETE CONSTRAINT employees.reports_to
+-- Result:
+-- employees (employee_id [PK], ..., reports_to) -- FK removed, field retained
+
+-- ============================================
+-- Step 2: Remove FK constraints from products
+-- ============================================
+-- products has 2 FKs: supplier_id -> suppliers, category_id -> categories
+DELETE CONSTRAINT products.supplier_id
+DELETE CONSTRAINT products.category_id
+-- Result:
+-- products (product_id [PK], ..., supplier_id, category_id) -- FKs removed, fields retained
+
+-- ============================================
+-- Step 3: Restructure products keys (PK -> partition + clustering)
+-- ============================================
+-- Relational: product_id is PK
+-- Cassandra: partition by category_id (query products by category), cluster by product_id
+DELETE PRIMARY KEY product_id FROM products
+ADD PARTITION KEY (category_id, supplier_id) TO products
+ADD CLUSTERING KEY product_id TO products
+-- Result:
+-- products (category_id [PARTITION], supplier_id [PARTITION], product_id [CLUSTERING], product_name, unit_price, units_in_stock, discontinued, quantity_per_unit, supplier_id)
+
+-- ============================================
+-- Step 4: Remove FK constraints from orders
+-- ============================================
+-- orders has 3 FKs: customer_id -> customers, employee_id -> employees, shipper_id -> shippers
+DELETE CONSTRAINT orders.customer_id
+DELETE CONSTRAINT orders.employee_id
+DELETE CONSTRAINT orders.shipper_id
+-- Result:
+-- orders (order_id [PK], ..., customer_id, employee_id, shipper_id) -- FKs removed
+
+-- ============================================
+-- Step 5: Restructure orders keys (PK -> partition + clustering)
+-- ============================================
+-- Relational: order_id is PK
+-- Cassandra: partition by customer_id (query orders by customer), cluster by order_date, order_id
+DELETE PRIMARY KEY order_id FROM orders
+ADD PARTITION KEY customer_id TO orders
+ADD CLUSTERING KEY order_date TO orders
+ADD CLUSTERING KEY order_id TO orders
+-- Result:
+-- orders (customer_id [PARTITION], order_date [CLUSTERING], order_id [CLUSTERING], required_date, shipped_date, freight, ship_name, ship_address, ship_city, ship_region, ship_postal_code, ship_country, employee_id, shipper_id)
+
+-- ============================================
+-- Step 6: Remove FK constraints from order_details
+-- ============================================
+-- order_details has 2 FKs: order_id -> orders, product_id -> products
+DELETE CONSTRAINT order_details.order_id
+DELETE CONSTRAINT order_details.product_id
+-- Result:
+-- order_details (order_id [PK], product_id [PK], ...) -- FKs removed, composite PK remains
+
+-- ============================================
+-- Step 7: Restructure order_details keys (composite PK -> partition + clustering)
+-- ============================================
+-- Relational: composite PK (order_id, product_id)
+-- Cassandra: partition by order_id (query details by order), cluster by product_id
+DELETE PRIMARY KEY (order_id, product_id) FROM order_details
+ADD PARTITION KEY (order_id, product_id) TO order_details
+-- Result:
+-- order_details (order_id [PARTITION], product_id [PARTITION], unit_price, quantity, discount)
+
+-- ============================================
+-- Step 8: CAST primary keys to Cassandra Partition Keys
+-- ============================================
+-- Simple tables: PRIMARY KEY -> PARTITION KEY (explicit CAST)
+CAST CONSTRAINT categories.category_id TO PARTITION KEY
+CAST CONSTRAINT suppliers.supplier_id TO PARTITION KEY
+CAST CONSTRAINT shippers.shipper_id TO PARTITION KEY
+CAST CONSTRAINT employees.employee_id TO PARTITION KEY
+CAST CONSTRAINT customers.customer_id TO PARTITION KEY
+
+-- ============================================
+-- Final Target (8 wide-column tables):
+-- categories:     { category_id [PARTITION], category_name, description }
+-- suppliers:      { supplier_id [PARTITION], company_name, contact_name, contact_title, phone, fax, street, city, postal_code, country }
+-- shippers:       { shipper_id [PARTITION], company_name, phone }
+-- employees:      { employee_id [PARTITION], last_name, first_name, title, birth_date, hire_date, phone, notes, street, city, region, postal_code, country, reports_to }
+-- customers:      { customer_id [PARTITION], company_name, contact_name, contact_title, phone, fax, street, city, postal_code, country }
+-- products:       { category_id [PARTITION], supplier_id [PARTITION], product_id [CLUSTERING], product_name, unit_price, units_in_stock, discontinued, quantity_per_unit, supplier_id }
+-- orders:         { customer_id [PARTITION], order_date [CLUSTERING], order_id [CLUSTERING], required_date, shipped_date, freight, ship_name, ship_address, ship_city, ship_region, ship_postal_code, ship_country, employee_id, shipper_id }
+-- order_details:  { order_id [PARTITION], product_id [PARTITION], unit_price, quantity, discount }
+-- ============================================
+
+-- ============================================
+-- Operation Summary (22 steps, 5 operation types):
+--   DELETE_CONSTRAINT:    8    DELETE_PRIMARY_KEY: 3
+--   ADD_PARTITION_KEY:    3    ADD_CLUSTERING_KEY: 3
+--   CAST_CONSTRAINT:      5
+-- ============================================

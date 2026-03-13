@@ -39,8 +39,8 @@ CREATE TABLE employees (
     last_name VARCHAR(255),
     first_name VARCHAR(255),
     title VARCHAR(255),
-    birth_date VARCHAR(255),
-    hire_date VARCHAR(255),
+    birth_date DATE,
+    hire_date DATE,
     phone VARCHAR(255),
     notes VARCHAR(255),
     street VARCHAR(255),
@@ -83,9 +83,9 @@ CREATE TABLE products (
 -- SMEL tests: NEST order+customer, NEST order+employee, NEST order+shipper
 CREATE TABLE orders (
     order_id VARCHAR(255) PRIMARY KEY,
-    order_date VARCHAR(255),
-    required_date VARCHAR(255),
-    shipped_date VARCHAR(255),
+    order_date DATE,
+    required_date DATE,
+    shipped_date DATE,
     freight DOUBLE PRECISION,
     ship_name VARCHAR(255),
     ship_address VARCHAR(255),

@@ -151,6 +151,6 @@ CAST_ATTRIBUTE person.age TO String
 -- Operation Mapping (Forward <-> Reverse)
 -- ============================================
 -- UNNEST  <-> NEST
--- FLATTEN <-> UNFLATTEN  [Symmetric naming]
--- UNWIND  <-> WIND       [Symmetric naming]
--- SPLIT   <-> MERGE      [Andre Conrad]
+-- FLATTEN <-> UNFLATTEN
+-- UNWIND  <-> WIND
+-- SPLIT   <-> MERGE

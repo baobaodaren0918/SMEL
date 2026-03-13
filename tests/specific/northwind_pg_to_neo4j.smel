@@ -9,9 +9,10 @@
 -- Operation Semantics:
 --   DELETE_CONSTRAINT: Remove FK constraint (prepare FK for graph edge conversion)
 --   DELETE_ATTRIBUTE:  Remove FK attribute (no longer needed as graph edge replaces it)
---   ADD_RELTYPE:       Add relationship type between nodes (graph edge)
+--   ADD_ENTITY:        Add relationship type from source to target node (graph edge)
+--   CAST_CONSTRAINT:   Convert PK type (PRIMARY KEY -> NODE KEY for Neo4j)
 --   DELETE_PRIMARY_KEY: Remove composite PK before structural TRANSFORM
---   TRANSFORM:         Convert entity (table) to relationship (graph edge)
+--   TRANSFORM:         Convert entity (table) into relationship (graph edge)
 
 MIGRATION northwind_pg_to_neo4j:1.0
 FROM RELATIONAL TO GRAPH
@@ -49,9 +50,9 @@ USING northwind_schema:1
 -- hierarchical self-reference. In graph model, this becomes an edge.
 DELETE_CONSTRAINT employees.reports_to
 DELETE_ATTRIBUTE employees.reports_to
-ADD_RELTYPE REPORTS_TO BETWEEN employees AND employees
+ADD_ENTITY REPORTS_TO FROM employees TO employees
 -- Result:
--- employees: { employee_id [PK], last_name, first_name, title, birth_date, hire_date, phone, notes, street, city, postal_code, country }
+-- employees: { employee_id [PK], last_name, first_name, title, birth_date, hire_date, phone, notes, street, city, region, postal_code, country }
 -- + REPORTS_TO relationship (employees -> employees)
 
 -- ============================================
@@ -60,7 +61,7 @@ ADD_RELTYPE REPORTS_TO BETWEEN employees AND employees
 -- supplier_id FK becomes a SUPPLIES edge from suppliers to products.
 DELETE_CONSTRAINT products.supplier_id
 DELETE_ATTRIBUTE products.supplier_id
-ADD_RELTYPE SUPPLIES BETWEEN suppliers AND products
+ADD_ENTITY SUPPLIES FROM suppliers TO products
 -- Result:
 -- products: { product_id [PK], product_name, unit_price, units_in_stock, discontinued, quantity_per_unit, category_id }
 -- + SUPPLIES relationship (suppliers -> products)
@@ -71,9 +72,10 @@ ADD_RELTYPE SUPPLIES BETWEEN suppliers AND products
 -- category_id FK becomes a PART_OF edge from products to categories.
 DELETE_CONSTRAINT products.category_id
 DELETE_ATTRIBUTE products.category_id
-ADD_RELTYPE PART_OF BETWEEN products AND categories
+ADD_ENTITY PART_OF FROM products TO categories
 -- Result:
 -- products: { product_id [PK], product_name, unit_price, units_in_stock, discontinued, quantity_per_unit }
+-- + PART_OF relationship (products -> categories)
 
 -- ============================================
 -- Step 4: orders -- customer FK -> PURCHASED relationship
@@ -81,7 +83,7 @@ ADD_RELTYPE PART_OF BETWEEN products AND categories
 -- customer_id FK becomes a PURCHASED edge from customers to orders.
 DELETE_CONSTRAINT orders.customer_id
 DELETE_ATTRIBUTE orders.customer_id
-ADD_RELTYPE PURCHASED BETWEEN customers AND orders
+ADD_ENTITY PURCHASED FROM customers TO orders
 -- Result:
 -- orders: { order_id [PK], order_date, required_date, shipped_date, freight, ship_name, ship_address, ship_city, ship_region, ship_postal_code, ship_country, employee_id, shipper_id }
 -- + PURCHASED relationship (customers -> orders)
@@ -92,7 +94,7 @@ ADD_RELTYPE PURCHASED BETWEEN customers AND orders
 -- employee_id FK becomes a SOLD edge from employees to orders.
 DELETE_CONSTRAINT orders.employee_id
 DELETE_ATTRIBUTE orders.employee_id
-ADD_RELTYPE SOLD BETWEEN employees AND orders
+ADD_ENTITY SOLD FROM employees TO orders
 -- Result:
 -- orders: { order_id [PK], order_date, required_date, shipped_date, freight, ship_name, ship_address, ship_city, ship_region, ship_postal_code, ship_country, shipper_id }
 -- + SOLD relationship (employees -> orders)
@@ -103,9 +105,10 @@ ADD_RELTYPE SOLD BETWEEN employees AND orders
 -- shipper_id FK becomes a SHIPPED_VIA edge from orders to shippers.
 DELETE_CONSTRAINT orders.shipper_id
 DELETE_ATTRIBUTE orders.shipper_id
-ADD_RELTYPE SHIPPED_VIA BETWEEN orders AND shippers
+ADD_ENTITY SHIPPED_VIA FROM orders TO shippers
 -- Result:
--- orders: { order_id [PK], order_date, required_date, shipped_date, freight, ship_name, ship_city }
+-- orders: { order_id [PK], order_date, required_date, shipped_date, freight, ship_name, ship_address, ship_city, ship_region, ship_postal_code, ship_country }
+-- + SHIPPED_VIA relationship (orders -> shippers)
 
 -- ============================================
 -- Step 7: order_details -- junction table -> CONTAINS relationship with properties
@@ -119,24 +122,37 @@ DELETE_CONSTRAINT order_details.product_id
 DELETE_PRIMARY_KEY (order_id, product_id) FROM order_details
 DELETE_ATTRIBUTE order_details.order_id
 DELETE_ATTRIBUTE order_details.product_id
-TRANSFORM order_details TO RELATIONSHIP BETWEEN orders AND products
-RENAME_RELTYPE order_details TO CONTAINS
+TRANSFORM order_details INTO RELATIONSHIP FROM orders TO products
+RENAME_ENTITY order_details TO CONTAINS
 -- Result:
 -- order_details table removed; CONTAINS relationship created:
 -- CONTAINS (orders -> products) with properties: { unit_price, quantity, discount }
 -- Note: TRANSFORM creates relationship with entity name "order_details",
---       then RENAME_RELTYPE renames it to match Neo4j convention "CONTAINS".
+--       then RENAME_ENTITY renames it to match Neo4j convention "CONTAINS".
+
+-- ============================================
+-- Step 8: CAST primary keys to Neo4j Node Keys
+-- ============================================
+-- Neo4j uses NODE KEY constraints instead of PRIMARY KEY.
+-- This step explicitly converts all 7 node PKs to graph-native key type.
+CAST_CONSTRAINT categories.category_id TO NODE KEY
+CAST_CONSTRAINT suppliers.supplier_id TO NODE KEY
+CAST_CONSTRAINT shippers.shipper_id TO NODE KEY
+CAST_CONSTRAINT employees.employee_id TO NODE KEY
+CAST_CONSTRAINT customers.customer_id TO NODE KEY
+CAST_CONSTRAINT products.product_id TO NODE KEY
+CAST_CONSTRAINT orders.order_id TO NODE KEY
 
 -- ============================================
 -- Final Meta V2 (7 nodes, 7 relationship types):
 -- ============================================
--- categories:  { category_id [PK], category_name, description }
--- suppliers:   { supplier_id [PK], company_name, contact_name, contact_title, phone, fax, street, city, postal_code, country }
--- shippers:    { shipper_id [PK], company_name, phone }
--- employees:   { employee_id [PK], last_name, first_name, title, birth_date, hire_date, phone, notes, street, city, postal_code, country }
--- customers:   { customer_id [PK], company_name, contact_name, contact_title, phone, fax, street, city, postal_code, country }
--- products:    { product_id [PK], product_name, unit_price, units_in_stock, discontinued, quantity_per_unit }
--- orders:      { order_id [PK], order_date, required_date, shipped_date, freight, ship_name, ship_city }
+-- categories:  { category_id [NK], category_name, description }
+-- suppliers:   { supplier_id [NK], company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country }
+-- shippers:    { shipper_id [NK], company_name, phone }
+-- employees:   { employee_id [NK], last_name, first_name, title, birth_date, hire_date, phone, notes, street, city, region, postal_code, country }
+-- customers:   { customer_id [NK], company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country }
+-- products:    { product_id [NK], product_name, unit_price, units_in_stock, discontinued, quantity_per_unit }
+-- orders:      { order_id [NK], order_date, required_date, shipped_date, freight, ship_name, ship_address, ship_city, ship_region, ship_postal_code, ship_country }
 -- REPORTS_TO  (employees -> employees)
 -- SUPPLIES    (suppliers -> products)
 -- PART_OF     (products -> categories)
@@ -148,8 +164,9 @@ RENAME_RELTYPE order_details TO CONTAINS
 -- ============================================
 
 -- ============================================
--- Operation Summary (25 steps, 6 operation types):
+-- Operation Summary (32 steps, 8 operation types):
 --   DELETE_CONSTRAINT:  8    DELETE_ATTRIBUTE:  8
---   ADD_RELTYPE:        6    DELETE_PRIMARY_KEY: 1
---   TRANSFORM:          1    RENAME_RELTYPE:    1
+--   ADD_ENTITY(edge):   6    DELETE_PRIMARY_KEY: 1
+--   TRANSFORM:          1    RENAME_ENTITY:     1
+--   CAST_CONSTRAINT:    7
 -- ============================================

@@ -12,8 +12,8 @@
 --   RENAME_ATTRIBUTE: Rename a field within an entity
 --   ADD_PRIMARY_KEY:  Add primary key to entity
 --   DELETE_ATTRIBUTE: Remove attribute from entity
---   ADD_RELTYPE:      Add relationship type between nodes
---   TRANSFORM:        Convert entity to relationship (or vice versa)
+--   ADD_ENTITY:       Add relationship type from source to target node
+--   TRANSFORM:        Convert entity into relationship (or vice versa)
 
 MIGRATION northwind_mongo_to_neo4j:1.0
 FROM DOCUMENT TO GRAPH
@@ -191,8 +191,8 @@ ADD_PRIMARY_KEY orders.order_id AS String
 -- ============================================
 DELETE_ATTRIBUTE products.supplier_id
 DELETE_ATTRIBUTE products.category_id
-ADD_RELTYPE SUPPLIES BETWEEN suppliers AND products
-ADD_RELTYPE PART_OF BETWEEN products AND categories
+ADD_ENTITY SUPPLIES FROM suppliers TO products
+ADD_ENTITY PART_OF FROM products TO categories
 -- Result:
 -- products node: { product_id, product_name, unit_price, units_in_stock, discontinued, quantity_per_unit }
 -- Relationships: SUPPLIES (suppliers -> products), PART_OF (products -> categories)
@@ -203,9 +203,9 @@ ADD_RELTYPE PART_OF BETWEEN products AND categories
 DELETE_ATTRIBUTE orders.customer_id
 DELETE_ATTRIBUTE orders.employee_id
 DELETE_ATTRIBUTE orders.shipper_id
-ADD_RELTYPE PURCHASED BETWEEN customers AND orders
-ADD_RELTYPE SOLD BETWEEN employees AND orders
-ADD_RELTYPE SHIPPED_VIA BETWEEN orders AND shippers
+ADD_ENTITY PURCHASED FROM customers TO orders
+ADD_ENTITY SOLD FROM employees TO orders
+ADD_ENTITY SHIPPED_VIA FROM orders TO shippers
 -- Result:
 -- orders node: { order_id, order_date, required_date, shipped_date, freight, ship_name, ship_city }
 -- Relationships: PURCHASED, SOLD, SHIPPED_VIA
@@ -214,7 +214,7 @@ ADD_RELTYPE SHIPPED_VIA BETWEEN orders AND shippers
 -- Step 13: Convert reports_to field to self-relationship (employees)
 -- ============================================
 DELETE_ATTRIBUTE employees.reports_to
-ADD_RELTYPE REPORTS_TO BETWEEN employees AND employees
+ADD_ENTITY REPORTS_TO FROM employees TO employees
 -- Result:
 -- employees node: { employee_id, last_name, first_name, title, birth_date, hire_date, phone, notes, street, city, postal_code, country }
 -- Relationship: REPORTS_TO (employees -> employees)
@@ -226,29 +226,41 @@ ADD_RELTYPE REPORTS_TO BETWEEN employees AND employees
 -- Remove FK fields, then transform to relationship with remaining properties
 DELETE_ATTRIBUTE order_details.order_id
 DELETE_ATTRIBUTE order_details.product_id
-TRANSFORM order_details TO RELATIONSHIP BETWEEN orders AND products
-RENAME_RELTYPE order_details TO CONTAINS
+TRANSFORM order_details INTO RELATIONSHIP FROM orders TO products
+RENAME_ENTITY order_details TO CONTAINS
 -- Result:
 -- CONTAINS relationship (orders -> products) with properties: unit_price, quantity, discount
 
+-- ============================================
+-- Step 15: CAST primary keys to Neo4j Node Keys
+-- ============================================
+-- Neo4j uses NODE KEY constraints instead of PRIMARY KEY.
+CAST_CONSTRAINT categories.category_id TO NODE KEY
+CAST_CONSTRAINT suppliers.supplier_id TO NODE KEY
+CAST_CONSTRAINT shippers.shipper_id TO NODE KEY
+CAST_CONSTRAINT employees.employee_id TO NODE KEY
+CAST_CONSTRAINT customers.customer_id TO NODE KEY
+CAST_CONSTRAINT products.product_id TO NODE KEY
+CAST_CONSTRAINT orders.order_id TO NODE KEY
+
 -- Final Result (7 nodes, 7 relationships):
--- categories:  { category_id [PK], category_name, description }
--- suppliers:   { supplier_id [PK], company_name, contact_name, contact_title, phone, fax, street, city, postal_code, country }
--- shippers:    { shipper_id [PK], company_name, phone }
--- employees:   { employee_id [PK], last_name, first_name, title, birth_date, hire_date, phone, notes, street, city, postal_code, country }
--- customers:   { customer_id [PK], company_name, contact_name, contact_title, phone, fax, street, city, postal_code, country }
--- products:    { product_id [PK], product_name, unit_price, units_in_stock, discontinued, quantity_per_unit }
--- orders:      { order_id [PK], order_date, required_date, shipped_date, freight, ship_name, ship_city }
+-- categories:  { category_id [NK], category_name, description }
+-- suppliers:   { supplier_id [NK], company_name, contact_name, contact_title, phone, fax, street, city, postal_code, country }
+-- shippers:    { shipper_id [NK], company_name, phone }
+-- employees:   { employee_id [NK], last_name, first_name, title, birth_date, hire_date, phone, notes, street, city, postal_code, country }
+-- customers:   { customer_id [NK], company_name, contact_name, contact_title, phone, fax, street, city, postal_code, country }
+-- products:    { product_id [NK], product_name, unit_price, units_in_stock, discontinued, quantity_per_unit }
+-- orders:      { order_id [NK], order_date, required_date, shipped_date, freight, ship_name, ship_city }
 -- SUPPLIES (suppliers -> products), PART_OF (products -> categories)
 -- PURCHASED (customers -> orders), SOLD (employees -> orders), SHIPPED_VIA (orders -> shippers)
 -- REPORTS_TO (employees -> employees)
 -- CONTAINS (orders -> products) with { unit_price, quantity, discount }
 
 -- ============================================
--- Operation Summary (50 steps, 9 operation types):
+-- Operation Summary (57 steps, 10 operation types):
 --   UNNEST:            7    FLATTEN:           3
 --   RENAME_ATTRIBUTE: 13    ADD_PRIMARY_KEY:   7
 --   ADD_ATTRIBUTE:     7    DELETE_ATTRIBUTE: 11
---   ADD_RELTYPE:       7    TRANSFORM:         1
---   RENAME_RELTYPE:    1
+--   ADD_ENTITY(edge):  7    TRANSFORM:         1
+--   RENAME_ENTITY:     1    CAST_CONSTRAINT:   7
 -- ============================================

@@ -30,25 +30,17 @@ def validate_export(result_dict: Dict[str, Any], target_type: str,
     Returns:
         Validation result dict with passed/summary/details
     """
-    from config import TARGET_SCHEMA_FILES
     from Schema.adapters import ADAPTER_REGISTRY
     from core import db_to_dict
-
-    # Only validate cross-model Northwind migrations
-    source_type = result_dict.get("source_type", "")
-    if source_type == target_type:
-        return {"passed": None, "summary": "N/A (same-model)", "details": {}}
-
-    if not config_key.startswith("northwind_"):
-        return {"passed": None, "summary": "N/A (not Northwind)", "details": {}}
+    from validate_meta import _resolve_target_file
 
     exported_target = result_dict.get("exported_target", "")
     if not exported_target:
         return {"passed": False, "summary": "FAIL (no exported target)", "details": {}}
 
-    target_file = TARGET_SCHEMA_FILES.get(target_type)
-    if not target_file or not target_file.exists():
-        return {"passed": None, "summary": f"N/A (no target file for {target_type})", "details": {}}
+    target_file = _resolve_target_file(config_key, target_type)
+    if not target_file:
+        return {"passed": None, "summary": f"N/A (no target file for {config_key})", "details": {}}
 
     adapter_class = ADAPTER_REGISTRY.get(target_type)
     if not adapter_class:

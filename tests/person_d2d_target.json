@@ -1,0 +1,83 @@
+{
+  "bsonType": "object",
+  "required": [
+    "_id",
+    "name"
+  ],
+  "properties": {
+    "_id": {
+      "bsonType": "string"
+    },
+    "age": {
+      "bsonType": "int"
+    },
+    "tags": {
+      "bsonType": "array",
+      "items": {
+        "bsonType": "string"
+      }
+    },
+    "knows": {
+      "bsonType": "array",
+      "items": {
+        "bsonType": "string"
+      }
+    },
+    "email": {
+      "bsonType": "string"
+    },
+    "name": {
+      "bsonType": "object",
+      "properties": {
+        "first_name": {
+          "bsonType": "string"
+        },
+        "last_name": {
+          "bsonType": "string"
+        }
+      }
+    },
+    "address": {
+      "bsonType": "object",
+      "properties": {
+        "street": {
+          "bsonType": "string"
+        },
+        "city": {
+          "bsonType": "string"
+        },
+        "country": {
+          "bsonType": "string"
+        }
+      }
+    },
+    "employment": {
+      "bsonType": "object",
+      "properties": {
+        "role": {
+          "bsonType": "string"
+        },
+        "start_date": {
+          "bsonType": "string"
+        },
+        "company": {
+          "bsonType": "object",
+          "properties": {
+            "company_name": {
+              "bsonType": "string"
+            },
+            "street": {
+              "bsonType": "string"
+            },
+            "city": {
+              "bsonType": "string"
+            }
+          }
+        }
+      }
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "person",
+  "description": "MongoDB document schema for person"
+}
