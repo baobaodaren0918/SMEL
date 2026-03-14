@@ -168,6 +168,36 @@ class SchemaTransformer:
                         "generated": False
                     }
 
+    # ── Helper utilities (shared by multiple handlers) ──────────────────
+
+    def _get_entity(self, name: str, op_name: str = "") -> Optional[EntityType]:
+        """Look up an entity by name; print [NOTICE] and return None if missing."""
+        entity = self.database.get_entity_type(name)
+        if not entity and op_name:
+            print(f"[NOTICE] {op_name} skipped: entity '{name}' not found")
+        return entity
+
+    def _split_path(self, path: str) -> tuple:
+        """Split 'entity.attr' path into (entity_name, attr_or_field_name).
+
+        Returns ("", "") if path has fewer than 2 parts.
+        """
+        parts = path.split(".")
+        if len(parts) < 2:
+            return ("", "")
+        return ".".join(parts[:-1]), parts[-1]
+
+    def _resolve_entity_attr(self, path: str, op_name: str = "") -> tuple:
+        """Parse 'entity.attr' path, look up the entity, and return (entity, attr_name).
+
+        Returns (None, "") on failure (with optional [NOTICE] print).
+        """
+        entity_name, attr_name = self._split_path(path)
+        if not entity_name:
+            return (None, "")
+        entity = self._get_entity(entity_name, op_name)
+        return (entity, attr_name)
+
     def _handle_nest(self, params: Dict) -> bool:
         """
         NEST: Embed separate table into parent as nested object (denormalization).
@@ -194,11 +224,9 @@ class SchemaTransformer:
         attributes = params.get("attributes", [])
         with_deletion = params.get("with_deletion", False)
 
-        source_entity = self.database.get_entity_type(source_name)
-        target_entity = self.database.get_entity_type(target_name)
+        source_entity = self._get_entity(source_name, "NEST")
+        target_entity = self._get_entity(target_name, "NEST")
         if not source_entity or not target_entity:
-            missing = source_name if not source_entity else target_name
-            print(f"[NOTICE] NEST skipped: entity '{missing}' not found")
             return False
 
         # Determine embedding cardinality based on FK direction:
@@ -312,16 +340,12 @@ class SchemaTransformer:
         source_path = params["source"]
 
         # Parse path: person.name -> parent=person, nested=name
-        parts = source_path.split(".")
-        if len(parts) < 2:
+        parent_path, nested_name = self._split_path(source_path)
+        if not parent_path:
             return False
 
-        nested_name = parts[-1]
-        parent_path = ".".join(parts[:-1])
-
-        parent_entity = self.database.get_entity_type(parent_path)
+        parent_entity = self._get_entity(parent_path, "FLATTEN")
         if not parent_entity:
-            print(f"[NOTICE] FLATTEN skipped: entity '{parent_path}' not found")
             return False
 
         # Try to find the embedded entity
@@ -379,9 +403,8 @@ class SchemaTransformer:
         fields = params["fields"]
         nested_name = params["nested_name"]
 
-        entity = self.database.get_entity_type(entity_name)
+        entity = self._get_entity(entity_name, "UNFLATTEN")
         if not entity:
-            print(f"[NOTICE] UNFLATTEN skipped: entity '{entity_name}' not found")
             return False
 
         # Create new embedded entity for the nested object
@@ -452,17 +475,13 @@ class SchemaTransformer:
             return False
 
         # Parse source path: person.address -> parent=person, nested=address
-        path_parts = source_path.split(".")
-        if len(path_parts) < 2:
+        parent_path, nested_name = self._split_path(source_path)
+        if not parent_path:
             return False
 
-        nested_name = path_parts[-1]
-        parent_path = ".".join(path_parts[:-1])
-
         # Get parent entity
-        parent_entity = self.database.get_entity_type(parent_path)
+        parent_entity = self._get_entity(parent_path, "UNNEST")
         if not parent_entity:
-            print(f"[NOTICE] UNNEST skipped: entity '{parent_path}' not found")
             return False
 
         # Try to find the embedded entity
@@ -617,18 +636,15 @@ class SchemaTransformer:
             # Mode 2: Expand in place - UNWIND person_tag.tags
             # Transform array attribute to its element type (for schema transformation)
             # e.g., tags: ListDataType(STRING) -> tags: STRING
-            parts = source_path.split(".")
-            if len(parts) >= 2:
-                entity_name = ".".join(parts[:-1])
-                attr_name = parts[-1]
-                entity = self.database.get_entity_type(entity_name)
-                if entity:
-                    attr = entity.get_attribute(attr_name)
-                    if attr and hasattr(attr.data_type, 'element_type'):
-                        # Convert ListDataType to its element type
-                        attr.data_type = attr.data_type.element_type
-                        self.changes.append(f"UNWIND_INPLACE:{entity_name}.{attr_name}")
-                        return True
+            entity, attr_name = self._resolve_entity_attr(source_path)
+            if entity:
+                attr = entity.get_attribute(attr_name)
+                if attr and hasattr(attr.data_type, 'element_type'):
+                    # Convert ListDataType to its element type
+                    attr.data_type = attr.data_type.element_type
+                    entity_name = self._split_path(source_path)[0]
+                    self.changes.append(f"UNWIND_INPLACE:{entity_name}.{attr_name}")
+                    return True
             return False
 
         # Mode 1: Create new table
@@ -637,16 +653,12 @@ class SchemaTransformer:
             return False
 
         # Parse source path: person.tags[] -> parent=person, array_name=tags
-        parts = source_path.replace("[]", "").split(".")
-        if len(parts) < 2:
+        parent_path, array_name = self._split_path(source_path.replace("[]", ""))
+        if not parent_path:
             return False
 
-        array_name = parts[-1]
-        parent_path = ".".join(parts[:-1])
-
-        parent_entity = self.database.get_entity_type(parent_path)
+        parent_entity = self._get_entity(parent_path, "UNWIND")
         if not parent_entity:
-            print(f"[NOTICE] UNWIND skipped: entity '{parent_path}' not found")
             return False
 
         # Check if source is an array attribute
@@ -684,29 +696,22 @@ class SchemaTransformer:
         Note: Cross-entity movement is handled by MERGE, not WIND.
         """
         source_path = params.get("source", "")
-        parts = source_path.split(".")
-        if len(parts) >= 2:
-            entity_name = ".".join(parts[:-1])
-            attr_name = parts[-1]
-            entity = self.database.get_entity_type(entity_name)
-            if entity:
-                attr = entity.get_attribute(attr_name)
-                if attr:
-                    # Convert scalar type to ListDataType (reverse of UNWIND which does List -> scalar)
-                    # Skip if already a ListDataType to avoid double-wrapping
-                    if not isinstance(attr.data_type, ListDataType):
-                        attr.data_type = ListDataType(element_type=attr.data_type)
-                    self.changes.append(f"WIND:{entity_name}.{attr_name}")
-                    return True
+        entity, attr_name = self._resolve_entity_attr(source_path)
+        if entity:
+            attr = entity.get_attribute(attr_name)
+            if attr:
+                # Convert scalar type to ListDataType (reverse of UNWIND which does List -> scalar)
+                # Skip if already a ListDataType to avoid double-wrapping
+                if not isinstance(attr.data_type, ListDataType):
+                    attr.data_type = ListDataType(element_type=attr.data_type)
+                entity_name = self._split_path(source_path)[0]
+                self.changes.append(f"WIND:{entity_name}.{attr_name}")
+                return True
         return False
 
     def _handle_delete_constraint(self, params: Dict) -> bool:
-        parts = params["reference"].split(".")
-        if len(parts) < 2:
-            return False
-        entity_name = ".".join(parts[:-1])
-        ref_name = parts[-1]
-        entity = self.database.get_entity_type(entity_name)
+        entity_name, ref_name = self._split_path(params["reference"])
+        entity = self._get_entity(entity_name) if entity_name else None
         if entity:
             # Remove the Reference relationship
             entity.remove_relationship(ref_name)
@@ -724,14 +729,10 @@ class SchemaTransformer:
         return False
 
     def _handle_delete_embedded(self, params: Dict) -> bool:
-        parts = params["embedded"].split(".")
-        if len(parts) < 2:
-            return False
-        parent_name = ".".join(parts[:-1])
-        embedded_name = parts[-1].replace("[]", "")
-        parent_entity = self.database.get_entity_type(parent_name)
+        parent_name, embedded_name = self._split_path(params["embedded"])
+        embedded_name = embedded_name.replace("[]", "")
+        parent_entity = self._get_entity(parent_name, "DELETE_EMBEDDED") if parent_name else None
         if not parent_entity:
-            print(f"[NOTICE] DELETE_EMBEDDED skipped: entity '{parent_name}' not found")
             return False
         # Find the full entity path from the Embedded relationship
         full_path = f"{parent_name}.{embedded_name}"
@@ -758,12 +759,12 @@ class SchemaTransformer:
         if not entity_name or not field_name or not target_table:
             return False
 
-        entity = self.database.get_entity_type(entity_name)
+        entity = self._get_entity(entity_name, "ADD_CONSTRAINT")
         if not entity:
             return False
 
         # Get target entity's primary key type for FK attribute
-        target_entity = self.database.get_entity_type(target_table)
+        target_entity = self._get_entity(target_table)
         fk_type = PrimitiveDataType(PrimitiveType.INTEGER)
         if target_entity:
             target_pk = target_entity.get_primary_key()
@@ -831,9 +832,8 @@ class SchemaTransformer:
             elif c["type"] == "NOT_NULL":
                 is_optional = False
 
-        entity = self.database.get_entity_type(entity_name) if entity_name else None
+        entity = self._get_entity(entity_name, "ADD_ATTRIBUTE") if entity_name else None
         if not entity:
-            print(f"[NOTICE] ADD_ATTRIBUTE skipped: entity '{entity_name}' not found")
             return False
         entity.add_attribute(Attribute(name, data_type, False, is_optional))
         self.changes.append(f"ADD_ATTR:{entity_name}.{name}")
@@ -939,43 +939,39 @@ class SchemaTransformer:
     def _handle_delete_attribute(self, params: Dict) -> bool:
         """DELETE ATTRIBUTE Customer.email"""
         target = params["target"]
-        parts = target.split(".")
-        if len(parts) >= 2:
-            entity_name = ".".join(parts[:-1])
-            attr_name = parts[-1]
-            entity = self.database.get_entity_type(entity_name)
-            if entity:
-                # Get meta_id before removal for constraint cleanup
-                attr = entity.get_attribute(attr_name)
-                attr_meta_id = attr.meta_id if attr else None
+        entity, attr_name = self._resolve_entity_attr(target)
+        if not entity:
+            return False
 
-                entity.remove_attribute(attr_name)
+        # Get meta_id before removal for constraint cleanup
+        attr = entity.get_attribute(attr_name)
+        attr_meta_id = attr.meta_id if attr else None
 
-                # Clean up constraints referencing the deleted attribute
-                if attr_meta_id:
-                    entity.constraints = [
-                        c for c in entity.constraints
-                        if not (isinstance(c, UniqueConstraint) and
-                                any(up.property_id == attr_meta_id for up in c.unique_properties))
-                        and not (isinstance(c, ForeignKeyConstraint) and
-                                 any(fkp.property_id == attr_meta_id for fkp in c.foreign_key_properties))
-                    ]
-                # Clean up Reference relationships matching the deleted attribute
-                for rel in list(entity.relationships):
-                    if isinstance(rel, Reference) and rel.ref_name == attr_name:
-                        entity.remove_relationship(attr_name)
-                        break
+        entity.remove_attribute(attr_name)
 
-                self.changes.append(f"DELETE_ATTR:{target}")
-                return True
-        return False
+        # Clean up constraints referencing the deleted attribute
+        if attr_meta_id:
+            entity.constraints = [
+                c for c in entity.constraints
+                if not (isinstance(c, UniqueConstraint) and
+                        any(up.property_id == attr_meta_id for up in c.unique_properties))
+                and not (isinstance(c, ForeignKeyConstraint) and
+                         any(fkp.property_id == attr_meta_id for fkp in c.foreign_key_properties))
+            ]
+        # Clean up Reference relationships matching the deleted attribute
+        for rel in list(entity.relationships):
+            if isinstance(rel, Reference) and rel.ref_name == attr_name:
+                entity.remove_relationship(attr_name)
+                break
+
+        self.changes.append(f"DELETE_ATTR:{target}")
+        return True
 
     def _handle_delete_entity(self, params: Dict) -> bool:
         """DELETE ENTITY Customer (also handles EDGE entities)"""
         name = params["name"]
-        deleted_entity = self.database.get_entity_type(name)
+        deleted_entity = self._get_entity(name, "DELETE_ENTITY")
         if not deleted_entity:
-            print(f"[NOTICE] DELETE_ENTITY skipped: entity '{name}' not found")
             return False
 
         # If deleting an EDGE entity, clean up Edge from source entity
@@ -1139,8 +1135,11 @@ class SchemaTransformer:
                         existing_pk = old_c
                         break
                 if existing_pk:
-                    # Append new key columns to existing composite PK
-                    existing_pk.unique_properties.extend(constraint.unique_properties)
+                    # Append new key columns to existing composite PK (skip duplicates)
+                    existing_ids = {up.property_id for up in existing_pk.unique_properties}
+                    for up in constraint.unique_properties:
+                        if up.property_id not in existing_ids:
+                            existing_pk.unique_properties.append(up)
                     key_names_str = ", ".join(key_columns)
                     self.changes.append(f"ADD_KEY:{entity_name}.({key_names_str})")
                     return True
@@ -1255,9 +1254,8 @@ class SchemaTransformer:
             print(f"[NOTICE] RENAME skipped: no entity specified for '{old_name}'")
             return False
 
-        entity = self.database.get_entity_type(entity_name)
+        entity = self._get_entity(entity_name, "RENAME")
         if not entity:
-            print(f"[NOTICE] RENAME skipped: entity '{entity_name}' not found")
             return False
 
         attr = entity.get_attribute(old_name)
@@ -1277,9 +1275,8 @@ class SchemaTransformer:
         old_name = params["old_name"]
         new_name = params["new_name"]
 
-        entity = self.database.get_entity_type(old_name)
+        entity = self._get_entity(old_name, "RENAME_ENTITY")
         if not entity:
-            print(f"[NOTICE] RENAME_ENTITY skipped: entity '{old_name}' not found")
             return False
         # Collision check: prevent overwriting an existing entity
         if self.database.get_entity_type(new_name):
@@ -1331,29 +1328,20 @@ class SchemaTransformer:
         source_path = params["source"]
         target_path = params["target"]
 
-        source_parts = source_path.split(".")
-        target_parts = target_path.split(".")
+        src_entity, src_attr_name = self._resolve_entity_attr(source_path)
+        tgt_entity, tgt_attr_name = self._resolve_entity_attr(target_path)
 
-        if len(source_parts) >= 2 and len(target_parts) >= 2:
-            # Copy attribute: last part is attribute name, rest is entity path
-            src_entity_path = ".".join(source_parts[:-1])
-            src_attr_name = source_parts[-1]
-            tgt_entity_path = ".".join(target_parts[:-1])
-            tgt_attr_name = target_parts[-1]
-
-            src_entity = self.database.get_entity_type(src_entity_path)
-            tgt_entity = self.database.get_entity_type(tgt_entity_path)
-
-            if src_entity and tgt_entity:
-                src_attr = src_entity.get_attribute(src_attr_name)
-                if src_attr:
-                    new_attr = Attribute(tgt_attr_name, src_attr.data_type, False, src_attr.is_optional)
-                    tgt_entity.add_attribute(new_attr)
-                    self.changes.append(f"COPY:{source_path}->{target_path}")
-                    return True
-        elif len(source_parts) == 1 and len(target_parts) == 1:
+        if src_entity and tgt_entity:
+            # Copy attribute
+            src_attr = src_entity.get_attribute(src_attr_name)
+            if src_attr:
+                new_attr = Attribute(tgt_attr_name, src_attr.data_type, False, src_attr.is_optional)
+                tgt_entity.add_attribute(new_attr)
+                self.changes.append(f"COPY:{source_path}->{target_path}")
+                return True
+        elif "." not in source_path and "." not in target_path:
             # Copy entity
-            src_entity = self.database.get_entity_type(source_parts[0])
+            src_entity = self.database.get_entity_type(source_path)
             if src_entity:
                 new_entity = copy.deepcopy(src_entity)
                 # Update object_name with new target name
@@ -1371,13 +1359,25 @@ class SchemaTransformer:
         and adds it as a new entity with the target name.
 
         Example: COPY_ENTITY person AS employee
+        Example: COPY_ENTITY works_at AS employed_at FROM person TO company  (EDGE)
         """
         source_name = params["source"]
         target_name = params["target"]
+        source_entity_name = params.get("source_entity")
+        target_entity_name = params.get("target_entity")
 
-        src_entity = self.database.get_entity_type(source_name)
+        src_entity = self._get_entity(source_name, "COPY_ENTITY")
         if not src_entity:
-            print(f"[NOTICE] COPY_ENTITY skipped: entity '{source_name}' not found")
+            return False
+
+        # EDGE requires explicit FROM...TO
+        if src_entity.entity_kind == EntityKind.EDGE and not (source_entity_name and target_entity_name):
+            print(f"[ERROR] COPY_ENTITY failed: source '{source_name}' is an EDGE entity, FROM...TO is required")
+            return False
+
+        # Non-EDGE must not use FROM...TO
+        if src_entity.entity_kind != EntityKind.EDGE and (source_entity_name or target_entity_name):
+            print(f"[ERROR] COPY_ENTITY failed: source '{source_name}' is not an EDGE entity, FROM...TO is not allowed (use CAST_ENTITY to change entity kind)")
             return False
 
         new_entity = copy.deepcopy(src_entity)
@@ -1395,6 +1395,22 @@ class SchemaTransformer:
             elif isinstance(rel, Edge):
                 if rel.source_entity == source_name:
                     rel.source_entity = target_name
+
+        # Handle EDGE: set explicit FROM...TO and add Edge to source VERTEX
+        if source_entity_name and target_entity_name:
+            new_entity.source_entity = source_entity_name
+            new_entity.target_entity = target_entity_name
+            new_entity.entity_kind = EntityKind.EDGE
+            # Add Edge relationship to source VERTEX
+            source_ent = self.database.get_entity_type(source_entity_name)
+            if source_ent:
+                source_ent.add_relationship(Edge(
+                    rel_type_name=target_name,
+                    source_entity=source_entity_name,
+                    target_entity=target_entity_name,
+                    cardinality=src_entity.edge_cardinality if hasattr(src_entity, 'edge_cardinality') and src_entity.edge_cardinality else Cardinality.ZERO_TO_MANY
+                ))
+
         self.database.add_entity_type(new_entity)
         self.changes.append(f"COPY_ENTITY:{source_name}->{target_name}")
         return True
@@ -1404,18 +1420,10 @@ class SchemaTransformer:
         source_path = params["source"]
         target_path = params["target"]
 
-        source_parts = source_path.split(".")
-        target_parts = target_path.split(".")
+        src_entity, src_attr_name = self._resolve_entity_attr(source_path)
+        tgt_entity, tgt_attr_name = self._resolve_entity_attr(target_path)
 
-        if len(source_parts) >= 2 and len(target_parts) >= 2:
-            # Move attribute - support nested paths like person.address.street
-            src_entity_name = ".".join(source_parts[:-1])
-            src_attr_name = source_parts[-1]
-            tgt_entity_name = ".".join(target_parts[:-1])
-            tgt_attr_name = target_parts[-1]
-            src_entity = self.database.get_entity_type(src_entity_name)
-            tgt_entity = self.database.get_entity_type(tgt_entity_name)
-            if src_entity and tgt_entity:
+        if src_entity and tgt_entity:
                 src_attr = src_entity.get_attribute(src_attr_name)
                 if src_attr:
                     # Add to target
@@ -1433,11 +1441,17 @@ class SchemaTransformer:
         source2_name = params["source2"]
         target_name = params["target"]
 
-        source1 = self.database.get_entity_type(source1_name)
-        source2 = self.database.get_entity_type(source2_name)
+        source1 = self._get_entity(source1_name, "MERGE")
+        source2 = self._get_entity(source2_name, "MERGE")
         if not source1 or not source2:
-            missing = source1_name if not source1 else source2_name
-            print(f"[NOTICE] MERGE skipped: entity '{missing}' not found")
+            return False
+
+        # EDGE entities cannot be merged
+        if source1.entity_kind == EntityKind.EDGE:
+            print(f"[ERROR] MERGE failed: entity '{source1_name}' is an EDGE entity, MERGE does not support EDGE")
+            return False
+        if source2.entity_kind == EntityKind.EDGE:
+            print(f"[ERROR] MERGE failed: entity '{source2_name}' is an EDGE entity, MERGE does not support EDGE")
             return False
 
         # Create new entity with combined attributes
@@ -1563,6 +1577,11 @@ class SchemaTransformer:
         if not source or not parts:
             return False
 
+        # EDGE entities cannot be split
+        if source.entity_kind == EntityKind.EDGE:
+            print(f"[ERROR] SPLIT failed: entity '{source_name}' is an EDGE entity, SPLIT does not support EDGE")
+            return False
+
         pk = source.get_primary_key()
         created_entities = []
 
@@ -1645,20 +1664,13 @@ class SchemaTransformer:
         target = params["target"]
         new_type_str = params.get("data_type", params.get("type", "STRING")).upper()
 
-        parts = target.split(".")
-        if len(parts) < 2:
-            return False
-
-        entity_name = ".".join(parts[:-1])
-        attr_name = parts[-1]
-        entity = self.database.get_entity_type(entity_name)
+        entity, attr_name = self._resolve_entity_attr(target, "CAST")
         if not entity:
-            print(f"[NOTICE] CAST skipped: entity '{entity_name}' not found")
             return False
 
         attr = entity.get_attribute(attr_name)
         if not attr:
-            print(f"[NOTICE] CAST skipped: attribute '{attr_name}' not found in '{entity_name}'")
+            print(f"[NOTICE] CAST skipped: attribute '{attr_name}' not found")
             return False
 
         new_type = self.TYPE_STR_MAP.get(new_type_str, PrimitiveType.STRING)
@@ -1676,18 +1688,12 @@ class SchemaTransformer:
         target = params["target"]
         new_type = params["constraint_type"]  # PRIMARY_KEY, UNIQUE_KEY, PARTITION_KEY, CLUSTERING_KEY, NODE_KEY, DOCUMENT_ID
 
-        parts = target.split(".")
-        if len(parts) < 2:
-            return False
-
-        entity_name = ".".join(parts[:-1])
-        attr_name = parts[-1]
-        entity = self.database.get_entity_type(entity_name)
+        entity, attr_name = self._resolve_entity_attr(target)
         if not entity:
             return False
 
         # Find the attribute
-        attr = next((a for a in entity.attributes if a.attr_name == attr_name), None)
+        attr = entity.get_attribute(attr_name)
         if not attr:
             return False
 
@@ -1718,17 +1724,23 @@ class SchemaTransformer:
         return False
 
     def _handle_cast_entity(self, params: Dict) -> bool:
-        """CAST_ENTITY: Change the entity_kind of an entity type.
+        """CAST_ENTITY: Change the entity_kind of an entity type (cross-paradigm type conversion).
 
         Overrides automatic entity_kind normalization for this entity.
+        For VERTEX<->EDGE conversion, use TRANSFORM instead.
         Example: CAST_ENTITY orders TO DOCUMENT
-        Example: CAST_ENTITY person TO VERTEX
+        Example: CAST_ENTITY person TO GRAPH
         """
         target = params["target"]
         entity_kind_str = params["entity_kind"]
 
-        entity = self.database.get_entity_type(target)
+        entity = self._get_entity(target, "CAST_ENTITY")
         if not entity:
+            return False
+
+        # EDGE entities must use TRANSFORM, not CAST_ENTITY
+        if entity.entity_kind == EntityKind.EDGE:
+            print(f"[ERROR] CAST_ENTITY failed: entity '{target}' is an EDGE entity, use TRANSFORM INTO ENTITY first")
             return False
 
         kind_map = {
@@ -1737,11 +1749,12 @@ class SchemaTransformer:
             "GRAPH": EntityKind.VERTEX,
             "COLUMNAR": EntityKind.WIDE_COLUMN_TABLE,
         }
+
         new_kind = kind_map.get(entity_kind_str)
         if not new_kind:
             return False
-
         entity.entity_kind = new_kind
+
         self._explicitly_cast_entities.add(target)
         self.changes.append(f"CAST_ENTITY:{target}->{entity_kind_str}")
         return True
@@ -1755,13 +1768,7 @@ class SchemaTransformer:
         target = params["target"]
         new_cardinality_str = params["cardinality"]
 
-        parts = target.split(".")
-        if len(parts) < 2:
-            return False
-
-        entity_name = ".".join(parts[:-1])
-        ref_name = parts[-1]
-        entity = self.database.get_entity_type(entity_name)
+        entity, ref_name = self._resolve_entity_attr(target)
         if not entity:
             return False
 
@@ -1801,9 +1808,8 @@ class SchemaTransformer:
             source_entity_name = params["source_entity"]
             target_entity_name = params["target_entity"]
 
-            entity = self.database.get_entity_type(name)
+            entity = self._get_entity(name, "TRANSFORM")
             if not entity:
-                print(f"[NOTICE] TRANSFORM skipped: entity '{name}' not found")
                 return False
 
             # Resolve cardinality (default: ZERO_TO_MANY)
@@ -1837,9 +1843,8 @@ class SchemaTransformer:
             return True
 
         elif target_type == "ENTITY":
-            edge_entity = self.database.get_entity_type(name)
+            edge_entity = self._get_entity(name, "TRANSFORM")
             if not edge_entity or edge_entity.entity_kind != EntityKind.EDGE:
-                print(f"[NOTICE] TRANSFORM skipped: EDGE entity '{name}' not found")
                 return False
 
             # Remove Edge from source entity's relationships

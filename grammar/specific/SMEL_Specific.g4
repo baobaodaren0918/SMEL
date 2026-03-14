@@ -105,19 +105,19 @@ add_primary_key: ADD_PRIMARY_KEY keyColumns (AS dataType)? (TO identifier)? keyC
 
 // ADD_FOREIGN_KEY: Add foreign key constraint
 // Example: ADD_FOREIGN_KEY customer_id TO Order REFERENCES Customer(id)
-add_foreign_key: ADD_FOREIGN_KEY keyColumns (TO identifier)? keyClause*;
+add_foreign_key: ADD_FOREIGN_KEY keyColumns (AS dataType)? (TO identifier)? keyClause*;
 
 // ADD_UNIQUE_KEY: Add unique constraint
 // Example: ADD_UNIQUE_KEY email TO Customer
-add_unique_key: ADD_UNIQUE_KEY keyColumns (TO identifier)? keyClause*;
+add_unique_key: ADD_UNIQUE_KEY keyColumns (AS dataType)? (TO identifier)? keyClause*;
 
 // ADD_PARTITION_KEY: Add partition key (Cassandra - columnar)
 // Example: ADD_PARTITION_KEY user_id TO UserActivity
-add_partition_key: ADD_PARTITION_KEY keyColumns (TO identifier)? keyClause*;
+add_partition_key: ADD_PARTITION_KEY keyColumns (AS dataType)? (TO identifier)? keyClause*;
 
 // ADD_CLUSTERING_KEY: Add clustering key (Cassandra - columnar)
 // Example: ADD_CLUSTERING_KEY timestamp TO UserActivity
-add_clustering_key: ADD_CLUSTERING_KEY keyColumns (TO identifier)? keyClause*;
+add_clustering_key: ADD_CLUSTERING_KEY keyColumns (AS dataType)? (TO identifier)? keyClause*;
 
 // ADD_LABEL: Add label to node (graph database)
 // Example: ADD_LABEL Employee TO Person
@@ -272,7 +272,8 @@ copy_attribute: COPY_ATTRIBUTE qualifiedName TO qualifiedName;
 // COPY_ENTITY: Duplicate an entire entity with all its structure (attributes, keys, constraints)
 // Reference: PRISM "COPY TABLE R INTO S", CoDEL "Addtable(S, R)"
 // Example: COPY_ENTITY person AS employee
-copy_entity: COPY_ENTITY identifier AS identifier;
+// Example: COPY_ENTITY works_at AS employed_at FROM person TO company  (copy EDGE with explicit endpoints)
+copy_entity: COPY_ENTITY identifier AS identifier (FROM identifier TO identifier)?;
 
 // MOVE_ATTRIBUTE: Relocate an attribute to another location (removes original)
 // Example: MOVE_ATTRIBUTE person.name TO other.name
@@ -302,10 +303,11 @@ cast_attribute: CAST_ATTRIBUTE qualifiedName TO dataType;
 // Example: CAST_CONSTRAINT person.city TO PARTITION KEY
 cast_constraint: CAST_CONSTRAINT qualifiedName TO constraintKeyType;
 
-// CAST_ENTITY: Change the entity_kind of an entity type
+// CAST_ENTITY: Change the entity_kind of an entity type (cross-paradigm type conversion)
 // Example: CAST_ENTITY orders TO DOCUMENT
-// Example: CAST_ENTITY person TO VERTEX
+// Example: CAST_ENTITY person TO GRAPH
 // Note: Overrides automatic entity_kind normalization for this entity
+// Note: For VERTEX<->EDGE conversion, use TRANSFORM instead
 cast_entity: CAST_ENTITY identifier TO databaseType;
 
 // RECARD: Change the multiplicity/cardinality of a reference

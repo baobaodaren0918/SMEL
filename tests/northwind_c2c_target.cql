@@ -41,7 +41,7 @@ CREATE TABLE customers (
     region TEXT,
     postal_code TEXT,
     country TEXT,
-    PRIMARY KEY (customer_id, customer_id)
+    PRIMARY KEY (customer_id)
 );
 
 CREATE TABLE products (
@@ -99,7 +99,7 @@ CREATE TABLE customer_contacts (
     phone TEXT,
     fax TEXT,
     contact_id INT,
-    PRIMARY KEY ((customer_id, customer_id), contact_id)
+    PRIMARY KEY ((customer_id), contact_id)
 );
 
 CREATE TABLE region (

@@ -255,9 +255,10 @@ nest_gen: NEST identifier COLON unnestFieldList IN qualifiedName WHERE condition
 // COPY: Duplicate an attribute or entity
 // Example: COPY ATTRIBUTE person.name TO person.first_name
 // Example: COPY ENTITY person AS employee
+// Example: COPY ENTITY works_at AS employed_at FROM person TO company  (copy EDGE with explicit endpoints)
 copy_gen: COPY (entityCopy | attributeCopy);
 attributeCopy: ATTRIBUTE qualifiedName TO qualifiedName;
-entityCopy: ENTITY identifier AS identifier;
+entityCopy: ENTITY identifier AS identifier (FROM identifier TO identifier)?;
 
 // MOVE: Relocate an attribute to another location (removes original)
 // Example: MOVE ATTRIBUTE person.name TO other.name

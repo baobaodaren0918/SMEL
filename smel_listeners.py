@@ -614,10 +614,15 @@ class SMELSpecificListener(SMEL_SpecificListener, BaseSMELListener):
         }, original_keyword="COPY_ATTRIBUTE"))
 
     def enterCopy_entity(self, ctx):
-        self.operations.append(Operation(OpType.COPY_ENTITY, {
-            "source": ctx.identifier(0).getText(),
-            "target": ctx.identifier(1).getText()
-        }, original_keyword="COPY_ENTITY"))
+        identifiers = ctx.identifier()
+        params = {
+            "source": identifiers[0].getText(),
+            "target": identifiers[1].getText()
+        }
+        if len(identifiers) >= 4:
+            params["source_entity"] = identifiers[2].getText()
+            params["target_entity"] = identifiers[3].getText()
+        self.operations.append(Operation(OpType.COPY_ENTITY, params, original_keyword="COPY_ENTITY"))
 
     def enterMove_attribute(self, ctx):
         self.operations.append(Operation(OpType.MOVE, {
@@ -998,10 +1003,15 @@ class SMELGeneralizedListener(SMEL_GeneralizedListener, BaseSMELListener):
     def enterCopy_gen(self, ctx):
         if ctx.entityCopy():
             ec = ctx.entityCopy()
-            self.operations.append(Operation(OpType.COPY_ENTITY, {
-                "source": ec.identifier(0).getText(),
-                "target": ec.identifier(1).getText()
-            }, original_keyword="COPY ENTITY"))
+            identifiers = ec.identifier()
+            params = {
+                "source": identifiers[0].getText(),
+                "target": identifiers[1].getText()
+            }
+            if len(identifiers) >= 4:
+                params["source_entity"] = identifiers[2].getText()
+                params["target_entity"] = identifiers[3].getText()
+            self.operations.append(Operation(OpType.COPY_ENTITY, params, original_keyword="COPY ENTITY"))
         else:
             ac = ctx.attributeCopy()
             self.operations.append(Operation(OpType.COPY, {
