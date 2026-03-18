@@ -126,8 +126,8 @@ CAST_CONSTRAINT customers.customer_id TO PARTITION KEY
 -- suppliers:      { supplier_id [PARTITION], company_name, contact_name, contact_title, phone, fax, street, city, postal_code, country }
 -- shippers:       { shipper_id [PARTITION], company_name, phone }
 -- employees:      { employee_id [PARTITION], last_name, first_name, title, birth_date, hire_date, phone, notes, street, city, region, postal_code, country, reports_to }
--- customers:      { customer_id [PARTITION], company_name, contact_name, contact_title, phone, fax, street, city, postal_code, country }
--- products:       { category_id [PARTITION], supplier_id [PARTITION], product_id [CLUSTERING], product_name, unit_price, units_in_stock, discontinued, quantity_per_unit, supplier_id }
+-- customers:      { customer_id [PARTITION], company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country }
+-- products:       { category_id [PARTITION], supplier_id [PARTITION], product_id [CLUSTERING], product_name, unit_price, units_in_stock, discontinued, quantity_per_unit }
 -- orders:         { customer_id [PARTITION], order_date [CLUSTERING], order_id [CLUSTERING], required_date, shipped_date, freight, ship_name, ship_address, ship_city, ship_region, ship_postal_code, ship_country, employee_id, shipper_id }
 -- order_details:  { order_id [PARTITION], product_id [PARTITION], unit_price, quantity, discount }
 -- ============================================

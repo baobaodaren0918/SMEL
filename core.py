@@ -1231,17 +1231,20 @@ class SchemaTransformer:
 
             elif isinstance(key_type_str, PKTypeEnum) and isinstance(constraint, UniqueConstraint):
                 # Cassandra PARTITION/CLUSTERING keys: remove matching properties
+                removed_any = False
                 for up in list(constraint.unique_properties):
                     if up.primary_key_type == key_type_str:
                         up_attr = entity.get_attribute_by_id(up.property_id)
                         if up_attr and up_attr.attr_name in key_columns_set:
                             constraint.unique_properties.remove(up)
                             up_attr.is_key = False
-                            key_names_str = ", ".join(key_columns)
-                            self.changes.append(f"{operation}_KEY:{entity_name}.({key_names_str})")
-                            if not constraint.unique_properties:
-                                entity.constraints.remove(constraint)
-                            return True
+                            removed_any = True
+                if removed_any:
+                    key_names_str = ", ".join(key_columns)
+                    self.changes.append(f"{operation}_KEY:{entity_name}.({key_names_str})")
+                    if not constraint.unique_properties:
+                        entity.constraints.remove(constraint)
+                    return True
         return False
 
     def _handle_rename(self, params: Dict) -> bool:

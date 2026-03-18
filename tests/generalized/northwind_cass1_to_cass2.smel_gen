@@ -109,3 +109,12 @@ ADD ATTRIBUTE status TO orders WITH TYPE String
 -- territories:           { territory_id [PARTITION], territory_description, region_id }
 -- employee_territories:  { employee_id [PARTITION], region_id [PARTITION], territory_id [CLUSTERING] }
 -- ============================================
+
+-- ============================================
+-- Operation Summary (33 steps, 10 operation types):
+--   MERGE: 1              SPLIT: 1
+--   ADD ENTITY: 3         ADD ATTRIBUTE: 5
+--   ADD PARTITION KEY: 7  ADD CLUSTERING KEY: 4
+--   DELETE PARTITION KEY: 3  DELETE CLUSTERING KEY: 3
+--   DELETE ATTRIBUTE: 4   RENAME ATTRIBUTE: 2
+-- ============================================

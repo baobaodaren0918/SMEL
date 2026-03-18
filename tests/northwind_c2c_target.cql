@@ -54,7 +54,7 @@ CREATE TABLE products (
     units_in_stock INT,
     discontinued BOOLEAN,
     quantity_per_unit TEXT,
-    PRIMARY KEY (supplier_id, product_id)
+    PRIMARY KEY (product_id)
 );
 
 CREATE TABLE shippers (

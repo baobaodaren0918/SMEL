@@ -90,3 +90,10 @@ ADD ATTRIBUTE status TO orders WITH TYPE String
 --                          address { street, city, region, postal_code, country } } }
 --   }
 -- ============================================
+
+-- ============================================
+-- Operation Summary (16 steps, 6 operation types):
+--   FLATTEN: 1             UNFLATTEN: 1
+--   ADD EMBEDDED: 2        ADD ATTRIBUTE: 6
+--   DELETE ATTRIBUTE: 2    RENAME ATTRIBUTE: 4
+-- ============================================

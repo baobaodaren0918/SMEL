@@ -173,9 +173,9 @@ RENAME_ATTRIBUTE ship_destination_ship_region TO ship_region IN orders
 RENAME_ATTRIBUTE ship_destination_ship_postal_code TO ship_postal_code IN orders
 RENAME_ATTRIBUTE ship_destination_ship_country TO ship_country IN orders
 -- Result:
--- suppliers: { supplier_id, company_name, contact_name, contact_title, phone, fax, street, city, postal_code, country }
--- customers: { customer_id, company_name, contact_name, contact_title, phone, fax, street, city, postal_code, country }
--- employees: { employee_id, last_name, first_name, title, birth_date, hire_date, phone, notes, reports_to, street, city, postal_code, country }
+-- suppliers: { supplier_id, company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country }
+-- customers: { customer_id, company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country }
+-- employees: { employee_id, last_name, first_name, title, birth_date, hire_date, phone, notes, reports_to, street, city, region, postal_code, country }
 
 -- ============================================
 -- Step 10: Add primary key for orders
@@ -216,7 +216,7 @@ ADD_ENTITY SHIPPED_VIA FROM orders TO shippers
 DELETE_ATTRIBUTE employees.reports_to
 ADD_ENTITY REPORTS_TO FROM employees TO employees
 -- Result:
--- employees node: { employee_id, last_name, first_name, title, birth_date, hire_date, phone, notes, street, city, postal_code, country }
+-- employees node: { employee_id, last_name, first_name, title, birth_date, hire_date, phone, notes, street, city, region, postal_code, country }
 -- Relationship: REPORTS_TO (employees -> employees)
 
 -- ============================================
@@ -245,10 +245,10 @@ CAST_CONSTRAINT orders.order_id TO NODE KEY
 
 -- Final Result (7 nodes, 7 relationships):
 -- categories:  { category_id [NK], category_name, description }
--- suppliers:   { supplier_id [NK], company_name, contact_name, contact_title, phone, fax, street, city, postal_code, country }
+-- suppliers:   { supplier_id [NK], company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country }
 -- shippers:    { shipper_id [NK], company_name, phone }
--- employees:   { employee_id [NK], last_name, first_name, title, birth_date, hire_date, phone, notes, street, city, postal_code, country }
--- customers:   { customer_id [NK], company_name, contact_name, contact_title, phone, fax, street, city, postal_code, country }
+-- employees:   { employee_id [NK], last_name, first_name, title, birth_date, hire_date, phone, notes, street, city, region, postal_code, country }
+-- customers:   { customer_id [NK], company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country }
 -- products:    { product_id [NK], product_name, unit_price, units_in_stock, discontinued, quantity_per_unit }
 -- orders:      { order_id [NK], order_date, required_date, shipped_date, freight, ship_name, ship_city }
 -- SUPPLIES (suppliers -> products), PART_OF (products -> categories)

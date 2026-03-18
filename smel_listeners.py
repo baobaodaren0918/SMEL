@@ -680,8 +680,10 @@ class SMELSpecificListener(SMEL_SpecificListener, BaseSMELListener):
             constraint_type = "NODE_KEY"
         elif ct.DOCUMENT_ID():
             constraint_type = "DOCUMENT_ID"
-        else:
+        elif ct.CLUSTERING():
             constraint_type = "CLUSTERING_KEY"
+        else:
+            raise ValueError(f"Unknown constraint type in CAST_CONSTRAINT: {ct.getText()}")
         self.operations.append(Operation(OpType.CAST_CONSTRAINT, {
             "target": ctx.qualifiedName().getText(),
             "constraint_type": constraint_type
@@ -1071,8 +1073,10 @@ class SMELGeneralizedListener(SMEL_GeneralizedListener, BaseSMELListener):
                 constraint_type = "NODE_KEY"
             elif ct.DOCUMENT_ID():
                 constraint_type = "DOCUMENT_ID"
-            else:
+            elif ct.CLUSTERING():
                 constraint_type = "CLUSTERING_KEY"
+            else:
+                raise ValueError(f"Unknown constraint type in CAST CONSTRAINT: {ct.getText()}")
             self.operations.append(Operation(OpType.CAST_CONSTRAINT, {
                 "target": cc.qualifiedName().getText(),
                 "constraint_type": constraint_type

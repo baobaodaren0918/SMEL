@@ -96,3 +96,12 @@ ADD ATTRIBUTE status TO orders WITH TYPE String
 -- territories:           { territory_id [PK], territory_description, region_id [FK->region] }
 -- employee_territories:  { employee_id [PK,FK], territory_id [PK,FK] }
 -- ============================================
+
+-- ============================================
+-- Operation Summary (26 steps, 10 operation types):
+--   MERGE: 1              SPLIT: 1
+--   ADD ENTITY: 3         ADD ATTRIBUTE: 4
+--   ADD KEY: 5            ADD CONSTRAINT: 4
+--   DELETE CONSTRAINT: 1  DELETE KEY: 1
+--   DELETE ATTRIBUTE: 4   RENAME ATTRIBUTE: 2
+-- ============================================
