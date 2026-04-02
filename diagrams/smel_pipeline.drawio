@@ -1,0 +1,365 @@
+<mxfile host="app.diagrams.net" modified="2026-03-10" agent="Claude" version="24.0.0" type="device">
+  <diagram name="SMEL Pipeline" id="smel-pipeline">
+    <mxGraphModel dx="1800" dy="1100" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1700" pageHeight="950" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- ========== User Actor (left) ========== -->
+        <mxCell id="user" value="&lt;b&gt;User&lt;/b&gt;" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;outlineConnect=0;fontSize=14;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="310" width="40" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- ========== SMEL System Boundary ========== -->
+        <mxCell id="system_boundary" value="&lt;b&gt;SMILE Engine&lt;/b&gt;" style="shape=umlFrame;whiteSpace=wrap;html=1;width=140;height=30;boundedLbl=1;verticalAlign=top;align=left;spacingLeft=10;fillColor=none;strokeColor=#666666;strokeWidth=1.5;dashed=0;fontSize=16;" vertex="1" parent="1">
+          <mxGeometry x="160" y="40" width="1250" height="820" as="geometry" />
+        </mxCell>
+
+        <!-- ========== Phase Labels ========== -->
+        <mxCell id="phase1_label" value="&lt;b&gt;Phase 1  Input&lt;/b&gt;" style="text;html=1;fontSize=12;align=center;" vertex="1" parent="1">
+          <mxGeometry x="190" y="75" width="140" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="phase2_label" value="&lt;b&gt;Phase 2  Parsing &amp;amp; RE&lt;/b&gt;" style="text;html=1;fontSize=12;align=center;" vertex="1" parent="1">
+          <mxGeometry x="390" y="75" width="180" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="phase3_label" value="&lt;b&gt;Phase 3  Execution&lt;/b&gt;" style="text;html=1;fontSize=12;align=center;" vertex="1" parent="1">
+          <mxGeometry x="620" y="75" width="170" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="phase4_label" value="&lt;b&gt;Phase 4  FE &amp;amp; Output&lt;/b&gt;" style="text;html=1;fontSize=12;align=center;" vertex="1" parent="1">
+          <mxGeometry x="860" y="75" width="180" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="phase5_label" value="&lt;b&gt;Phase 5  Delivery&lt;/b&gt;" style="text;html=1;fontSize=12;align=center;" vertex="1" parent="1">
+          <mxGeometry x="1090" y="75" width="150" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- ========== Phase Separator Lines ========== -->
+        <mxCell id="sep1" style="endArrow=none;dashed=1;strokeColor=#AAAAAA;strokeWidth=1;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="360" y="95" as="sourcePoint" />
+            <mxPoint x="360" y="840" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sep2" style="endArrow=none;dashed=1;strokeColor=#AAAAAA;strokeWidth=1;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="590" y="95" as="sourcePoint" />
+            <mxPoint x="590" y="840" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sep3" style="endArrow=none;dashed=1;strokeColor=#AAAAAA;strokeWidth=1;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="840" y="95" as="sourcePoint" />
+            <mxPoint x="840" y="840" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="sep4" style="endArrow=none;dashed=1;strokeColor=#AAAAAA;strokeWidth=1;" edge="1" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1070" y="95" as="sourcePoint" />
+            <mxPoint x="1070" y="840" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- ================================================================ -->
+        <!-- STREAM A (top): Source Schema → Adapter → Meta V1                -->
+        <!-- ================================================================ -->
+
+        <!-- Source Schema File -->
+        <mxCell id="source" value="&lt;b&gt;Source Schema&lt;/b&gt;" style="shape=document;whiteSpace=wrap;html=1;fillColor=#EDF2FC;strokeColor=#9BB3D6;fontSize=14;size=0.18;" vertex="1" parent="1">
+          <mxGeometry x="200" y="140" width="140" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="src_pg" value="&lt;b&gt;.sql&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDF2FC;strokeColor=#9BB3D6;fontSize=12;arcSize=50;" vertex="1" parent="1">
+          <mxGeometry x="195" y="215" width="60" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="src_json" value="&lt;b&gt;.json&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDF2FC;strokeColor=#9BB3D6;fontSize=12;arcSize=50;" vertex="1" parent="1">
+          <mxGeometry x="260" y="215" width="60" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="src_cypher" value="&lt;b&gt;.cypher&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDF2FC;strokeColor=#9BB3D6;fontSize=12;arcSize=50;" vertex="1" parent="1">
+          <mxGeometry x="195" y="242" width="60" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="src_cql" value="&lt;b&gt;.cql&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EDF2FC;strokeColor=#9BB3D6;fontSize=12;arcSize=50;" vertex="1" parent="1">
+          <mxGeometry x="260" y="242" width="60" height="24" as="geometry" />
+        </mxCell>
+
+        <!-- Source Adapter -->
+        <mxCell id="source_adapter" value="&lt;b&gt;Source Adapter&lt;/b&gt;&lt;br&gt;&lt;b style=&quot;font-size:10px&quot;&gt;(Reverse Engineering)&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF8E1;strokeColor=#D4B470;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="400" y="140" width="155" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="sadp_pg" value="&lt;b&gt;PostgreSQL&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF8E1;strokeColor=#D4B470;fontSize=9;arcSize=50;" vertex="1" parent="1">
+          <mxGeometry x="395" y="215" width="75" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="sadp_mongo" value="&lt;b&gt;MongoDB&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF8E1;strokeColor=#D4B470;fontSize=9;arcSize=50;" vertex="1" parent="1">
+          <mxGeometry x="475" y="215" width="75" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="sadp_neo4j" value="&lt;b&gt;Neo4j&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF8E1;strokeColor=#D4B470;fontSize=9;arcSize=50;" vertex="1" parent="1">
+          <mxGeometry x="395" y="242" width="75" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="sadp_cass" value="&lt;b&gt;Cassandra&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF8E1;strokeColor=#D4B470;fontSize=9;arcSize=50;" vertex="1" parent="1">
+          <mxGeometry x="475" y="242" width="75" height="24" as="geometry" />
+        </mxCell>
+
+        <!-- Meta Schema V1 -->
+        <mxCell id="meta_v1" value="&lt;b&gt;Meta Schema V1&lt;/b&gt;&lt;br&gt;&lt;b style=&quot;font-size:10px&quot;&gt;Unified M-Model&lt;/b&gt;" style="shape=hexagon;perimeter=hexagonPerimeter2;whiteSpace=wrap;html=1;fixedSize=1;fillColor=#EDF7ED;strokeColor=#6B9E4F;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="620" y="130" width="170" height="80" as="geometry" />
+        </mxCell>
+
+        <!-- ================================================================ -->
+        <!-- STREAM B (bottom): SMEL Script → Parser → Operations             -->
+        <!-- ================================================================ -->
+
+        <!-- SMEL Script -->
+        <mxCell id="smel_script" value="&lt;b&gt;SMILE Script&lt;/b&gt;&lt;br&gt;&lt;b style=&quot;font-size:10px&quot;&gt;.smel / .smel_gen&lt;/b&gt;" style="shape=document;whiteSpace=wrap;html=1;fillColor=#FFF5EB;strokeColor=#D4B06A;fontSize=14;size=0.18;" vertex="1" parent="1">
+          <mxGeometry x="200" y="380" width="140" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- ANTLR4 Parser -->
+        <mxCell id="parser" value="&lt;b&gt;ANTLR4 Parser&lt;/b&gt;&lt;br&gt;&lt;b style=&quot;font-size:10px&quot;&gt;Specific / Generalized&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#999999;fontSize=13;fontColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="400" y="380" width="155" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- Parsed Operations -->
+        <mxCell id="operations" value="&lt;b&gt;Parsed Operations&lt;/b&gt;&lt;br&gt;&lt;b style=&quot;font-size:9px&quot;&gt;NEST, UNNEST, FLATTEN, UNFLATTEN,&lt;br&gt;WIND, UNWIND, ADD, DELETE, RENAME, ...&lt;/b&gt;" style="shape=parallelogram;whiteSpace=wrap;html=1;fillColor=#F2EDF7;strokeColor=#B8A3C7;fontSize=12;perimeter=parallelogramPerimeter;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="600" y="370" width="220" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- Grammar variants box -->
+        <mxCell id="grammar_box" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#999999;dashed=1;strokeWidth=1;" vertex="1" parent="1">
+          <mxGeometry x="190" y="480" width="420" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="grammar_label" value="&lt;b&gt;&lt;i&gt;Two Grammar Variants&lt;/i&gt;&lt;/b&gt;" style="text;html=1;fontSize=10;align=left;fontColor=#777777;" vertex="1" parent="1">
+          <mxGeometry x="200" y="482" width="160" height="18" as="geometry" />
+        </mxCell>
+        <mxCell id="grammar_specific" value="&lt;b&gt;Specific Grammar&lt;/b&gt;&lt;br&gt;&lt;b style=&quot;font-size:9px&quot;&gt;ADD_ATTRIBUTE, RENAME_ENTITY,&lt;br&gt;DELETE_CONSTRAINT, ...&lt;br&gt;(dedicated compound keywords)&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F7F7F7;strokeColor=#999999;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="205" y="510" width="190" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="grammar_generalized" value="&lt;b&gt;Generalized Grammar&lt;/b&gt;&lt;br&gt;&lt;b style=&quot;font-size:9px&quot;&gt;ADD ATTRIBUTE, RENAME ENTITY,&lt;br&gt;DELETE CONSTRAINT, ...&lt;br&gt;(parametric modular syntax)&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F7F7F7;strokeColor=#999999;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="405" y="510" width="190" height="70" as="geometry" />
+        </mxCell>
+
+        <!-- ================================================================ -->
+        <!-- CONVERGENCE: Meta V1 + Operations → Executor → Meta V2           -->
+        <!-- ================================================================ -->
+
+        <!-- Operation Executor -->
+        <mxCell id="executor" value="&lt;b&gt;Operation Executor&lt;/b&gt;&lt;br&gt;&lt;b style=&quot;font-size:10px&quot;&gt;(SchemaTransformer)&lt;/b&gt;" style="shape=process;whiteSpace=wrap;html=1;fillColor=#F2EDF7;strokeColor=#B8A3C7;fontSize=13;size=0.15;" vertex="1" parent="1">
+          <mxGeometry x="660" y="260" width="140" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- ================================================================ -->
+        <!-- OUTPUT: Meta V2 → Target Adapter → Target Schema → Web UI       -->
+        <!-- ================================================================ -->
+
+        <!-- Meta Schema V2 -->
+        <mxCell id="meta_v2" value="&lt;b&gt;Meta Schema V2&lt;/b&gt;&lt;br&gt;&lt;b style=&quot;font-size:10px&quot;&gt;Unified M-Model&lt;/b&gt;" style="shape=hexagon;perimeter=hexagonPerimeter2;whiteSpace=wrap;html=1;fixedSize=1;fillColor=#EDF7ED;strokeColor=#6B9E4F;fontSize=14;" vertex="1" parent="1">
+          <mxGeometry x="860" y="250" width="170" height="80" as="geometry" />
+        </mxCell>
+
+        <!-- Target Adapter -->
+        <mxCell id="target_adapter" value="&lt;b&gt;Target Adapter&lt;/b&gt;&lt;br&gt;&lt;b style=&quot;font-size:10px&quot;&gt;(Forward Engineering)&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF8E1;strokeColor=#D4B470;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="870" y="380" width="155" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="tadp_pg" value="&lt;b&gt;PostgreSQL&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF8E1;strokeColor=#D4B470;fontSize=9;arcSize=50;" vertex="1" parent="1">
+          <mxGeometry x="865" y="460" width="75" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="tadp_mongo" value="&lt;b&gt;MongoDB&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF8E1;strokeColor=#D4B470;fontSize=9;arcSize=50;" vertex="1" parent="1">
+          <mxGeometry x="945" y="460" width="75" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="tadp_neo4j" value="&lt;b&gt;Neo4j&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF8E1;strokeColor=#D4B470;fontSize=9;arcSize=50;" vertex="1" parent="1">
+          <mxGeometry x="865" y="487" width="75" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="tadp_cass" value="&lt;b&gt;Cassandra&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF8E1;strokeColor=#D4B470;fontSize=9;arcSize=50;" vertex="1" parent="1">
+          <mxGeometry x="945" y="487" width="75" height="24" as="geometry" />
+        </mxCell>
+
+        <!-- Validation -->
+        <mxCell id="validation" value="&lt;b&gt;Validation&lt;/b&gt;&lt;br&gt;&lt;b style=&quot;font-size:9px&quot;&gt;2-Layer Check&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F0EBF5;strokeColor=#B8A3C7;fontSize=11;fontColor=#333333;dashed=1;strokeWidth=1;" vertex="1" parent="1">
+          <mxGeometry x="1090" y="170" width="110" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- Target Schema -->
+        <mxCell id="target" value="&lt;b&gt;Target Schema&lt;/b&gt;" style="shape=document;whiteSpace=wrap;html=1;fillColor=#FDEDED;strokeColor=#CC9090;fontSize=14;size=0.18;" vertex="1" parent="1">
+          <mxGeometry x="1100" y="380" width="140" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="tgt_pg" value="&lt;b&gt;.sql&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FDEDED;strokeColor=#CC9090;fontSize=12;arcSize=50;" vertex="1" parent="1">
+          <mxGeometry x="1090" y="450" width="60" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="tgt_json" value="&lt;b&gt;.json&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FDEDED;strokeColor=#CC9090;fontSize=12;arcSize=50;" vertex="1" parent="1">
+          <mxGeometry x="1155" y="450" width="60" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="tgt_cypher" value="&lt;b&gt;.cypher&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FDEDED;strokeColor=#CC9090;fontSize=12;arcSize=50;" vertex="1" parent="1">
+          <mxGeometry x="1090" y="477" width="60" height="24" as="geometry" />
+        </mxCell>
+        <mxCell id="tgt_cql" value="&lt;b&gt;.cql&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FDEDED;strokeColor=#CC9090;fontSize=12;arcSize=50;" vertex="1" parent="1">
+          <mxGeometry x="1155" y="477" width="60" height="24" as="geometry" />
+        </mxCell>
+
+        <!-- Web UI -->
+        <mxCell id="webui" value="&lt;b&gt;Web UI&lt;/b&gt;&lt;br&gt;&lt;b style=&quot;font-size:10px&quot;&gt;Visualization&lt;/b&gt;" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F5F5F5;strokeColor=#999999;fontSize=13;fontColor=#333333;dashed=0;" vertex="1" parent="1">
+          <mxGeometry x="1100" y="530" width="140" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- User Actor (right) -->
+        <mxCell id="user_right" value="&lt;b&gt;User&lt;/b&gt;" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;outlineConnect=0;fontSize=14;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="1340" y="520" width="40" height="60" as="geometry" />
+        </mxCell>
+
+        <!-- ========== ARROWS ========== -->
+
+        <!-- User → Source Schema (1. provides) -->
+        <mxCell id="a_user_source" value="&lt;b&gt;1. provides&lt;/b&gt;" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=1;orthogonalLoop=1;jettySize=auto;strokeWidth=1.2;fontSize=11;exitX=0.5;exitY=0;entryX=0;entryY=0.5;" edge="1" source="user" target="source" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="60" y="170" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- User → SMEL Script (2. writes) -->
+        <mxCell id="a_user_smel" value="&lt;b&gt;2. writes&lt;/b&gt;" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=1;orthogonalLoop=1;jettySize=auto;strokeWidth=1.2;fontSize=11;exitX=0.5;exitY=1;entryX=0;entryY=0.5;" edge="1" source="user" target="smel_script" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="60" y="410" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Source → Source Adapter -->
+        <mxCell id="a1" value="" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;orthogonalLoop=1;jettySize=auto;strokeWidth=1.2;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" source="source" target="source_adapter" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Source Adapter → Meta V1 -->
+        <mxCell id="a2" value="&lt;b&gt;RE&lt;/b&gt;" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;orthogonalLoop=1;jettySize=auto;strokeWidth=1.2;exitX=1;exitY=0.5;entryX=0;entryY=0.5;fontSize=11;fontColor=#D4B470;" edge="1" source="source_adapter" target="meta_v1" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Meta V1 → Executor -->
+        <mxCell id="a3" value="" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;orthogonalLoop=1;jettySize=auto;strokeWidth=1.2;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" source="meta_v1" target="executor" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- SMEL Script → Parser -->
+        <mxCell id="a_smel_parser" value="" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;orthogonalLoop=1;jettySize=auto;strokeWidth=1.2;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" source="smel_script" target="parser" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Parser → Operations -->
+        <mxCell id="a_parser_ops" value="&lt;b&gt;parse&lt;/b&gt;" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;orthogonalLoop=1;jettySize=auto;strokeWidth=1.2;fontSize=11;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" source="parser" target="operations" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Operations → Executor -->
+        <mxCell id="a_ops_exec" value="&lt;b&gt;apply&lt;/b&gt;" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;orthogonalLoop=1;jettySize=auto;strokeWidth=1.2;fontSize=11;exitX=0.5;exitY=0;entryX=0.5;entryY=1;" edge="1" source="operations" target="executor" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="710" y="350" />
+              <mxPoint x="730" y="350" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Executor → Meta V2 -->
+        <mxCell id="a4" value="" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;orthogonalLoop=1;jettySize=auto;strokeWidth=1.2;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" source="executor" target="meta_v2" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Meta V2 → Target Adapter -->
+        <mxCell id="a5" value="&lt;b&gt;FE&lt;/b&gt;" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;orthogonalLoop=1;jettySize=auto;strokeWidth=1.2;fontSize=11;fontColor=#D4B470;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" source="meta_v2" target="target_adapter" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Meta V2 → Validation (L1) -->
+        <mxCell id="a_v2_valid" value="&lt;b&gt;&lt;font color=&quot;#6B9E4F&quot; style=&quot;font-size:10px&quot;&gt;L1&lt;/font&gt;&lt;/b&gt;" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=1;orthogonalLoop=1;jettySize=auto;strokeWidth=1;dashed=1;strokeColor=#6B9E4F;exitX=1;exitY=0;entryX=0;entryY=0.5;" edge="1" source="meta_v2" target="validation" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1060" y="250" />
+              <mxPoint x="1060" y="190" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Target Adapter → Target Schema -->
+        <mxCell id="a6" value="" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;orthogonalLoop=1;jettySize=auto;strokeWidth=1.2;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" source="target_adapter" target="target" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Target Schema → Validation (L2) -->
+        <mxCell id="a_target_valid" value="&lt;b&gt;&lt;font color=&quot;#6B9E4F&quot; style=&quot;font-size:10px&quot;&gt;L2&lt;/font&gt;&lt;/b&gt;" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=1;orthogonalLoop=1;jettySize=auto;strokeWidth=1;dashed=1;strokeColor=#6B9E4F;exitX=0.5;exitY=0;entryX=0.5;entryY=1;" edge="1" source="target" target="validation" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Validation → Web UI -->
+        <mxCell id="a_valid_webui" value="" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=1;orthogonalLoop=1;jettySize=auto;strokeWidth=1;dashed=1;strokeColor=#6B9E4F;exitX=1;exitY=0.5;entryX=1;entryY=0;" edge="1" source="validation" target="webui" parent="1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1260" y="190" />
+              <mxPoint x="1260" y="530" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Target Schema → Web UI -->
+        <mxCell id="a_target_webui" value="" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;orthogonalLoop=1;jettySize=auto;strokeWidth=1;exitX=0.5;exitY=1;entryX=0.5;entryY=0;" edge="1" source="target" target="webui" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Web UI → User (right) -->
+        <mxCell id="a_webui_user" value="&lt;b&gt;3. receives&lt;/b&gt;" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;orthogonalLoop=1;jettySize=auto;strokeWidth=1.2;fontSize=11;exitX=1;exitY=0.5;entryX=0;entryY=0.5;" edge="1" source="webui" target="user_right" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ========== Legend ========== -->
+        <mxCell id="legend_box" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#AAAAAA;strokeWidth=1;" vertex="1" parent="1">
+          <mxGeometry x="860" y="630" width="420" height="175" as="geometry" />
+        </mxCell>
+        <mxCell id="legend_title" value="&lt;b&gt;Legend&lt;/b&gt;" style="text;html=1;fontSize=12;align=left;" vertex="1" parent="1">
+          <mxGeometry x="875" y="635" width="60" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="leg1" value="" style="shape=document;fillColor=#EDF2FC;strokeColor=#9BB3D6;size=0.18;" vertex="1" parent="1">
+          <mxGeometry x="875" y="665" width="25" height="18" as="geometry" />
+        </mxCell>
+        <mxCell id="leg1t" value="&lt;b&gt;Schema File (Input / Output)&lt;/b&gt;" style="text;html=1;fontSize=10;align=left;" vertex="1" parent="1">
+          <mxGeometry x="910" y="665" width="200" height="18" as="geometry" />
+        </mxCell>
+        <mxCell id="leg2" value="" style="shape=hexagon;perimeter=hexagonPerimeter2;fillColor=#EDF7ED;strokeColor=#6B9E4F;fixedSize=1;" vertex="1" parent="1">
+          <mxGeometry x="875" y="690" width="25" height="18" as="geometry" />
+        </mxCell>
+        <mxCell id="leg2t" value="&lt;b&gt;Meta Schema (M-Model)&lt;/b&gt;" style="text;html=1;fontSize=10;align=left;" vertex="1" parent="1">
+          <mxGeometry x="910" y="690" width="200" height="18" as="geometry" />
+        </mxCell>
+        <mxCell id="leg3" value="" style="rounded=1;fillColor=#FFF8E1;strokeColor=#D4B470;" vertex="1" parent="1">
+          <mxGeometry x="875" y="715" width="25" height="18" as="geometry" />
+        </mxCell>
+        <mxCell id="leg3t" value="&lt;b&gt;Adapter (RE / FE)&lt;/b&gt;" style="text;html=1;fontSize=10;align=left;" vertex="1" parent="1">
+          <mxGeometry x="910" y="715" width="200" height="18" as="geometry" />
+        </mxCell>
+        <mxCell id="leg4" value="" style="shape=process;fillColor=#F2EDF7;strokeColor=#B8A3C7;size=0.2;" vertex="1" parent="1">
+          <mxGeometry x="875" y="740" width="25" height="18" as="geometry" />
+        </mxCell>
+        <mxCell id="leg4t" value="&lt;b&gt;Executor / Operations&lt;/b&gt;" style="text;html=1;fontSize=10;align=left;" vertex="1" parent="1">
+          <mxGeometry x="910" y="740" width="200" height="18" as="geometry" />
+        </mxCell>
+        <mxCell id="leg5" value="" style="shape=document;fillColor=#FFF5EB;strokeColor=#D4B06A;size=0.18;" vertex="1" parent="1">
+          <mxGeometry x="1100" y="665" width="25" height="18" as="geometry" />
+        </mxCell>
+        <mxCell id="leg5t" value="&lt;b&gt;SMILE Script (User-authored)&lt;/b&gt;" style="text;html=1;fontSize=10;align=left;" vertex="1" parent="1">
+          <mxGeometry x="1135" y="665" width="180" height="18" as="geometry" />
+        </mxCell>
+        <mxCell id="leg6" value="" style="shape=umlActor;outlineConnect=0;" vertex="1" parent="1">
+          <mxGeometry x="1105" y="688" width="15" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="leg6t" value="&lt;b&gt;Actor (User)&lt;/b&gt;" style="text;html=1;fontSize=10;align=left;" vertex="1" parent="1">
+          <mxGeometry x="1135" y="690" width="100" height="18" as="geometry" />
+        </mxCell>
+        <mxCell id="leg7" value="" style="rounded=1;fillColor=#F0EBF5;strokeColor=#B8A3C7;dashed=1;strokeWidth=1;" vertex="1" parent="1">
+          <mxGeometry x="1100" y="715" width="25" height="18" as="geometry" />
+        </mxCell>
+        <mxCell id="leg7t" value="&lt;b&gt;Validation&lt;/b&gt;" style="text;html=1;fontSize=10;align=left;" vertex="1" parent="1">
+          <mxGeometry x="1135" y="715" width="140" height="18" as="geometry" />
+        </mxCell>
+        <mxCell id="leg8t" value="&lt;b&gt;RE = Reverse Engineering&lt;br&gt;FE = Forward Engineering&lt;/b&gt;" style="text;html=1;fontSize=10;align=left;" vertex="1" parent="1">
+          <mxGeometry x="1100" y="740" width="180" height="35" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

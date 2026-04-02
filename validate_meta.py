@@ -185,7 +185,7 @@ def compare_meta_schemas(actual: Dict[str, Any], expected: Dict[str, Any]) -> Di
 def _compare_entity(actual: Dict, expected: Dict) -> Dict:
     """Compare two serialized entity dicts. Returns diff dict or empty if equal.
 
-    Hard issues (counted): missing/extra attributes, type mismatches,
+    Hard issues (counted): missing/extra properties, type mismatches,
         missing/extra embedded, missing/extra references, missing/extra edges.
     Warnings (not counted): cardinality differences, key_type differences,
         FK constraint details, entity_kind differences.
@@ -201,13 +201,13 @@ def _compare_entity(actual: Dict, expected: Dict) -> Dict:
             "expected": expected.get("entity_kind"),
         }
 
-    # Compare attributes (by name, type; key_type/cardinality as warnings)
-    attr_diff = _compare_attributes(
-        actual.get("attributes", []),
-        expected.get("attributes", [])
+    # Compare properties (by name, type; key_type/cardinality as warnings)
+    attr_diff = _compare_properties(
+        actual.get("properties", []),
+        expected.get("properties", [])
     )
     if attr_diff:
-        diff["attributes"] = attr_diff
+        diff["properties"] = attr_diff
         issue_count += attr_diff.get("issue_count", 0)
 
     # Compare constraints (PK structure only, FK as warning)
@@ -303,10 +303,10 @@ def _compare_embedded(actual: List[Dict], expected: List[Dict]) -> Dict:
     return result
 
 
-def _compare_attributes(actual: List[Dict], expected: List[Dict]) -> Dict:
-    """Compare attribute lists by name.
+def _compare_properties(actual: List[Dict], expected: List[Dict]) -> Dict:
+    """Compare property lists by name.
 
-    Hard issues: missing/extra attributes, type mismatches.
+    Hard issues: missing/extra properties, type mismatches.
     Warnings: is_key, key_type, and is_optional differences (representation-level).
     """
     actual_map = {a["name"]: a for a in actual}
@@ -372,7 +372,7 @@ def _compare_attributes(actual: List[Dict], expected: List[Dict]) -> Dict:
 def _compare_references(actual: List[Dict], expected: List[Dict]) -> Dict:
     """Compare references by name+target.
 
-    Hard issues: missing/extra references, target mismatches, edge_attributes mismatches.
+    Hard issues: missing/extra references, target mismatches, edge_properties mismatches.
     Warnings: cardinality differences.
     """
     actual_map = {item["name"]: item for item in actual}
@@ -393,9 +393,9 @@ def _compare_references(actual: List[Dict], expected: List[Dict]) -> Dict:
                 "actual_target": a.get("target"),
                 "expected_target": e.get("target"),
             })
-        # Compare edge_attributes (if either side has them)
-        a_attrs = {at["name"]: at["type"] for at in a.get("edge_attributes", [])}
-        e_attrs = {at["name"]: at["type"] for at in e.get("edge_attributes", [])}
+        # Compare edge_properties (if either side has them)
+        a_attrs = {at["name"]: at["type"] for at in a.get("edge_properties", [])}
+        e_attrs = {at["name"]: at["type"] for at in e.get("edge_properties", [])}
         if a_attrs != e_attrs:
             attr_mismatches.append({
                 "name": name,
@@ -537,7 +537,7 @@ def _compare_constraints(actual: List[Dict], expected: List[Dict]) -> Dict:
 def _compare_relationship_types(actual: Dict, expected: Dict) -> Dict:
     """Compare __relationship_types__ dicts.
 
-    Hard issues: missing/extra relationship types, source/target/attribute mismatches.
+    Hard issues: missing/extra relationship types, source/target/property mismatches.
     Warnings: cardinality differences (consistent with edges/references/embedded).
     """
     missing = sorted(set(expected) - set(actual))
@@ -559,11 +559,11 @@ def _compare_relationship_types(actual: Dict, expected: Dict) -> Dict:
                 "actual": a.get("cardinality"),
                 "expected": e.get("cardinality"),
             })
-        # Compare relationship attributes
-        a_attrs = {attr["name"]: attr["type"] for attr in a.get("attributes", [])}
-        e_attrs = {attr["name"]: attr["type"] for attr in e.get("attributes", [])}
+        # Compare relationship properties
+        a_attrs = {attr["name"]: attr["type"] for attr in a.get("properties", [])}
+        e_attrs = {attr["name"]: attr["type"] for attr in e.get("properties", [])}
         if a_attrs != e_attrs:
-            diffs["attributes"] = {"actual": a_attrs, "expected": e_attrs}
+            diffs["properties"] = {"actual": a_attrs, "expected": e_attrs}
         if diffs:
             mismatches.append({"name": name, "diffs": diffs})
 

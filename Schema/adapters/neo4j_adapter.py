@@ -1,6 +1,6 @@
 """
 Neo4j Adapter - Parse Neo4j Graph JSON Schema to Unified Meta Schema.
-Converts Neo4j node/relationship definitions to Database/EntityType/Attribute objects.
+Converts Neo4j node/relationship definitions to Database/EntityType/Property objects.
 
 This adapter provides bidirectional conversion:
   - load_from_file(): Neo4j Graph JSON -> Unified Meta Schema
@@ -20,7 +20,7 @@ import json
 import re
 from typing import Dict, Any, Optional, List
 from ..unified_meta_schema import (
-    Database, DatabaseType, EntityType, EntityKind, Attribute,
+    Database, DatabaseType, EntityType, EntityKind, Property,
     UniqueConstraint, UniqueProperty, PKTypeEnum,
     Edge, Cardinality, PrimitiveDataType, PrimitiveType,
     TypeMappings
@@ -107,9 +107,9 @@ class Neo4jAdapter:
                     "Person": EntityType(
                         object_name=["Person"],
                         entity_kind=EntityKind.VERTEX,
-                        attributes=[
-                            Attribute("name", STRING, is_key=True),
-                            Attribute("age", INTEGER)
+                        properties=[
+                            Property("name", STRING, is_key=True),
+                            Property("age", INTEGER)
                         ],
                         constraints=[UniqueConstraint(is_primary_key=True, ...)]
                     ),
@@ -120,7 +120,7 @@ class Neo4jAdapter:
                         entity_kind=EntityKind.EDGE,
                         source_entity="Person",
                         target_entity="Movie",
-                        attributes=[Attribute("role", STRING)],
+                        properties=[Property("role", STRING)],
                         edge_cardinality=ZERO_TO_MANY
                     )
             )
@@ -162,9 +162,9 @@ class Neo4jAdapter:
             -> EntityType(
                  object_name=["Person"],
                  entity_kind=EntityKind.VERTEX,
-                 attributes=[
-                     Attribute("name", STRING, is_key=True),
-                     Attribute("age", INTEGER)
+                 properties=[
+                     Property("name", STRING, is_key=True),
+                     Property("age", INTEGER)
                  ],
                  constraints=[UniqueConstraint(is_primary_key=True, ...)]
                )
@@ -177,7 +177,7 @@ class Neo4jAdapter:
             entity_kind=EntityKind.VERTEX
         )
 
-        # Parse properties -> Attributes
+        # Parse properties -> Property objects
         properties = node_def.get("properties", [])
         for prop_def in properties:
             prop_name = prop_def.get("name", "")
@@ -186,13 +186,13 @@ class Neo4jAdapter:
             is_key = (prop_name == primary_key)
             data_type = self._parse_data_type(prop_type)
 
-            attr = Attribute(
+            attr = Property(
                 attr_name=prop_name,
                 data_type=data_type,
                 is_key=is_key,
                 is_optional=not is_key
             )
-            entity.add_attribute(attr)
+            entity.add_property(attr)
 
             # Create primary key constraint
             if is_key:
@@ -236,20 +236,20 @@ class Neo4jAdapter:
         cardinality_str = rel_def.get("cardinality", "0..n")
         cardinality = self.CARDINALITY_MAP.get(cardinality_str, Cardinality.ZERO_TO_MANY)
 
-        # Parse relationship properties -> Attributes
-        rel_attributes = []
+        # Parse relationship properties -> Property objects
+        edge_properties = []
         for prop_def in rel_def.get("properties", []):
             prop_name = prop_def.get("name", "")
             prop_type = prop_def.get("type", "string").lower()
             data_type = self._parse_data_type(prop_type)
 
-            attr = Attribute(
+            attr = Property(
                 attr_name=prop_name,
                 data_type=data_type,
                 is_key=False,
                 is_optional=True
             )
-            rel_attributes.append(attr)
+            edge_properties.append(attr)
 
         # Create EDGE EntityType (schema-level definition)
         edge_entity = EntityType(
@@ -258,7 +258,7 @@ class Neo4jAdapter:
             source_entity=source_label,
             target_entity=target_label,
             edge_cardinality=cardinality,
-            attributes=rel_attributes
+            properties=edge_properties
         )
         self.database.add_entity_type(edge_entity)
 
@@ -535,12 +535,12 @@ class Neo4jAdapter:
         label_display = label + (''.join(f':{l}' for l in extra_labels) if extra_labels else '')
         lines.append(f"// Node: {label_display}")
 
-        # Generate constraint for primary key attribute(s)
+        # Generate constraint for primary key property(s)
         pk_constraint = entity.get_primary_key()
         if pk_constraint and pk_constraint.unique_properties:
             pk_attrs = []
             for up in pk_constraint.unique_properties:
-                pk_attr = entity.get_attribute_by_id(up.property_id)
+                pk_attr = entity.get_property_by_id(up.property_id)
                 if pk_attr:
                     pk_attrs.append(pk_attr.attr_name)
             if len(pk_attrs) == 1:
@@ -558,9 +558,9 @@ class Neo4jAdapter:
                 )
 
         # Generate property comment listing all properties with types
-        if entity.attributes:
+        if entity.properties:
             prop_strs = []
-            for attr in entity.attributes:
+            for attr in entity.properties:
                 type_str = cls.REVERSE_TYPE_MAP.get(
                     attr.data_type.primitive_type, "string"
                 ) if isinstance(attr.data_type, PrimitiveDataType) else "string"
@@ -586,9 +586,9 @@ class Neo4jAdapter:
         )
 
         # List relationship properties if any
-        if edge_entity.attributes:
+        if edge_entity.properties:
             prop_strs = []
-            for attr in edge_entity.attributes:
+            for attr in edge_entity.properties:
                 type_str = cls.REVERSE_TYPE_MAP.get(
                     attr.data_type.primitive_type, "string"
                 ) if isinstance(attr.data_type, PrimitiveDataType) else "string"
@@ -678,9 +678,9 @@ class Neo4jAdapter:
 #       "Person": EntityType(
 #           object_name=["Person"],
 #           entity_kind=EntityKind.VERTEX,
-#           attributes=[
-#               Attribute("name", STRING, is_key=True),
-#               Attribute("age", INTEGER)
+#           properties=[
+#               Property("name", STRING, is_key=True),
+#               Property("age", INTEGER)
 #           ],
 #           constraints=[UniqueConstraint(is_primary_key=True, ...)],
 #           relationships=[
@@ -691,9 +691,9 @@ class Neo4jAdapter:
 #       "Movie": EntityType(
 #           object_name=["Movie"],
 #           entity_kind=EntityKind.VERTEX,
-#           attributes=[
-#               Attribute("title", STRING, is_key=True),
-#               Attribute("year", INTEGER)
+#           properties=[
+#               Property("title", STRING, is_key=True),
+#               Property("year", INTEGER)
 #           ]
 #       )
 #   }
@@ -702,14 +702,14 @@ class Neo4jAdapter:
 #           rel_name="ACTED_IN",
 #           source_entity="Person",
 #           target_entity="Movie",
-#           attributes=[Attribute("role", STRING)],
+#           properties=[Property("role", STRING)],
 #           cardinality=ZERO_TO_MANY
 #       ),
 #       "DIRECTED": EntityType(EDGE)(
 #           rel_name="DIRECTED",
 #           source_entity="Person",
 #           target_entity="Movie",
-#           attributes=[],
+#           properties=[],
 #           cardinality=ZERO_TO_MANY
 #       )
 #   }

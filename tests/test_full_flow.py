@@ -65,8 +65,8 @@ def _print_validation_warnings(validation_result: dict):
                     print(f"                Reason: {reason}")
                     warning_count += 1
 
-            # Attribute key warnings
-            attr_diff = entity_diff.get("attributes", {})
+            # Property key warnings
+            attr_diff = entity_diff.get("properties", {})
             for kw in attr_diff.get("key_warnings", []):
                 reason = NOTICE_REASONS.get("key_type", "Unknown")
                 print(f"      [NOTICE] {entity_name}.{kw['attr']}.{kw['field']}: "
@@ -74,7 +74,7 @@ def _print_validation_warnings(validation_result: dict):
                 print(f"                Reason: {reason}")
                 warning_count += 1
 
-            # Attribute optional (nullability) warnings
+            # Property optional (nullability) warnings
             for ow in attr_diff.get("optional_warnings", []):
                 reason = NOTICE_REASONS.get("optional", "Unknown")
                 print(f"      [NOTICE] {entity_name}.{ow['attr']}.is_optional: "
@@ -152,12 +152,12 @@ def _print_validation_errors(validation_result: dict):
 
     # Entity-level diffs
     for entity_name, entity_diff in details.get("entity_diffs", {}).items():
-        # Attribute issues
-        attr_diff = entity_diff.get("attributes", {})
+        # Property issues
+        attr_diff = entity_diff.get("properties", {})
         for name in attr_diff.get("missing", []):
-            print(f"      [ERROR] {entity_name}: missing attribute '{name}'")
+            print(f"      [ERROR] {entity_name}: missing property '{name}'")
         for name in attr_diff.get("extra", []):
-            print(f"      [ERROR] {entity_name}: extra attribute '{name}'")
+            print(f"      [ERROR] {entity_name}: extra property '{name}'")
         for tm in attr_diff.get("type_mismatches", []):
             print(f"      [ERROR] {entity_name}.{tm['attr']}: "
                   f"type actual={tm['actual']} expected={tm['expected']}")
@@ -172,7 +172,7 @@ def _print_validation_errors(validation_result: dict):
             print(f"      [ERROR] {entity_name}.ref({tm['name']}): "
                   f"target actual={tm['actual_target']} expected={tm['expected_target']}")
         for am in ref_diff.get("attr_mismatches", []):
-            print(f"      [ERROR] {entity_name}.ref({am['name']}).edge_attributes: "
+            print(f"      [ERROR] {entity_name}.ref({am['name']}).edge_properties: "
                   f"actual={am['actual']} expected={am['expected']}")
 
         # Embedded issues
@@ -317,13 +317,13 @@ def _print_verbose(r: dict):
     print("\n         --- Source Schema ---")
     source_filtered = filter_entities(r.get('source', {}))
     for name, entity in source_filtered.items():
-        attrs = [a['name'] + (' [PK]' if a.get('is_key') else '') for a in entity.get('attributes', [])]
+        attrs = [a['name'] + (' [PK]' if a.get('is_key') else '') for a in entity.get('properties', [])]
         print(f"         {name}: {attrs}")
 
     print("\n         --- Meta V2 (Result) ---")
     result_filtered = filter_entities(r.get('result', {}))
     for name, entity in result_filtered.items():
-        attrs = [a['name'] + (' [PK]' if a.get('is_key') else '') for a in entity.get('attributes', [])]
+        attrs = [a['name'] + (' [PK]' if a.get('is_key') else '') for a in entity.get('properties', [])]
         embedded = [e['name'] for e in entity.get('embedded', [])]
         refs = [f"{ref['name']}->{ref['target']}" for ref in entity.get('references', [])]
         line = f"         {name}: {attrs}"

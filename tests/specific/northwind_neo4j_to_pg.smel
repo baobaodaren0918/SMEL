@@ -9,7 +9,7 @@
 -- Operation Semantics:
 --   TRANSFORM:       Convert relationship (graph edge) to entity (table)
 --   RENAME_ENTITY:   Rename entity after TRANSFORM (relationship name -> table name)
---   ADD_ATTRIBUTE:   Add FK attribute to entity (graph edge replaced by FK column)
+--   ADD_PROPERTY:   Add FK attribute to entity (graph edge replaced by FK column)
 --   ADD_CONSTRAINT:  Add FK constraint (re-establish relational references)
 --   ADD_PRIMARY_KEY: Add composite PK to junction table
 --   DELETE_ENTITY:   Remove relationship type (graph edge no longer needed)
@@ -59,8 +59,8 @@ USING northwind_schema:1
 -- Then rename from relationship name to table name, add FK columns and composite PK.
 TRANSFORM CONTAINS INTO ENTITY
 RENAME_ENTITY CONTAINS TO order_details
-ADD_ATTRIBUTE order_id TO order_details WITH TYPE String
-ADD_ATTRIBUTE product_id TO order_details WITH TYPE String
+ADD_PROPERTY order_id TO order_details WITH TYPE String
+ADD_PROPERTY product_id TO order_details WITH TYPE String
 ADD_CONSTRAINT order_details.order_id REFERENCES orders(order_id) WITH CARDINALITY ONE_TO_MANY
 ADD_CONSTRAINT order_details.product_id REFERENCES products(product_id) WITH CARDINALITY ONE_TO_MANY
 ADD_PRIMARY_KEY (order_id, product_id) TO order_details
@@ -72,7 +72,7 @@ ADD_PRIMARY_KEY (order_id, product_id) TO order_details
 -- ============================================
 -- PURCHASED (customers -> orders) becomes a customer_id FK column in orders.
 DELETE_ENTITY PURCHASED
-ADD_ATTRIBUTE customer_id TO orders WITH TYPE String
+ADD_PROPERTY customer_id TO orders WITH TYPE String
 ADD_CONSTRAINT orders.customer_id REFERENCES customers(customer_id) WITH CARDINALITY ONE_TO_MANY
 -- Result:
 -- orders: { order_id [PK], order_date, required_date, shipped_date, freight, ship_name, ship_address, ship_city, ship_region, ship_postal_code, ship_country, customer_id [FK] }
@@ -82,7 +82,7 @@ ADD_CONSTRAINT orders.customer_id REFERENCES customers(customer_id) WITH CARDINA
 -- ============================================
 -- SOLD (employees -> orders) becomes an employee_id FK column in orders.
 DELETE_ENTITY SOLD
-ADD_ATTRIBUTE employee_id TO orders WITH TYPE String
+ADD_PROPERTY employee_id TO orders WITH TYPE String
 ADD_CONSTRAINT orders.employee_id REFERENCES employees(employee_id) WITH CARDINALITY ONE_TO_MANY
 -- Result:
 -- orders: { ..., employee_id [FK] }
@@ -92,7 +92,7 @@ ADD_CONSTRAINT orders.employee_id REFERENCES employees(employee_id) WITH CARDINA
 -- ============================================
 -- SHIPPED_VIA (orders -> shippers) becomes a shipper_id FK column in orders.
 DELETE_ENTITY SHIPPED_VIA
-ADD_ATTRIBUTE shipper_id TO orders WITH TYPE String
+ADD_PROPERTY shipper_id TO orders WITH TYPE String
 ADD_CONSTRAINT orders.shipper_id REFERENCES shippers(shipper_id) WITH CARDINALITY ONE_TO_MANY
 -- Result:
 -- orders: { order_id [PK], order_date, required_date, shipped_date, freight, ship_name, ship_address, ship_city, ship_region, ship_postal_code, ship_country, customer_id [FK], employee_id [FK], shipper_id [FK] }
@@ -102,7 +102,7 @@ ADD_CONSTRAINT orders.shipper_id REFERENCES shippers(shipper_id) WITH CARDINALIT
 -- ============================================
 -- SUPPLIES (suppliers -> products) becomes a supplier_id FK column in products.
 DELETE_ENTITY SUPPLIES
-ADD_ATTRIBUTE supplier_id TO products WITH TYPE String
+ADD_PROPERTY supplier_id TO products WITH TYPE String
 ADD_CONSTRAINT products.supplier_id REFERENCES suppliers(supplier_id) WITH CARDINALITY ONE_TO_MANY
 -- Result:
 -- products: { product_id [PK], product_name, unit_price, units_in_stock, discontinued, quantity_per_unit, supplier_id [FK] }
@@ -112,7 +112,7 @@ ADD_CONSTRAINT products.supplier_id REFERENCES suppliers(supplier_id) WITH CARDI
 -- ============================================
 -- PART_OF (products -> categories) becomes a category_id FK column in products.
 DELETE_ENTITY PART_OF
-ADD_ATTRIBUTE category_id TO products WITH TYPE String
+ADD_PROPERTY category_id TO products WITH TYPE String
 ADD_CONSTRAINT products.category_id REFERENCES categories(category_id) WITH CARDINALITY ONE_TO_MANY
 -- Result:
 -- products: { ..., supplier_id [FK], category_id [FK] }
@@ -124,7 +124,7 @@ ADD_CONSTRAINT products.category_id REFERENCES categories(category_id) WITH CARD
 -- referencing the same employees table (self-reference with ZERO_TO_MANY
 -- cardinality since not every employee has a manager).
 DELETE_ENTITY REPORTS_TO
-ADD_ATTRIBUTE reports_to TO employees WITH TYPE String
+ADD_PROPERTY reports_to TO employees WITH TYPE String
 ADD_CONSTRAINT employees.reports_to REFERENCES employees(employee_id) WITH CARDINALITY ZERO_TO_MANY
 -- Result:
 -- employees: { employee_id [PK], last_name, first_name, title, birth_date, hire_date, phone, notes, street, city, region, postal_code, country, reports_to [FK->employees] }
@@ -156,7 +156,7 @@ CAST_CONSTRAINT orders.order_id TO PRIMARY KEY
 
 -- ============================================
 -- Operation Summary (32 steps, 7 operation types):
---   RENAME_ENTITY:    1    ADD_ATTRIBUTE:     8
+--   RENAME_ENTITY:    1    ADD_PROPERTY:     8
 --   ADD_CONSTRAINT:   8    DELETE_ENTITY:     6
 --   ADD_PRIMARY_KEY:  1    TRANSFORM:         1
 --   CAST_CONSTRAINT:  7

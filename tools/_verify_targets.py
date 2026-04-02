@@ -27,7 +27,7 @@ def db_entity_attrs(db):
     """Extract {entity_name: sorted [attr_names]} from Database object."""
     result = {}
     for name, entity in db.entity_types.items():
-        attrs = sorted([a.attr_name for a in entity.attributes])
+        attrs = sorted([a.attr_name for a in entity.properties])
         result[name] = attrs
     return result
 
@@ -39,7 +39,7 @@ def db_reltypes(db):
         result[name] = {
             'source': rt.source_entity,
             'target': rt.target_entity,
-            'attrs': sorted([a.attr_name for a in rt.attributes]) if hasattr(rt, 'attributes') else []
+            'attrs': sorted([a.attr_name for a in rt.properties]) if hasattr(rt, 'properties') else []
         }
     return result
 
@@ -50,7 +50,7 @@ def result_entity_attrs(meta):
     for name, entity in meta.items():
         if name.startswith('__') or not isinstance(entity, dict):
             continue
-        attrs = sorted([a['name'] for a in entity.get('attributes', [])])
+        attrs = sorted([a['name'] for a in entity.get('properties', [])])
         result[name] = attrs
     return result
 
@@ -63,7 +63,7 @@ def result_reltypes(meta):
         result[name] = {
             'source': rt.get('source_entity', ''),
             'target': rt.get('target_entity', ''),
-            'attrs': sorted([a['name'] for a in rt.get('attributes', [])])
+            'attrs': sorted([a['name'] for a in rt.get('properties', [])])
         }
     return result
 

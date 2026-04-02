@@ -32,9 +32,9 @@ USING northwind_schema:1
 -- After:  products PK((product_id)) with category_name, description added
 DELETE_PARTITION_KEY (category_id, supplier_id) FROM products
 DELETE_CLUSTERING_KEY product_id FROM products
-DELETE_ATTRIBUTE products.category_id
+DELETE_PROPERTY products.category_id
 DELETE_PARTITION_KEY category_id FROM categories
-DELETE_ATTRIBUTE categories.category_id
+DELETE_PROPERTY categories.category_id
 MERGE categories, products INTO products
 ADD_PARTITION_KEY product_id TO products
 
@@ -66,14 +66,14 @@ ADD_CLUSTERING_KEY order_id TO orders
 -- Phase 4: ADD region (new entity)
 -- Business: Sales territory management -- geographic regions
 -- ============================================
-ADD_ENTITY region WITH ATTRIBUTES (region_id String, region_description String)
+ADD_ENTITY region WITH PROPERTIES (region_id String, region_description String)
 ADD_PARTITION_KEY region_id TO region
 
 -- ============================================
 -- Phase 5: ADD territories (new entity)
 -- Business: Sales territories within regions
 -- ============================================
-ADD_ENTITY territories WITH ATTRIBUTES (territory_id String, territory_description String, region_id String)
+ADD_ENTITY territories WITH PROPERTIES (territory_id String, territory_description String, region_id String)
 ADD_PARTITION_KEY territory_id TO territories
 
 -- ============================================
@@ -82,25 +82,25 @@ ADD_PARTITION_KEY territory_id TO territories
 -- Cassandra: composite partition key (employee_id, region_id) + clustering key territory_id
 -- ============================================
 ADD_ENTITY employee_territories
-ADD_ATTRIBUTE employee_id TO employee_territories WITH TYPE String
-ADD_ATTRIBUTE region_id TO employee_territories WITH TYPE String
-ADD_ATTRIBUTE territory_id TO employee_territories WITH TYPE String
+ADD_PROPERTY employee_id TO employee_territories WITH TYPE String
+ADD_PROPERTY region_id TO employee_territories WITH TYPE String
+ADD_PROPERTY territory_id TO employee_territories WITH TYPE String
 ADD_PARTITION_KEY (employee_id, region_id) TO employee_territories
 ADD_CLUSTERING_KEY territory_id TO employee_territories
 
 -- ============================================
 -- Phase 7: employees -- simplify
 -- ============================================
-DELETE_ATTRIBUTE employees.birth_date
-DELETE_ATTRIBUTE employees.notes
-ADD_ATTRIBUTE email TO employees WITH TYPE String
+DELETE_PROPERTY employees.birth_date
+DELETE_PROPERTY employees.notes
+ADD_PROPERTY email TO employees WITH TYPE String
 
 -- ============================================
 -- Phase 8: products + orders -- RENAME + ADD
 -- ============================================
-RENAME_ATTRIBUTE product_name TO name IN products
-RENAME_ATTRIBUTE freight TO shipping_cost IN orders
-ADD_ATTRIBUTE status TO orders WITH TYPE String
+RENAME_PROPERTY product_name TO name IN products
+RENAME_PROPERTY freight TO shipping_cost IN orders
+ADD_PROPERTY status TO orders WITH TYPE String
 
 -- ============================================
 -- Final Meta V2 (10 entities):
@@ -120,8 +120,8 @@ ADD_ATTRIBUTE status TO orders WITH TYPE String
 -- ============================================
 -- Operation Summary (33 steps, 10 operation types):
 --   MERGE: 1              SPLIT: 1
---   ADD_ENTITY: 3         ADD_ATTRIBUTE: 5
+--   ADD_ENTITY: 3         ADD_PROPERTY: 5
 --   ADD_PARTITION_KEY: 7  ADD_CLUSTERING_KEY: 4
 --   DELETE_PARTITION_KEY: 3  DELETE_CLUSTERING_KEY: 3
---   DELETE_ATTRIBUTE: 4   RENAME_ATTRIBUTE: 2
+--   DELETE_PROPERTY: 4   RENAME_PROPERTY: 2
 -- ============================================

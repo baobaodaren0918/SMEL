@@ -8,9 +8,9 @@
 --
 -- Operation Semantics:
 --   FLATTEN:          Reduce nesting depth by 1 (merge child into parent)
---   RENAME_ATTRIBUTE: Rename a field within an entity
+--   RENAME_PROPERTY: Rename a field within an entity
 --   CAST:             Change field data type
---   ADD_ATTRIBUTE:    Add new field to entity
+--   ADD_PROPERTY:    Add new field to entity
 
 MIGRATION person_mongo1_to_mongo2:1.0
 FROM DOCUMENT TO DOCUMENT
@@ -48,35 +48,35 @@ USING person_schema:1
 -- After:  company { name, address_street, address_city }
 FLATTEN person.employment.company.address
 -- Rename prefixed attributes back to clean names
-RENAME_ATTRIBUTE address_street TO street IN company
-RENAME_ATTRIBUTE address_city TO city IN company
+RENAME_PROPERTY address_street TO street IN company
+RENAME_PROPERTY address_city TO city IN company
 -- Result: company { name, street, city }
 
 -- ============================================
 -- Phase 2: Internationalize — rename name sub-fields
 -- ============================================
-RENAME_ATTRIBUTE vorname TO first_name IN name
-RENAME_ATTRIBUTE nachname TO last_name IN name
+RENAME_PROPERTY vorname TO first_name IN name
+RENAME_PROPERTY nachname TO last_name IN name
 -- Result: name { first_name, last_name }
 
 -- ============================================
 -- Phase 3: Type correction
 -- age was stored as String in MongoDB V1, now Integer
 -- ============================================
-CAST_ATTRIBUTE person.age TO Integer
+CAST_PROPERTY person.age TO Integer
 
 -- ============================================
 -- Phase 4: Add new fields
 -- ============================================
-ADD_ATTRIBUTE email TO person WITH TYPE String
-ADD_ATTRIBUTE country TO address WITH TYPE String
-ADD_ATTRIBUTE start_date TO employment WITH TYPE String
+ADD_PROPERTY email TO person WITH TYPE String
+ADD_PROPERTY country TO address WITH TYPE String
+ADD_PROPERTY start_date TO employment WITH TYPE String
 
 -- ============================================
 -- Phase 5: Business field renames
 -- ============================================
-RENAME_ATTRIBUTE position TO role IN employment
-RENAME_ATTRIBUTE name TO company_name IN company
+RENAME_PROPERTY position TO role IN employment
+RENAME_PROPERTY name TO company_name IN company
 
 -- ============================================
 -- Final Meta V2 (6 entities, max 2-level nesting):
@@ -110,7 +110,7 @@ RENAME_ATTRIBUTE name TO company_name IN company
 -- ============================================
 -- Operation Summary (11 steps):
 --   FLATTEN:          1
---   RENAME_ATTRIBUTE: 6
+--   RENAME_PROPERTY: 6
 --   CAST:             1
---   ADD_ATTRIBUTE:    3
+--   ADD_PROPERTY:    3
 -- ============================================

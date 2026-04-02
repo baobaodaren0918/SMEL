@@ -503,11 +503,11 @@ class TupleDataType(DataType):
 
 
 # ============================================================================
-# ATTRIBUTE
+# PROPERTY (formerly Attribute)
 # ============================================================================
 
 @dataclass
-class Attribute:
+class Property:
     attr_name: str
     data_type: DataType
     is_key: bool = False
@@ -521,7 +521,7 @@ class Attribute:
 
     def to_dict(self) -> Dict[str, Any]:
         d = {
-            "kind": "attribute",
+            "kind": "property",
             "meta_id": self.meta_id,
             "attr_name": self.attr_name,
             "data_type": self.data_type.to_dict(),
@@ -533,7 +533,7 @@ class Attribute:
         return d
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'Attribute':
+    def from_dict(cls, data: Dict[str, Any]) -> 'Property':
         dt = DataType.from_dict(data.get("data_type", {"kind": "primitive", "type": "string"}))
         return cls(
             attr_name=data.get("attr_name", ""),
@@ -552,10 +552,10 @@ class Attribute:
 @dataclass
 class UniqueProperty:
     """Property that is part of a unique/primary key constraint (from André Conrad).
-    Uses property_id to reference Attribute by meta_id instead of embedding the object.
+    Uses property_id to reference Property by meta_id instead of embedding the object.
     """
     primary_key_type: PKTypeEnum
-    property_id: str  # References Attribute.meta_id
+    property_id: str  # References Property.meta_id
     meta_id: str = field(default_factory=_uid)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -583,7 +583,7 @@ class ForeignKeyProperty:
     """Property that is part of a foreign key constraint (from André Conrad).
     Uses IDs to reference properties instead of embedding objects.
     """
-    property_id: str  # References Attribute.meta_id (the FK column)
+    property_id: str  # References Property.meta_id (the FK column)
     points_to_unique_property_id: str  # References target UniqueProperty.meta_id
 
     def to_dict(self) -> Dict[str, Any]:
@@ -643,7 +643,7 @@ class UniqueConstraint(Constraint):
         )
 
     def get_property_ids(self) -> List[str]:
-        """Get list of property IDs (Attribute meta_ids) in this constraint."""
+        """Get list of property IDs (Property meta_ids) in this constraint."""
         return [up.property_id for up in self.unique_properties]
 
 
@@ -669,7 +669,7 @@ class ForeignKeyConstraint(Constraint):
         )
 
     def get_property_ids(self) -> List[str]:
-        """Get list of property IDs (Attribute meta_ids) in this constraint."""
+        """Get list of property IDs (Property meta_ids) in this constraint."""
         return [fkp.property_id for fkp in self.foreign_key_properties]
 
 
@@ -717,7 +717,7 @@ class Relationship(ABC):
 class Reference(Relationship):
     ref_name: str = ""
     refs_to: str = ""  # Entity name (string only, not object reference)
-    edge_attributes: List[Attribute] = field(default_factory=list)
+    edge_properties: List[Property] = field(default_factory=list)
 
     def get_target_entity_name(self) -> str:
         return self.refs_to
@@ -731,15 +731,15 @@ class Reference(Relationship):
             "cardinality": self.cardinality.value,
             "is_optional": self.is_optional
         }
-        if self.edge_attributes:
-            d["edge_attributes"] = [a.to_dict() for a in self.edge_attributes]
+        if self.edge_properties:
+            d["edge_properties"] = [a.to_dict() for a in self.edge_properties]
         if self.description:
             d["description"] = self.description
         return d
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'Reference':
-        edge_attrs = [Attribute.from_dict(a) for a in data.get("edge_attributes", [])]
+        edge_props = [Property.from_dict(a) for a in data.get("edge_properties", [])]
         return cls(
             ref_name=data.get("ref_name", ""),
             refs_to=data.get("refs_to", ""),
@@ -747,7 +747,7 @@ class Reference(Relationship):
             is_optional=data.get("is_optional", True),
             description=data.get("description"),
             meta_id=data.get("meta_id", _uid()),
-            edge_attributes=edge_attrs
+            edge_properties=edge_props
         )
 
 
@@ -843,7 +843,7 @@ class EntityType:
     entity_kind: EntityKind = EntityKind.TABLE
     is_root: bool = True
     constraints: List[Constraint] = field(default_factory=list)
-    attributes: List[Attribute] = field(default_factory=list)
+    properties: List[Property] = field(default_factory=list)
     relationships: List[Relationship] = field(default_factory=list)
     to_connection_ids: List[str] = field(default_factory=list)    # from André Conrad: Connector meta_ids pointing TO this entity
     from_connection_ids: List[str] = field(default_factory=list)  # from André Conrad: Connector meta_ids going FROM this entity
@@ -894,21 +894,21 @@ class EntityType:
         """Get all foreign key constraints."""
         return [c for c in self.constraints if isinstance(c, ForeignKeyConstraint)]
 
-    # Attribute methods
-    def add_attribute(self, attr: Attribute):
-        self.attributes.append(attr)
+    # Property methods
+    def add_property(self, attr: Property):
+        self.properties.append(attr)
 
-    def get_attribute(self, name: str) -> Optional[Attribute]:
-        return next((a for a in self.attributes if a.attr_name == name), None)
+    def get_property(self, name: str) -> Optional[Property]:
+        return next((a for a in self.properties if a.attr_name == name), None)
 
-    def get_attribute_by_id(self, meta_id: str) -> Optional[Attribute]:
-        """Get attribute by its meta_id (used for constraint property_id lookup)."""
-        return next((a for a in self.attributes if a.meta_id == meta_id), None)
+    def get_property_by_id(self, meta_id: str) -> Optional[Property]:
+        """Get property by its meta_id (used for constraint property_id lookup)."""
+        return next((a for a in self.properties if a.meta_id == meta_id), None)
 
-    def remove_attribute(self, name: str) -> Optional[Attribute]:
-        for i, a in enumerate(self.attributes):
+    def remove_property(self, name: str) -> Optional[Property]:
+        for i, a in enumerate(self.properties):
             if a.attr_name == name:
-                return self.attributes.pop(i)
+                return self.properties.pop(i)
         return None
 
     # Relationship methods
@@ -951,7 +951,7 @@ class EntityType:
             "entity_kind": self.entity_kind.value,
             "is_root": self.is_root,
             "constraints": [c.to_dict() for c in self.constraints],
-            "attributes": [a.to_dict() for a in self.attributes],
+            "properties": [a.to_dict() for a in self.properties],
             "relationships": [r.to_dict() for r in self.relationships],
             "to_connection_ids": self.to_connection_ids,
             "from_connection_ids": self.from_connection_ids
@@ -974,7 +974,7 @@ class EntityType:
             kind = EntityKind.TABLE
 
         constraints = [Constraint.from_dict(c) for c in data.get("constraints", [])]
-        attrs = [Attribute.from_dict(a) for a in data.get("attributes", [])]
+        attrs = [Property.from_dict(a) for a in data.get("properties", [])]
         rels = [Relationship.from_dict(r) for r in data.get("relationships", [])]
 
         # Support both old (en_name) and new (object_name) formats
@@ -992,7 +992,7 @@ class EntityType:
             entity_kind=kind,
             is_root=data.get("is_root", True),
             constraints=constraints,
-            attributes=attrs,
+            properties=attrs,
             relationships=rels,
             to_connection_ids=data.get("to_connection_ids", []),
             from_connection_ids=data.get("from_connection_ids", []),
@@ -1014,7 +1014,7 @@ class RelationshipType:
     rel_name: str
     source_entity: str = ""  # Entity name (string only)
     target_entity: str = ""  # Entity name (string only)
-    attributes: List[Attribute] = field(default_factory=list)
+    properties: List[Property] = field(default_factory=list)
     cardinality: Cardinality = Cardinality.ZERO_TO_MANY
     bidirectional: Optional[bool] = None  # from Andre Conrad's paper Figure 2
     description: Optional[str] = None
@@ -1030,8 +1030,8 @@ class RelationshipType:
     def get_target_name(self) -> str:
         return self.target_entity
 
-    def add_attribute(self, attr: Attribute):
-        self.attributes.append(attr)
+    def add_property(self, attr: Property):
+        self.properties.append(attr)
 
     def to_dict(self) -> Dict[str, Any]:
         d = {
@@ -1039,7 +1039,7 @@ class RelationshipType:
             "rel_name": self.rel_name,
             "source_entity": self.source_entity,
             "target_entity": self.target_entity,
-            "attributes": [a.to_dict() for a in self.attributes],
+            "properties": [a.to_dict() for a in self.properties],
             "cardinality": self.cardinality.value
         }
         if self.bidirectional is not None:
@@ -1050,12 +1050,12 @@ class RelationshipType:
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'RelationshipType':
-        attrs = [Attribute.from_dict(a) for a in data.get("attributes", [])]
+        attrs = [Property.from_dict(a) for a in data.get("properties", [])]
         return cls(
             rel_name=data.get("rel_name", ""),
             source_entity=data.get("source_entity", ""),
             target_entity=data.get("target_entity", ""),
-            attributes=attrs,
+            properties=attrs,
             cardinality=Cardinality.from_symbol(data.get("cardinality", "0..n")),
             bidirectional=data.get("bidirectional"),
             description=data.get("description"),
@@ -1194,7 +1194,7 @@ class Database:
                 "rel_name": e.name,
                 "source_entity": e.source_entity or "",
                 "target_entity": e.target_entity or "",
-                "attributes": [a.to_dict() for a in e.attributes],
+                "properties": [a.to_dict() for a in e.properties],
                 "cardinality": (e.edge_cardinality or Cardinality.ZERO_TO_MANY).value
             } for n, e in edge_entities.items()}
         if self.connectors:
@@ -1234,7 +1234,7 @@ class Database:
         # Load relationship types as EDGE entities
         for r_data in data.get("relationship_types", {}).values():
             rel_name = r_data.get("rel_name", "")
-            attrs = [Attribute.from_dict(a) for a in r_data.get("attributes", [])]
+            attrs = [Property.from_dict(a) for a in r_data.get("properties", [])]
             card_str = r_data.get("cardinality", "0..n")
             edge_entity = EntityType(
                 object_name=[rel_name],
@@ -1242,7 +1242,7 @@ class Database:
                 source_entity=r_data.get("source_entity", ""),
                 target_entity=r_data.get("target_entity", ""),
                 edge_cardinality=Cardinality.from_symbol(card_str),
-                attributes=attrs,
+                properties=attrs,
                 meta_id=r_data.get("meta_id", _uid())
             )
             db.add_entity_type(edge_entity)
@@ -1266,7 +1266,7 @@ UnifiedMetaSchema = Database
 __all__ = [
     'DatabaseType', 'EntityKind', 'PrimitiveType', 'PKTypeEnum', 'Cardinality',
     'DataType', 'PrimitiveDataType', 'ListDataType', 'SetDataType', 'MapDataType', 'TupleDataType',
-    'Attribute', 'Constraint', 'UniqueProperty', 'ForeignKeyProperty',
+    'Property', 'Constraint', 'UniqueProperty', 'ForeignKeyProperty',
     'UniqueConstraint', 'ForeignKeyConstraint',
     'Relationship', 'Reference', 'Embedded', 'Edge',
     'ConnectorCardinality', 'Connector',

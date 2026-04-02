@@ -80,21 +80,21 @@ class SMEL_SpecificListener(ParseTreeListener):
         pass
 
 
-    # Enter a parse tree produced by SMEL_SpecificParser#add_attribute.
-    def enterAdd_attribute(self, ctx:SMEL_SpecificParser.Add_attributeContext):
+    # Enter a parse tree produced by SMEL_SpecificParser#add_property.
+    def enterAdd_property(self, ctx:SMEL_SpecificParser.Add_propertyContext):
         pass
 
-    # Exit a parse tree produced by SMEL_SpecificParser#add_attribute.
-    def exitAdd_attribute(self, ctx:SMEL_SpecificParser.Add_attributeContext):
+    # Exit a parse tree produced by SMEL_SpecificParser#add_property.
+    def exitAdd_property(self, ctx:SMEL_SpecificParser.Add_propertyContext):
         pass
 
 
-    # Enter a parse tree produced by SMEL_SpecificParser#attributeClause.
-    def enterAttributeClause(self, ctx:SMEL_SpecificParser.AttributeClauseContext):
+    # Enter a parse tree produced by SMEL_SpecificParser#propertyClause.
+    def enterPropertyClause(self, ctx:SMEL_SpecificParser.PropertyClauseContext):
         pass
 
-    # Exit a parse tree produced by SMEL_SpecificParser#attributeClause.
-    def exitAttributeClause(self, ctx:SMEL_SpecificParser.AttributeClauseContext):
+    # Exit a parse tree produced by SMEL_SpecificParser#propertyClause.
+    def exitPropertyClause(self, ctx:SMEL_SpecificParser.PropertyClauseContext):
         pass
 
 
@@ -287,12 +287,12 @@ class SMEL_SpecificListener(ParseTreeListener):
         pass
 
 
-    # Enter a parse tree produced by SMEL_SpecificParser#delete_attribute.
-    def enterDelete_attribute(self, ctx:SMEL_SpecificParser.Delete_attributeContext):
+    # Enter a parse tree produced by SMEL_SpecificParser#delete_property.
+    def enterDelete_property(self, ctx:SMEL_SpecificParser.Delete_propertyContext):
         pass
 
-    # Exit a parse tree produced by SMEL_SpecificParser#delete_attribute.
-    def exitDelete_attribute(self, ctx:SMEL_SpecificParser.Delete_attributeContext):
+    # Exit a parse tree produced by SMEL_SpecificParser#delete_property.
+    def exitDelete_property(self, ctx:SMEL_SpecificParser.Delete_propertyContext):
         pass
 
 
@@ -377,12 +377,12 @@ class SMEL_SpecificListener(ParseTreeListener):
         pass
 
 
-    # Enter a parse tree produced by SMEL_SpecificParser#rename_attribute.
-    def enterRename_attribute(self, ctx:SMEL_SpecificParser.Rename_attributeContext):
+    # Enter a parse tree produced by SMEL_SpecificParser#rename_property.
+    def enterRename_property(self, ctx:SMEL_SpecificParser.Rename_propertyContext):
         pass
 
-    # Exit a parse tree produced by SMEL_SpecificParser#rename_attribute.
-    def exitRename_attribute(self, ctx:SMEL_SpecificParser.Rename_attributeContext):
+    # Exit a parse tree produced by SMEL_SpecificParser#rename_property.
+    def exitRename_property(self, ctx:SMEL_SpecificParser.Rename_propertyContext):
         pass
 
 
@@ -449,12 +449,12 @@ class SMEL_SpecificListener(ParseTreeListener):
         pass
 
 
-    # Enter a parse tree produced by SMEL_SpecificParser#AttributeField.
-    def enterAttributeField(self, ctx:SMEL_SpecificParser.AttributeFieldContext):
+    # Enter a parse tree produced by SMEL_SpecificParser#SimpleField.
+    def enterSimpleField(self, ctx:SMEL_SpecificParser.SimpleFieldContext):
         pass
 
-    # Exit a parse tree produced by SMEL_SpecificParser#AttributeField.
-    def exitAttributeField(self, ctx:SMEL_SpecificParser.AttributeFieldContext):
+    # Exit a parse tree produced by SMEL_SpecificParser#SimpleField.
+    def exitSimpleField(self, ctx:SMEL_SpecificParser.SimpleFieldContext):
         pass
 
 
@@ -494,12 +494,12 @@ class SMEL_SpecificListener(ParseTreeListener):
         pass
 
 
-    # Enter a parse tree produced by SMEL_SpecificParser#copy_attribute.
-    def enterCopy_attribute(self, ctx:SMEL_SpecificParser.Copy_attributeContext):
+    # Enter a parse tree produced by SMEL_SpecificParser#copy_property.
+    def enterCopy_property(self, ctx:SMEL_SpecificParser.Copy_propertyContext):
         pass
 
-    # Exit a parse tree produced by SMEL_SpecificParser#copy_attribute.
-    def exitCopy_attribute(self, ctx:SMEL_SpecificParser.Copy_attributeContext):
+    # Exit a parse tree produced by SMEL_SpecificParser#copy_property.
+    def exitCopy_property(self, ctx:SMEL_SpecificParser.Copy_propertyContext):
         pass
 
 
@@ -512,12 +512,12 @@ class SMEL_SpecificListener(ParseTreeListener):
         pass
 
 
-    # Enter a parse tree produced by SMEL_SpecificParser#move_attribute.
-    def enterMove_attribute(self, ctx:SMEL_SpecificParser.Move_attributeContext):
+    # Enter a parse tree produced by SMEL_SpecificParser#move_property.
+    def enterMove_property(self, ctx:SMEL_SpecificParser.Move_propertyContext):
         pass
 
-    # Exit a parse tree produced by SMEL_SpecificParser#move_attribute.
-    def exitMove_attribute(self, ctx:SMEL_SpecificParser.Move_attributeContext):
+    # Exit a parse tree produced by SMEL_SpecificParser#move_property.
+    def exitMove_property(self, ctx:SMEL_SpecificParser.Move_propertyContext):
         pass
 
 
@@ -548,12 +548,12 @@ class SMEL_SpecificListener(ParseTreeListener):
         pass
 
 
-    # Enter a parse tree produced by SMEL_SpecificParser#cast_attribute.
-    def enterCast_attribute(self, ctx:SMEL_SpecificParser.Cast_attributeContext):
+    # Enter a parse tree produced by SMEL_SpecificParser#cast_property.
+    def enterCast_property(self, ctx:SMEL_SpecificParser.Cast_propertyContext):
         pass
 
-    # Exit a parse tree produced by SMEL_SpecificParser#cast_attribute.
-    def exitCast_attribute(self, ctx:SMEL_SpecificParser.Cast_attributeContext):
+    # Exit a parse tree produced by SMEL_SpecificParser#cast_property.
+    def exitCast_property(self, ctx:SMEL_SpecificParser.Cast_propertyContext):
         pass
 
 
@@ -638,30 +638,30 @@ class SMEL_SpecificListener(ParseTreeListener):
         pass
 
 
-    # Enter a parse tree produced by SMEL_SpecificParser#withAttributesClause.
-    def enterWithAttributesClause(self, ctx:SMEL_SpecificParser.WithAttributesClauseContext):
+    # Enter a parse tree produced by SMEL_SpecificParser#withPropertiesClause.
+    def enterWithPropertiesClause(self, ctx:SMEL_SpecificParser.WithPropertiesClauseContext):
         pass
 
-    # Exit a parse tree produced by SMEL_SpecificParser#withAttributesClause.
-    def exitWithAttributesClause(self, ctx:SMEL_SpecificParser.WithAttributesClauseContext):
-        pass
-
-
-    # Enter a parse tree produced by SMEL_SpecificParser#attributeDefList.
-    def enterAttributeDefList(self, ctx:SMEL_SpecificParser.AttributeDefListContext):
-        pass
-
-    # Exit a parse tree produced by SMEL_SpecificParser#attributeDefList.
-    def exitAttributeDefList(self, ctx:SMEL_SpecificParser.AttributeDefListContext):
+    # Exit a parse tree produced by SMEL_SpecificParser#withPropertiesClause.
+    def exitWithPropertiesClause(self, ctx:SMEL_SpecificParser.WithPropertiesClauseContext):
         pass
 
 
-    # Enter a parse tree produced by SMEL_SpecificParser#attributeDef.
-    def enterAttributeDef(self, ctx:SMEL_SpecificParser.AttributeDefContext):
+    # Enter a parse tree produced by SMEL_SpecificParser#propertyDefList.
+    def enterPropertyDefList(self, ctx:SMEL_SpecificParser.PropertyDefListContext):
         pass
 
-    # Exit a parse tree produced by SMEL_SpecificParser#attributeDef.
-    def exitAttributeDef(self, ctx:SMEL_SpecificParser.AttributeDefContext):
+    # Exit a parse tree produced by SMEL_SpecificParser#propertyDefList.
+    def exitPropertyDefList(self, ctx:SMEL_SpecificParser.PropertyDefListContext):
+        pass
+
+
+    # Enter a parse tree produced by SMEL_SpecificParser#propertyDef.
+    def enterPropertyDef(self, ctx:SMEL_SpecificParser.PropertyDefContext):
+        pass
+
+    # Exit a parse tree produced by SMEL_SpecificParser#propertyDef.
+    def exitPropertyDef(self, ctx:SMEL_SpecificParser.PropertyDefContext):
         pass
 
 

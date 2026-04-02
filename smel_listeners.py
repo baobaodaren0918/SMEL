@@ -40,12 +40,12 @@ class OpType(str, Enum):
     DELETE_ENTITY = "delete_entity"
     RENAME_ENTITY = "rename_entity"
     COPY_ENTITY = "copy_entity"
-    # Attribute operations
-    ADD_ATTRIBUTE = "add_attribute"
-    DELETE_ATTRIBUTE = "delete_attribute"
-    RENAME = "rename"
-    COPY = "copy"
-    MOVE = "move"
+    # Property operations
+    ADD_PROPERTY = "add_property"
+    DELETE_PROPERTY = "delete_property"
+    RENAME_PROPERTY = "rename_property"
+    COPY_PROPERTY = "copy_property"
+    MOVE_PROPERTY = "move_property"
     # Key/Constraint operations
     ADD_KEY = "add_key"
     DELETE_KEY = "delete_key"
@@ -63,7 +63,7 @@ class OpType(str, Enum):
     TRANSFORM = "transform"
     MERGE = "merge"
     SPLIT = "split"
-    CAST = "cast"
+    CAST_PROPERTY = "cast_property"
     RECARD = "recard"
 
 
@@ -81,7 +81,7 @@ class Operation:
     """Represents a single SMEL operation."""
     op_type: OpType
     params: Dict[str, Any] = field(default_factory=dict)
-    original_keyword: str = ""  # Original keyword from source (e.g., "FLATTEN", "RENAME_ATTRIBUTE")
+    original_keyword: str = ""  # Original keyword from source (e.g., "FLATTEN", "RENAME_PROPERTY")
 
 
 class BaseSMELListener:
@@ -165,10 +165,10 @@ class BaseSMELListener:
         """
         result = []
         for clause in clause_list:
-            if hasattr(clause, 'withAttributesClause') and clause.withAttributesClause():
-                attr_def_list = clause.withAttributesClause().attributeDefList()
+            if hasattr(clause, 'withPropertiesClause') and clause.withPropertiesClause():
+                attr_def_list = clause.withPropertiesClause().propertyDefList()
                 attrs = []
-                for attr_def in attr_def_list.attributeDef():
+                for attr_def in attr_def_list.propertyDef():
                     attrs.append({
                         'name': attr_def.identifier().getText(),
                         'data_type': attr_def.dataType().getText()
@@ -224,7 +224,7 @@ class BaseSMELListener:
 
         Grammar structure:
           unnestFieldList: unnestField (COMMA unnestField)*;
-          unnestField: identifier                                    # AttributeField
+          unnestField: identifier                                    # SimpleField
                      | identifier LBRACE unnestFieldList RBRACE      # NestedField
 
         Args:
@@ -240,7 +240,7 @@ class BaseSMELListener:
         nested = []
 
         for field_ctx in field_list_ctx.unnestField():
-            if isinstance(field_ctx, parser_module.AttributeFieldContext):
+            if isinstance(field_ctx, parser_module.SimpleFieldContext):
                 # Simple attribute: position, name, street, city
                 attributes.append(field_ctx.identifier().getText())
             elif isinstance(field_ctx, parser_module.NestedFieldContext):
@@ -266,7 +266,7 @@ class SMELSpecificListener(SMEL_SpecificListener, BaseSMELListener):
     """
     Listener for SMEL_Specific.g4 grammar.
 
-    Uses specific keywords like ADD_ATTRIBUTE, DELETE_ENTITY, RENAME_ATTRIBUTE.
+    Uses specific keywords like ADD_PROPERTY, DELETE_ENTITY, RENAME_PROPERTY.
     """
 
     def __init__(self):
@@ -406,11 +406,11 @@ class SMELSpecificListener(SMEL_SpecificListener, BaseSMELListener):
         }, original_keyword="UNNEST"))
 
     # ADD operations - each has its own method
-    def enterAdd_attribute(self, ctx):
-        self.operations.append(Operation(OpType.ADD_ATTRIBUTE, {
+    def enterAdd_property(self, ctx):
+        self.operations.append(Operation(OpType.ADD_PROPERTY, {
             "name": ctx.identifier(0).getText(),
             "entity": ctx.identifier(1).getText() if len(ctx.identifier()) > 1 else None,
-            "clauses": self._parse_attribute_clauses(ctx.attributeClause())
+            "clauses": self._parse_attribute_clauses(ctx.propertyClause())
         }))
 
     def enterAdd_constraint(self, ctx):
@@ -518,8 +518,8 @@ class SMELSpecificListener(SMEL_SpecificListener, BaseSMELListener):
         }))
 
     # DELETE operations
-    def enterDelete_attribute(self, ctx):
-        self.operations.append(Operation(OpType.DELETE_ATTRIBUTE, {
+    def enterDelete_property(self, ctx):
+        self.operations.append(Operation(OpType.DELETE_PROPERTY, {
             "target": ctx.qualifiedName().getText()
         }))
 
@@ -591,13 +591,13 @@ class SMELSpecificListener(SMEL_SpecificListener, BaseSMELListener):
         }))
 
     # RENAME operations
-    def enterRename_attribute(self, ctx):
+    def enterRename_property(self, ctx):
         identifiers = ctx.identifier() if isinstance(ctx.identifier(), list) else [ctx.identifier()]
-        self.operations.append(Operation(OpType.RENAME, {
+        self.operations.append(Operation(OpType.RENAME_PROPERTY, {
             "old_name": identifiers[0].getText(),
             "new_name": identifiers[1].getText() if len(identifiers) > 1 else None,
             "entity": identifiers[2].getText() if len(identifiers) > 2 else None
-        }, original_keyword="RENAME_ATTRIBUTE"))
+        }, original_keyword="RENAME_PROPERTY"))
 
     def enterRename_entity(self, ctx):
         identifiers = ctx.identifier() if isinstance(ctx.identifier(), list) else [ctx.identifier()]
@@ -607,11 +607,15 @@ class SMELSpecificListener(SMEL_SpecificListener, BaseSMELListener):
         }))
 
     # Simple operations
-    def enterCopy_attribute(self, ctx):
-        self.operations.append(Operation(OpType.COPY, {
-            "source": ctx.qualifiedName(0).getText(),
-            "target": ctx.qualifiedName(1).getText()
-        }, original_keyword="COPY_ATTRIBUTE"))
+    def enterCopy_property(self, ctx):
+        identifiers = ctx.identifier()
+        property_name = identifiers[0].getText()
+        source_entity = identifiers[1].getText()
+        target_entity = identifiers[2].getText()
+        self.operations.append(Operation(OpType.COPY_PROPERTY, {
+            "source": f"{source_entity}.{property_name}",
+            "target": f"{target_entity}.{property_name}"
+        }, original_keyword="COPY_PROPERTY"))
 
     def enterCopy_entity(self, ctx):
         identifiers = ctx.identifier()
@@ -624,11 +628,15 @@ class SMELSpecificListener(SMEL_SpecificListener, BaseSMELListener):
             params["target_entity"] = identifiers[3].getText()
         self.operations.append(Operation(OpType.COPY_ENTITY, params, original_keyword="COPY_ENTITY"))
 
-    def enterMove_attribute(self, ctx):
-        self.operations.append(Operation(OpType.MOVE, {
-            "source": ctx.qualifiedName(0).getText(),
-            "target": ctx.qualifiedName(1).getText()
-        }, original_keyword="MOVE_ATTRIBUTE"))
+    def enterMove_property(self, ctx):
+        identifiers = ctx.identifier()
+        property_name = identifiers[0].getText()
+        source_entity = identifiers[1].getText()
+        target_entity = identifiers[2].getText()
+        self.operations.append(Operation(OpType.MOVE_PROPERTY, {
+            "source": f"{source_entity}.{property_name}",
+            "target": f"{target_entity}.{property_name}"
+        }, original_keyword="MOVE_PROPERTY"))
 
     def enterMerge(self, ctx):
         self.operations.append(Operation(OpType.MERGE, {
@@ -662,11 +670,11 @@ class SMELSpecificListener(SMEL_SpecificListener, BaseSMELListener):
             "parts": parts
         }, original_keyword="SPLIT"))
 
-    def enterCast_attribute(self, ctx):
-        self.operations.append(Operation(OpType.CAST, {
+    def enterCast_property(self, ctx):
+        self.operations.append(Operation(OpType.CAST_PROPERTY, {
             "target": ctx.qualifiedName().getText(),
             "type": ctx.dataType().getText()
-        }, original_keyword="CAST_ATTRIBUTE"))
+        }, original_keyword="CAST_PROPERTY"))
 
     def enterCast_constraint(self, ctx):
         ct = ctx.constraintKeyType()
@@ -873,11 +881,11 @@ class SMELGeneralizedListener(SMEL_GeneralizedListener, BaseSMELListener):
         }, original_keyword="UNNEST"))
 
     # ADD operations - same internal structure as original SMEL
-    def enterAttributeAdd(self, ctx):
-        self.operations.append(Operation(OpType.ADD_ATTRIBUTE, {
+    def enterPropertyAdd(self, ctx):
+        self.operations.append(Operation(OpType.ADD_PROPERTY, {
             "name": ctx.identifier(0).getText(),
             "entity": ctx.identifier(1).getText() if len(ctx.identifier()) > 1 else None,
-            "clauses": self._parse_attribute_clauses(ctx.attributeClause())
+            "clauses": self._parse_attribute_clauses(ctx.propertyClause())
         }))
 
     def enterConstraintAdd(self, ctx):
@@ -949,8 +957,8 @@ class SMELGeneralizedListener(SMEL_GeneralizedListener, BaseSMELListener):
         }))
 
     # DELETE operations
-    def enterAttributeDelete(self, ctx):
-        self.operations.append(Operation(OpType.DELETE_ATTRIBUTE, {
+    def enterPropertyDelete(self, ctx):
+        self.operations.append(Operation(OpType.DELETE_PROPERTY, {
             "target": ctx.qualifiedName().getText()
         }))
 
@@ -986,13 +994,13 @@ class SMELGeneralizedListener(SMEL_GeneralizedListener, BaseSMELListener):
         }))
 
     # RENAME operations
-    def enterAttributeRename(self, ctx):
+    def enterPropertyRename(self, ctx):
         identifiers = ctx.identifier() if isinstance(ctx.identifier(), list) else [ctx.identifier()]
-        self.operations.append(Operation(OpType.RENAME, {
+        self.operations.append(Operation(OpType.RENAME_PROPERTY, {
             "old_name": identifiers[0].getText(),
             "new_name": identifiers[1].getText() if len(identifiers) > 1 else None,
             "entity": identifiers[2].getText() if len(identifiers) > 2 else None
-        }, original_keyword="RENAME ATTRIBUTE"))
+        }, original_keyword="RENAME PROPERTY"))
 
     def enterEntityRename(self, ctx):
         identifiers = ctx.identifier() if isinstance(ctx.identifier(), list) else [ctx.identifier()]
@@ -1015,17 +1023,25 @@ class SMELGeneralizedListener(SMEL_GeneralizedListener, BaseSMELListener):
                 params["target_entity"] = identifiers[3].getText()
             self.operations.append(Operation(OpType.COPY_ENTITY, params, original_keyword="COPY ENTITY"))
         else:
-            ac = ctx.attributeCopy()
-            self.operations.append(Operation(OpType.COPY, {
-                "source": ac.qualifiedName(0).getText(),
-                "target": ac.qualifiedName(1).getText()
-            }, original_keyword="COPY ATTRIBUTE"))
+            pc = ctx.propertyCopy()
+            identifiers = pc.identifier()
+            property_name = identifiers[0].getText()
+            source_entity = identifiers[1].getText()
+            target_entity = identifiers[2].getText()
+            self.operations.append(Operation(OpType.COPY_PROPERTY, {
+                "source": f"{source_entity}.{property_name}",
+                "target": f"{target_entity}.{property_name}"
+            }, original_keyword="COPY PROPERTY"))
 
     def enterMove_gen(self, ctx):
-        self.operations.append(Operation(OpType.MOVE, {
-            "source": ctx.qualifiedName(0).getText(),
-            "target": ctx.qualifiedName(1).getText()
-        }, original_keyword="MOVE ATTRIBUTE"))
+        identifiers = ctx.identifier()
+        property_name = identifiers[0].getText()
+        source_entity = identifiers[1].getText()
+        target_entity = identifiers[2].getText()
+        self.operations.append(Operation(OpType.MOVE_PROPERTY, {
+            "source": f"{source_entity}.{property_name}",
+            "target": f"{target_entity}.{property_name}"
+        }, original_keyword="MOVE PROPERTY"))
 
     def enterMerge_gen(self, ctx):
         self.operations.append(Operation(OpType.MERGE, {
@@ -1088,11 +1104,11 @@ class SMELGeneralizedListener(SMEL_GeneralizedListener, BaseSMELListener):
                 "entity_kind": ec.databaseType().getText().upper()
             }, original_keyword="CAST ENTITY"))
         else:
-            ac = ctx.attributeCast()
-            self.operations.append(Operation(OpType.CAST, {
-                "target": ac.qualifiedName().getText(),
-                "type": ac.dataType().getText()
-            }, original_keyword="CAST ATTRIBUTE"))
+            pc = ctx.propertyCast()
+            self.operations.append(Operation(OpType.CAST_PROPERTY, {
+                "target": pc.qualifiedName().getText(),
+                "type": pc.dataType().getText()
+            }, original_keyword="CAST PROPERTY"))
 
     def enterRecard_gen(self, ctx):
         self.operations.append(Operation(OpType.RECARD, {

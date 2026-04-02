@@ -81,7 +81,7 @@ def print_schema_comparison(result):
             entity = schema.get(entity_name)
             if entity:
                 lines = [f"  {entity['name']}".ljust(col_width)]
-                for attr in entity.get("attributes", []):
+                for attr in entity.get("properties", []):
                     marker = "[PK]" if attr["is_key"] else ("?" if attr["is_optional"] else "")
                     is_highlighted = (i == 1 and entity_name in new_entities)
                     prefix = f"{GREEN}" if is_highlighted else ""
@@ -163,7 +163,7 @@ def print_validation(result):
                 print(f"    Extra entities: {', '.join(details['extra_entities'])}")
             for ename, ediff in details.get("entity_diffs", {}).items():
                 parts = []
-                attr_d = ediff.get("attributes", {})
+                attr_d = ediff.get("properties", {})
                 if attr_d.get("missing"):
                     parts.append(f"missing attrs: {attr_d['missing']}")
                 if attr_d.get("extra"):

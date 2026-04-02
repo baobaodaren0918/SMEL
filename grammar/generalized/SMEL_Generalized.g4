@@ -3,7 +3,7 @@
  * A domain-specific language for database schema migration
  *
  * This version uses generalized, parameterized operations.
- * Operations use a base keyword with parameters (e.g., ADD ATTRIBUTE, ADD CONSTRAINT)
+ * Operations use a base keyword with parameters (e.g., ADD PROPERTY, ADD CONSTRAINT)
  *
  * Comparison: This is the "Generalized" version. See SMEL_Specific.g4
  * for the "Specific" version that uses independent keywords for each operation.
@@ -58,22 +58,22 @@ operation: nest_gen | unnest_gen | flatten_gen | unflatten_gen | unwind_gen | wi
 // ADD - Generalized ADD operation with type parameter
 // ============================================================================
 // Supports adding:
-//   - ATTRIBUTE:   Add new attribute to entity
+//   - PROPERTY:    Add new property to entity
 //   - CONSTRAINT:  Add foreign key constraint
 //   - EMBEDDED:    Add embedded object relationship (MongoDB style)
 //   - ENTITY:      Add new entity/table
 //   - KEY:         Add primary/unique/foreign key constraint
 //
-// Example: ADD ATTRIBUTE email TO Customer WITH TYPE String NOT NULL
+// Example: ADD PROPERTY email TO Customer WITH TYPE String NOT NULL
 // Example: ADD PRIMARY KEY id TO Customer
-// Example: ADD ENTITY CONTAINS FROM orders TO products WITH ATTRIBUTES (unitPrice Decimal)
+// Example: ADD ENTITY CONTAINS FROM orders TO products WITH PROPERTIES (unitPrice Decimal)
 
-add_gen: ADD (attributeAdd | constraintAdd | embeddedAdd | entityAdd
+add_gen: ADD (propertyAdd | constraintAdd | embeddedAdd | entityAdd
         | keyAdd | labelAdd);
 
-// Add attribute: ADD ATTRIBUTE email TO Customer WITH TYPE String NOT NULL
-attributeAdd: ATTRIBUTE identifier (TO identifier)? attributeClause*;
-attributeClause: withTypeClause | withDefaultClause | notNullClause;
+// Add property: ADD PROPERTY email TO Customer WITH TYPE String NOT NULL
+propertyAdd: PROPERTY identifier (TO identifier)? propertyClause*;
+propertyClause: withTypeClause | withDefaultClause | notNullClause;
 withTypeClause: WITH TYPE dataType;
 withDefaultClause: WITH DEFAULT literal;
 notNullClause: NOT_NULL;
@@ -90,11 +90,11 @@ embeddedAdd: EMBEDDED identifier TO identifier embeddedClause*;
 embeddedClause: withCardinalityClause | withStructureClause;
 withStructureClause: WITH STRUCTURE LPAREN identifierList RPAREN;
 
-// Add entity: ADD ENTITY Product WITH ATTRIBUTES (id String, name String)
-// Add edge:   ADD ENTITY CONTAINS FROM orders TO products WITH ATTRIBUTES (unitPrice Decimal)
+// Add entity: ADD ENTITY Product WITH PROPERTIES (id String, name String)
+// Add edge:   ADD ENTITY CONTAINS FROM orders TO products WITH PROPERTIES (unitPrice Decimal)
 // Add edge:   ADD ENTITY REPORTS_TO FROM employees TO employees WITH CARDINALITY ONE_TO_MANY
 entityAdd: ENTITY identifier (FROM identifier TO identifier)? (WITH CARDINALITY cardinalityType)? entityClause*;
-entityClause: withAttributesClause | withKeyClause;
+entityClause: withPropertiesClause | withKeyClause;
 withKeyClause: WITH KEY identifier;
 
 // Add key: ADD KEY entity.field AS String (explicit entity.field syntax)
@@ -116,21 +116,21 @@ labelAdd: LABEL identifier TO identifier;
 // DELETE - Generalized DELETE operation with type parameter
 // ============================================================================
 // Supports deleting:
-//   - ATTRIBUTE:   Remove attribute from entity
+//   - PROPERTY:    Remove property from entity
 //   - CONSTRAINT:  Remove foreign key constraint
 //   - EMBEDDED:    Remove embedded object relationship
 //   - ENTITY:      Remove entire entity/table
 //   - KEY:         Remove key constraints (PRIMARY, FOREIGN, UNIQUE, PARTITION, CLUSTERING)
 //   - LABEL:       Remove label
 //
-// Example: DELETE ATTRIBUTE Customer.email
+// Example: DELETE PROPERTY Customer.email
 // Example: DELETE PRIMARY KEY id FROM Customer
 
-delete_gen: DELETE (attributeDelete | constraintDelete | embeddedDelete | entityDelete
+delete_gen: DELETE (propertyDelete | constraintDelete | embeddedDelete | entityDelete
           | keyDelete | labelDelete);
 
-// Delete attribute: DELETE ATTRIBUTE Customer.email
-attributeDelete: ATTRIBUTE qualifiedName;
+// Delete property: DELETE PROPERTY Customer.email
+propertyDelete: PROPERTY qualifiedName;
 
 // Delete constraint: DELETE CONSTRAINT Customer.order_id
 constraintDelete: CONSTRAINT qualifiedName;
@@ -151,15 +151,15 @@ labelDelete: LABEL identifier FROM identifier;
 // RENAME - Generalized RENAME operation with type parameter
 // ============================================================================
 // Supports renaming:
-//   - Attribute: RENAME ATTRIBUTE oldName TO newName IN Entity
-//   - Entity:  RENAME ENTITY OldName TO NewName
+//   - Property: RENAME PROPERTY oldName TO newName IN Entity
+//   - Entity:   RENAME ENTITY OldName TO NewName
 //
-// Example: RENAME ATTRIBUTE email TO contact_email IN Customer
+// Example: RENAME PROPERTY email TO contact_email IN Customer
 
-rename_gen: RENAME (attributeRename | entityRename);
+rename_gen: RENAME (propertyRename | entityRename);
 
-// Rename attribute: RENAME ATTRIBUTE oldName TO newName IN Entity
-attributeRename: ATTRIBUTE identifier TO identifier (IN identifier)?;
+// Rename property: RENAME PROPERTY oldName TO newName IN Entity
+propertyRename: PROPERTY identifier TO identifier (IN identifier)?;
 
 // Rename entity: RENAME ENTITY OldName TO NewName
 entityRename: ENTITY identifier TO identifier;
@@ -204,7 +204,7 @@ unflatten_gen: UNFLATTEN identifier COLON identifierList AS identifier;
 // Example with multiple carry fields:
 //   UNNEST person.employment:position AS employment
 //       WITH person.person_id TO employment.person_id, person.dept_id TO employment.dept_id
-//   - 'street,city' are attributes to extract
+//   - 'street,city' are properties to extract
 //   - WITH clause: copy fields from source to new table (can carry multiple fields)
 //   - WITH is optional, for cases where no parent fields need to be copied
 //   Before: person { person_id, address: { street, city } }
@@ -217,11 +217,11 @@ unnest_gen: UNNEST qualifiedName COLON unnestFieldList AS identifier (WITH unnes
 unnestCarryList: unnestCarryField (COMMA unnestCarryField)*;
 unnestCarryField: qualifiedName TO qualifiedName;
 
-// Field list for UNNEST: supports both attributes and nested objects (recursive)
-// - identifier: regular attribute (e.g., position, name, street, city)
+// Field list for UNNEST: supports both properties and nested objects (recursive)
+// - identifier: regular property (e.g., position, name, street, city)
 // - identifier{...}: nested object with its contents (e.g., company{name, address{street, city}})
 unnestFieldList: unnestField (COMMA unnestField)*;
-unnestField: identifier                                    # AttributeField
+unnestField: identifier                                    # SimpleField
            | identifier LBRACE unnestFieldList RBRACE      # NestedField
            ;
 
@@ -230,10 +230,10 @@ unnestField: identifier                                    # AttributeField
 // Supports two modes:
 //   1. Expand in place: UNWIND person_tag.tags (expands array within existing table)
 //   2. Create new table: UNWIND person.tags[] INTO person_tag (legacy, creates new table)
-// Note: Use separate ADD KEY, ADD CONSTRAINT, RENAME ATTRIBUTE for constraints
+// Note: Use separate ADD KEY, ADD CONSTRAINT, RENAME PROPERTY for constraints
 unwind_gen: UNWIND qualifiedName (INTO identifier)?;
 
-// WIND - Convert scalar attribute back to array (reverse of UNWIND)
+// WIND - Convert scalar property back to array (reverse of UNWIND)
 // Syntax: WIND person_tag.tags
 // Cross-entity movement is handled by MERGE, not WIND.
 wind_gen: WIND qualifiedName;
@@ -242,7 +242,7 @@ wind_gen: WIND qualifiedName;
 // Example: NEST address:street,city IN person.address WHERE address.person_id = person.person_id
 // Example with deletion: NEST address:street,city IN person.address WHERE address.person_id = person.person_id WITH DELETION
 //   - 'address' is source entity
-//   - ':street,city' are attributes to embed
+//   - ':street,city' are properties to embed
 //   - 'IN person.address' specifies target (person entity, address field)
 //   - WHERE clause specifies join condition
 //   - WITH DELETION optionally removes source entity after embedding
@@ -252,17 +252,17 @@ nest_gen: NEST identifier COLON unnestFieldList IN qualifiedName WHERE condition
 // SIMPLE OPERATIONS
 // ============================================================================
 
-// COPY: Duplicate an attribute or entity
-// Example: COPY ATTRIBUTE person.name TO person.first_name
+// COPY: Duplicate a property or entity
+// Example: COPY PROPERTY email FROM person TO employee
 // Example: COPY ENTITY person AS employee
 // Example: COPY ENTITY works_at AS employed_at FROM person TO company  (copy EDGE with explicit endpoints)
-copy_gen: COPY (entityCopy | attributeCopy);
-attributeCopy: ATTRIBUTE qualifiedName TO qualifiedName;
+copy_gen: COPY (entityCopy | propertyCopy);
+propertyCopy: PROPERTY identifier FROM identifier TO identifier;
 entityCopy: ENTITY identifier AS identifier (FROM identifier TO identifier)?;
 
-// MOVE: Relocate an attribute to another location (removes original)
-// Example: MOVE ATTRIBUTE person.name TO other.name
-move_gen: MOVE ATTRIBUTE qualifiedName TO qualifiedName;
+// MOVE: Relocate a property to another entity (removes original)
+// Example: MOVE PROPERTY email FROM person TO employee
+move_gen: MOVE PROPERTY identifier FROM identifier TO identifier;
 
 // MERGE: Combine two entities into one new entity
 // Example: MERGE A, B INTO C AS alias
@@ -278,12 +278,12 @@ merge_gen: MERGE identifier COMMA identifier INTO identifier (AS identifier)?;
 split_gen: SPLIT identifier INTO splitPartGen (SEMICOLON splitPartGen)+;
 splitPartGen: identifier COLON identifierList;
 
-// CAST: Change the data type of an attribute, the type of a constraint, or the kind of an entity
-// Example: CAST ATTRIBUTE Entity.field TO Integer
+// CAST: Change the data type of a property, the type of a constraint, or the kind of an entity
+// Example: CAST PROPERTY Entity.field TO Integer
 // Example: CAST CONSTRAINT Entity.field TO UNIQUE KEY
 // Example: CAST ENTITY orders TO DOCUMENT
-cast_gen: CAST (constraintCast | entityCast | attributeCast);
-attributeCast: ATTRIBUTE qualifiedName TO dataType;
+cast_gen: CAST (constraintCast | entityCast | propertyCast);
+propertyCast: PROPERTY qualifiedName TO dataType;
 constraintCast: CONSTRAINT qualifiedName TO constraintKeyType;
 entityCast: ENTITY identifier TO databaseType;
 
@@ -311,10 +311,10 @@ usingKeyClause: USING KEY identifier;
 whereClause: WHERE condition;
 
 // Entity clauses (for ADD ENTITY)
-// WITH ATTRIBUTES (name String, age Integer) - each attribute has name and type
-withAttributesClause: WITH ATTRIBUTES LPAREN attributeDefList RPAREN;
-attributeDefList: attributeDef (COMMA attributeDef)*;
-attributeDef: identifier dataType;
+// WITH PROPERTIES (name String, age Integer) - each property has name and type
+withPropertiesClause: WITH PROPERTIES LPAREN propertyDefList RPAREN;
+propertyDefList: propertyDef (COMMA propertyDef)*;
+propertyDef: identifier dataType;
 
 // ============================================================================
 // COMMON TYPES - Shared type definitions
@@ -366,11 +366,11 @@ CAST: 'CAST'; RECARD: 'RECARD'; TRANSFORM: 'TRANSFORM';
 RELATIONSHIP: 'RELATIONSHIP'; BETWEEN: 'BETWEEN';
 
 // Type parameters for generalized operations
-ATTRIBUTE: 'ATTRIBUTE'; CONSTRAINT: 'CONSTRAINT'; EMBEDDED: 'EMBEDDED'; ENTITY: 'ENTITY';
+PROPERTY: 'PROPERTY'; CONSTRAINT: 'CONSTRAINT'; EMBEDDED: 'EMBEDDED'; ENTITY: 'ENTITY';
 LABEL: 'LABEL';
 
 // Entity/Variation clauses
-ATTRIBUTES: 'ATTRIBUTES';
+PROPERTIES: 'PROPERTIES';
 
 // Key types
 PRIMARY: 'PRIMARY'; UNIQUE: 'UNIQUE'; FOREIGN: 'FOREIGN';

@@ -638,7 +638,7 @@ def get_html():
         /* Dense layout for schemas with 7+ entities */
         .four-column-layout.dense-layout .independent-column { max-width: 320px; }
         .four-column-layout.dense-layout .column-content { max-height: 900px; }
-        .four-column-layout.dense-layout .attribute { padding: 3px 0; font-size: 13px; }
+        .four-column-layout.dense-layout .property { padding: 3px 0; font-size: 13px; }
         .four-column-layout.dense-layout .attr-name { font-size: 13px; }
         .four-column-layout.dense-layout .entity-name { padding: 10px 12px; font-size: 14px; }
         .four-column-layout.dense-layout .entity-body { padding: 8px 12px; }
@@ -708,19 +708,19 @@ def get_html():
 
         .entity-body { padding: 10px 14px; }
 
-        .attribute { display: flex; align-items: center; padding: 4px 0; font-size: 14px; }
+        .property { display: flex; align-items: center; padding: 4px 0; font-size: 14px; }
         .attr-name { flex: 1; font-weight: 500; color: #1D1D1F; font-size: 14px; }
         .attr-type { color: #636366; font-size: 13px; }
 
         /* Nested object styling - makes hierarchy obvious like JSON */
-        .attribute.nested-object {
+        .property.nested-object {
             background: #F5F5F7;
             padding: 6px 8px;
             border-radius: 6px;
             margin: 4px 0;
             font-weight: 600;
         }
-        .attribute.nested-object .attr-type {
+        .property.nested-object .attr-type {
             color: #AF52DE;
             font-weight: 600;
         }
@@ -1643,7 +1643,7 @@ def get_html():
                         for (var ename in d.entity_diffs) {
                             var ed = d.entity_diffs[ename];
                             var parts = [];
-                            var ad = ed.attributes || {};
+                            var ad = ed.properties || {};
                             if (ad.missing && ad.missing.length) parts.push('missing attrs: ' + ad.missing.join(', '));
                             if (ad.extra && ad.extra.length) parts.push('extra attrs: ' + ad.extra.join(', '));
                             if (ad.type_mismatches && ad.type_mismatches.length) {
@@ -1771,14 +1771,14 @@ def get_html():
                         parts.push('embedded(' + cw.name + '): actual=' + cw.actual + ' expected=' + cw.expected);
                     });
                 }
-                // Attribute key_type warnings
-                var attrs = w.attributes || {};
+                // Property key_type warnings
+                var attrs = w.properties || {};
                 if (attrs.key_warnings && attrs.key_warnings.length) {
                     attrs.key_warnings.forEach(function(kw) {
                         parts.push(kw.attr + '.' + kw.field + ': actual=' + kw.actual + ' expected=' + kw.expected);
                     });
                 }
-                // Attribute is_optional (nullability) warnings
+                // Property is_optional (nullability) warnings
                 if (attrs.optional_warnings && attrs.optional_warnings.length) {
                     attrs.optional_warnings.forEach(function(ow) {
                         parts.push(ow.attr + '.is_optional: actual=' + ow.actual + ' expected=' + ow.expected);
@@ -1862,10 +1862,10 @@ def get_html():
                 if (affected.status === 'new' || affected.status === 'modified') {
                     const entity = affected.entity;
 
-                    // Show attributes
-                    if (entity.attributes && entity.attributes.length > 0) {
-                        entity.attributes.forEach(attr => {
-                            const isNew = affected.new_attributes && affected.new_attributes.some(a => a.name === attr.name);
+                    // Show properties
+                    if (entity.properties && entity.properties.length > 0) {
+                        entity.properties.forEach(attr => {
+                            const isNew = affected.new_properties && affected.new_properties.some(a => a.name === attr.name);
                             html += '<div class="change-item' + (isNew ? ' new' : '') + '">';
                             html += '<span class="change-prefix' + (isNew ? ' add' : '') + '">' + (isNew ? '+' : ' ') + '</span>';
                             html += attr.name + ': ' + attr.type;
@@ -1928,9 +1928,9 @@ def get_html():
                         });
                     }
 
-                    // Show type changed attributes (for CAST and UNWIND operations)
-                    if (affected.type_changed_attributes && affected.type_changed_attributes.length > 0) {
-                        affected.type_changed_attributes.forEach(attr => {
+                    // Show type changed properties (for CAST and UNWIND operations)
+                    if (affected.type_changed_properties && affected.type_changed_properties.length > 0) {
+                        affected.type_changed_properties.forEach(attr => {
                             html += '<div class="change-item" style="color:#AF52DE;">';
                             html += '<span class="change-prefix" style="color:#AF52DE;">~</span>';
                             html += attr.name + ': <s style="color:#636366;">' + attr.old_type + '</s> → ' + attr.new_type;
@@ -1974,8 +1974,8 @@ def get_html():
                     break;
                 case 'UNNEST':
                     html = '<span class="param-value">' + esc(params.source_path) + '</span>';
-                    if (params.attributes && params.attributes.length > 0) {
-                        html += ':' + params.attributes.map(a => esc(a)).join(',');
+                    if (params.properties && params.properties.length > 0) {
+                        html += ':' + params.properties.map(a => esc(a)).join(',');
                     }
                     html += ' <span class="param-key">AS</span> <span class="param-value">' + esc(params.target) + '</span>';
                     if (params.carry_fields && params.carry_fields.length > 0) {
@@ -2038,8 +2038,8 @@ def get_html():
                 case 'DELETE_EMBEDDED':
                     html = '<span class="param-key">embedded:</span> <span class="param-value">' + esc(params.embedded) + '</span>';
                     break;
-                case 'ADD_ATTRIBUTE':
-                    html = '<span class="param-key">attribute:</span> <span class="param-value">' + esc(params.name) + '</span>';
+                case 'ADD_PROPERTY':
+                    html = '<span class="param-key">property:</span> <span class="param-value">' + esc(params.name) + '</span>';
                     if (params.data_type) html += ' <span class="param-key">type:</span> <span class="param-value">' + esc(params.data_type) + '</span>';
                     if (params.entity) html += ' <span class="param-key">TO</span> <span class="param-value">' + esc(params.entity) + '</span>';
                     break;
@@ -2056,7 +2056,7 @@ def get_html():
                     html = '<span class="param-key">label:</span> <span class="param-value">' + esc(params.label) + '</span>';
                     if (params.entity) html += ' <span class="param-key">TO</span> <span class="param-value">' + esc(params.entity) + '</span>';
                     break;
-                case 'DELETE_ATTRIBUTE':
+                case 'DELETE_PROPERTY':
                     html = '<span class="param-key">target:</span> <span class="param-value">' + esc(params.target) + '</span>';
                     break;
                 case 'DELETE_LABEL':
@@ -2238,7 +2238,7 @@ def get_html():
                 dot += '      <TR><TD COLSPAN="3" BGCOLOR="' + headerBg + '" ALIGN="CENTER"><FONT COLOR="white"><B>' + entity.name + '</B></FONT></TD></TR>\\n';
 
                 const refNames = new Set((entity.references || []).map(r => r.name));
-                entity.attributes.forEach(attr => {
+                entity.properties.forEach(attr => {
                     const isFk = refNames.has(attr.name);
                     let badge = '';
                     const _pkl = getPkLabel(migrationData.target_type);
@@ -2289,7 +2289,7 @@ def get_html():
             _dynNodeProps[origin] = {};
             _dynEdgeProps[origin] = {};
             entityList.forEach(entity => {
-                _dynNodeProps[origin][entity.name] = (entity.attributes || []).map(a => ({
+                _dynNodeProps[origin][entity.name] = (entity.properties || []).map(a => ({
                     n: a.name, t: a.type, k: a.is_key
                 }));
             });
@@ -2298,7 +2298,7 @@ def get_html():
                 _dynEdgeProps[origin][rt.rel_name || name] = {
                     from: rt.source_entity || '',
                     to: rt.target_entity || '',
-                    props: (rt.attributes || []).map(a => ({ n: a.name, t: a.type }))
+                    props: (rt.properties || []).map(a => ({ n: a.name, t: a.type }))
                 };
             });
 
@@ -2511,7 +2511,7 @@ def get_html():
                 html += '<div class="chebotko-header">' + escapeHtml(entity.name) + '</div>';
                 html += '<table class="chebotko-cols">';
 
-                (entity.attributes || []).forEach(attr => {
+                (entity.properties || []).forEach(attr => {
                     let marker = '';
                     const keyType = attr.key_type || null;
                     if (keyType === 'partition') {
@@ -2680,8 +2680,8 @@ def get_html():
                 }
             } catch(e) { keyInfo = null; }
 
-            (entity.attributes || []).forEach(a => {
-                html += '<div class="attribute"><span class="attr-name">' + a.name + '</span><span class="attr-type">' + a.type;
+            (entity.properties || []).forEach(a => {
+                html += '<div class="property"><span class="attr-name">' + a.name + '</span><span class="attr-type">' + a.type;
                 // Show key format for PK with generated prefix
                 if (a.is_key && keyInfo && keyInfo.generated && keyInfo.prefix) {
                     html += ' <span style="color:#34C759;font-size:10px;">= "' + keyInfo.prefix + '_{uuid6}"</span>';
@@ -2722,21 +2722,21 @@ def get_html():
             if (entity.type) html += ' <span class="entity-type-badge">' + entity.type + '</span>';
             html += '</div><div class="entity-body">';
 
-            function renderAttributes(attrs, indent) {
+            function renderProperties(attrs, indent) {
                 let result = '';
                 attrs.forEach(a => {
                     const levelClass = indent > 0 ? ' nested-level-' + Math.min(indent, 3) : '';
                     if (a.nested) {
                         // Nested object or array with nested content
                         const typeLabel = a.type === 'array' ? 'array' : '{object}';
-                        result += '<div class="attribute nested-object' + levelClass + '">';
+                        result += '<div class="property nested-object' + levelClass + '">';
                         result += '<span class="attr-name">' + a.name + '</span>';
                         result += '<span class="attr-type">' + typeLabel + '</span></div>';
-                        // Recursively render nested attributes with increased indent
-                        result += renderAttributes(a.nested, indent + 1);
+                        // Recursively render nested properties with increased indent
+                        result += renderProperties(a.nested, indent + 1);
                     } else {
-                        // Regular attribute
-                        result += '<div class="attribute' + levelClass + '">';
+                        // Regular property
+                        result += '<div class="property' + levelClass + '">';
                         result += '<span class="attr-name">' + a.name + '</span>';
                         result += '<span class="attr-type">' + a.type + '</span>';
                         if (a.is_key) result += '<span class="attr-badge pk">' + getPkLabel(migrationData.source_type) + '</span>';
@@ -2747,8 +2747,8 @@ def get_html():
                 return result;
             }
 
-            if (entity.attributes) {
-                html += renderAttributes(entity.attributes, 0);
+            if (entity.properties) {
+                html += renderProperties(entity.properties, 0);
             }
 
             // Fallback for non-nested structure
@@ -3488,7 +3488,7 @@ def get_html():
             html += '<div class="inspector-summary">';
             html += '<div class="summary-grid">';
             html += '<div class="summary-card"><div class="num">' + summary.entity_count + '</div><div class="label">Entities</div></div>';
-            html += '<div class="summary-card"><div class="num">' + summary.attribute_count + '</div><div class="label">Attributes</div></div>';
+            html += '<div class="summary-card"><div class="num">' + summary.property_count + '</div><div class="label">Properties</div></div>';
             html += '<div class="summary-card"><div class="num">' + summary.key_count + '</div><div class="label">Keys</div></div>';
             html += '<div class="summary-card"><div class="num">' + summary.constraint_count + '</div><div class="label">Constraints</div></div>';
             html += '<div class="summary-card"><div class="num">' + summary.relationship_count + '</div><div class="label">Relationships</div></div>';
@@ -3511,7 +3511,7 @@ def get_html():
                 html += '<tr>';
                 html += '<td><strong>' + escapeHtml(e.name) + '</strong></td>';
                 html += '<td><span class="entity-kind-badge ' + kindClass + '">' + e.entity_kind + '</span></td>';
-                html += '<td>' + e.attributes + '</td>';
+                html += '<td>' + e.properties + '</td>';
                 html += '<td>' + e.keys + '</td>';
                 html += '<td>' + e.constraints + '</td>';
                 html += '<td>' + e.relationships + '</td>';

@@ -48,35 +48,35 @@ USING person_schema:1
 -- After:  company { name, address_street, address_city }
 FLATTEN person.employment.company.address
 -- Rename prefixed attributes back to clean names
-RENAME ATTRIBUTE address_street TO street IN company
-RENAME ATTRIBUTE address_city TO city IN company
+RENAME PROPERTY address_street TO street IN company
+RENAME PROPERTY address_city TO city IN company
 -- Result: company { name, street, city }
 
 -- ============================================
 -- Phase 2: Internationalize — rename name sub-fields
 -- ============================================
-RENAME ATTRIBUTE vorname TO first_name IN name
-RENAME ATTRIBUTE nachname TO last_name IN name
+RENAME PROPERTY vorname TO first_name IN name
+RENAME PROPERTY nachname TO last_name IN name
 -- Result: name { first_name, last_name }
 
 -- ============================================
 -- Phase 3: Type correction
 -- age was stored as String in MongoDB V1, now Integer
 -- ============================================
-CAST ATTRIBUTE person.age TO Integer
+CAST PROPERTY person.age TO Integer
 
 -- ============================================
 -- Phase 4: Add new fields
 -- ============================================
-ADD ATTRIBUTE email TO person WITH TYPE String
-ADD ATTRIBUTE country TO address WITH TYPE String
-ADD ATTRIBUTE start_date TO employment WITH TYPE String
+ADD PROPERTY email TO person WITH TYPE String
+ADD PROPERTY country TO address WITH TYPE String
+ADD PROPERTY start_date TO employment WITH TYPE String
 
 -- ============================================
 -- Phase 5: Business field renames
 -- ============================================
-RENAME ATTRIBUTE position TO role IN employment
-RENAME ATTRIBUTE name TO company_name IN company
+RENAME PROPERTY position TO role IN employment
+RENAME PROPERTY name TO company_name IN company
 
 -- ============================================
 -- Final Meta V2 (6 entities, max 2-level nesting):
@@ -110,7 +110,7 @@ RENAME ATTRIBUTE name TO company_name IN company
 -- ============================================
 -- Operation Summary (11 steps):
 --   FLATTEN:          1
---   RENAME ATTRIBUTE: 6
+--   RENAME PROPERTY: 6
 --   CAST:             1
---   ADD ATTRIBUTE:    3
+--   ADD PROPERTY:    3
 -- ============================================

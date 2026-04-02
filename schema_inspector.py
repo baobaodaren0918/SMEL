@@ -87,8 +87,8 @@ def _build_summary(db) -> dict:
     entities = []
 
     for name, entity in db.entity_types.items():
-        attr_count = len(entity.attributes)
-        key_count = sum(1 for a in entity.attributes if a.is_key)
+        attr_count = len(entity.properties)
+        key_count = sum(1 for a in entity.properties if a.is_key)
         constraint_count = len(entity.constraints) if hasattr(entity, 'constraints') else 0
         rel_count = len(entity.relationships) if hasattr(entity, 'relationships') else 0
 
@@ -100,7 +100,7 @@ def _build_summary(db) -> dict:
         entities.append({
             "name": name,
             "entity_kind": str(entity.entity_kind.value) if hasattr(entity.entity_kind, 'value') else str(entity.entity_kind),
-            "attributes": attr_count,
+            "properties": attr_count,
             "keys": key_count,
             "constraints": constraint_count,
             "relationships": rel_count,
@@ -108,7 +108,7 @@ def _build_summary(db) -> dict:
 
     return {
         "entity_count": len(db.entity_types),
-        "attribute_count": total_attrs,
+        "property_count": total_attrs,
         "key_count": total_keys,
         "constraint_count": total_constraints,
         "relationship_count": total_relationships,
@@ -127,8 +127,8 @@ def _build_smel_template(db_type: str) -> str:
         f"",
         f"-- Your operations here, for example:",
         f"-- RENAME_ENTITY old_name AS new_name",
-        f"-- ADD_ATTRIBUTE entity(attr_name Type)",
-        f"-- DELETE_ATTRIBUTE entity(attr_name)",
+        f"-- ADD_PROPERTY entity(attr_name Type)",
+        f"-- DELETE_PROPERTY entity(attr_name)",
         f"-- NEST entity1, entity2 AS nested_name WITH ref_name",
         f"-- FLATTEN entity(nested_name)",
     ]
@@ -240,7 +240,7 @@ def main():
         print(f"{'='*60}")
         summary = result["summary"]
         print(f"\nEntities: {summary['entity_count']}")
-        print(f"Attributes: {summary['attribute_count']}")
+        print(f"Properties: {summary['property_count']}")
         print(f"Keys: {summary['key_count']}")
         print(f"Constraints: {summary['constraint_count']}")
         print(f"Relationships: {summary['relationship_count']}")
@@ -248,7 +248,7 @@ def main():
         print(f"\n--- Entities ---")
         for e in summary["entities"]:
             print(f"  {e['name']} ({e['entity_kind']}): "
-                  f"{e['attributes']} attrs, {e['keys']} keys, "
+                  f"{e['properties']} attrs, {e['keys']} keys, "
                   f"{e['constraints']} constraints, {e['relationships']} rels")
         print(f"\n--- SMEL Template ---")
         print(result["smel_template"])

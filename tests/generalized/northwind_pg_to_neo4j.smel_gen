@@ -8,7 +8,7 @@
 --
 -- Operation Semantics:
 --   DELETE_CONSTRAINT: Remove FK constraint (prepare FK for graph edge conversion)
---   DELETE_ATTRIBUTE:  Remove FK attribute (no longer needed as graph edge replaces it)
+--   DELETE_PROPERTY:  Remove FK attribute (no longer needed as graph edge replaces it)
 --   ADD_ENTITY:        Add relationship type from source to target node (graph edge)
 --   CAST_CONSTRAINT:   Convert PK type (PRIMARY KEY -> NODE KEY for Neo4j)
 --   DELETE_PRIMARY_KEY: Remove composite PK before structural TRANSFORM
@@ -49,7 +49,7 @@ USING northwind_schema:1
 -- The reports_to FK column references employees(employee_id), creating a
 -- hierarchical self-reference. In graph model, this becomes an edge.
 DELETE CONSTRAINT employees.reports_to
-DELETE ATTRIBUTE employees.reports_to
+DELETE PROPERTY employees.reports_to
 ADD ENTITY REPORTS_TO FROM employees TO employees
 -- Result:
 -- employees: { employee_id [PK], last_name, first_name, title, birth_date, hire_date, phone, notes, street, city, region, postal_code, country }
@@ -60,7 +60,7 @@ ADD ENTITY REPORTS_TO FROM employees TO employees
 -- ============================================
 -- supplier_id FK becomes a SUPPLIES edge from suppliers to products.
 DELETE CONSTRAINT products.supplier_id
-DELETE ATTRIBUTE products.supplier_id
+DELETE PROPERTY products.supplier_id
 ADD ENTITY SUPPLIES FROM suppliers TO products
 -- Result:
 -- products: { product_id [PK], product_name, unit_price, units_in_stock, discontinued, quantity_per_unit, category_id }
@@ -71,7 +71,7 @@ ADD ENTITY SUPPLIES FROM suppliers TO products
 -- ============================================
 -- category_id FK becomes a PART_OF edge from products to categories.
 DELETE CONSTRAINT products.category_id
-DELETE ATTRIBUTE products.category_id
+DELETE PROPERTY products.category_id
 ADD ENTITY PART_OF FROM products TO categories
 -- Result:
 -- products: { product_id [PK], product_name, unit_price, units_in_stock, discontinued, quantity_per_unit }
@@ -82,7 +82,7 @@ ADD ENTITY PART_OF FROM products TO categories
 -- ============================================
 -- customer_id FK becomes a PURCHASED edge from customers to orders.
 DELETE CONSTRAINT orders.customer_id
-DELETE ATTRIBUTE orders.customer_id
+DELETE PROPERTY orders.customer_id
 ADD ENTITY PURCHASED FROM customers TO orders
 -- Result:
 -- orders: { order_id [PK], order_date, required_date, shipped_date, freight, ship_name, ship_address, ship_city, ship_region, ship_postal_code, ship_country, employee_id, shipper_id }
@@ -93,7 +93,7 @@ ADD ENTITY PURCHASED FROM customers TO orders
 -- ============================================
 -- employee_id FK becomes a SOLD edge from employees to orders.
 DELETE CONSTRAINT orders.employee_id
-DELETE ATTRIBUTE orders.employee_id
+DELETE PROPERTY orders.employee_id
 ADD ENTITY SOLD FROM employees TO orders
 -- Result:
 -- orders: { order_id [PK], order_date, required_date, shipped_date, freight, ship_name, ship_address, ship_city, ship_region, ship_postal_code, ship_country, shipper_id }
@@ -104,7 +104,7 @@ ADD ENTITY SOLD FROM employees TO orders
 -- ============================================
 -- shipper_id FK becomes a SHIPPED_VIA edge from orders to shippers.
 DELETE CONSTRAINT orders.shipper_id
-DELETE ATTRIBUTE orders.shipper_id
+DELETE PROPERTY orders.shipper_id
 ADD ENTITY SHIPPED_VIA FROM orders TO shippers
 -- Result:
 -- orders: { order_id [PK], order_date, required_date, shipped_date, freight, ship_name, ship_address, ship_city, ship_region, ship_postal_code, ship_country }
@@ -120,8 +120,8 @@ ADD ENTITY SHIPPED_VIA FROM orders TO shippers
 DELETE CONSTRAINT order_details.order_id
 DELETE CONSTRAINT order_details.product_id
 DELETE PRIMARY KEY (order_id, product_id) FROM order_details
-DELETE ATTRIBUTE order_details.order_id
-DELETE ATTRIBUTE order_details.product_id
+DELETE PROPERTY order_details.order_id
+DELETE PROPERTY order_details.product_id
 TRANSFORM order_details INTO RELATIONSHIP FROM orders TO products
 RENAME ENTITY order_details TO CONTAINS
 -- Result:
@@ -165,7 +165,7 @@ CAST CONSTRAINT orders.order_id TO NODE KEY
 
 -- ============================================
 -- Operation Summary (32 steps, 8 operation types):
---   DELETE_CONSTRAINT:  8    DELETE_ATTRIBUTE:  8
+--   DELETE_CONSTRAINT:  8    DELETE_PROPERTY:  8
 --   ADD_ENTITY:         6    DELETE_PRIMARY_KEY: 1
 --   TRANSFORM:          1    RENAME_ENTITY:     1
 --   CAST_CONSTRAINT:    7

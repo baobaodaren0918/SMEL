@@ -1,6 +1,6 @@
 """
 MongoDB Adapter - Parse MongoDB JSON Schema to Unified Meta Schema.
-Converts MongoDB JSON Schema (with bsonType) to Database/EntityType/Attribute objects.
+Converts MongoDB JSON Schema (with bsonType) to Database/EntityType/Property objects.
 
 This adapter provides bidirectional conversion:
   - parse(): MongoDB JSON Schema -> Unified Meta Schema
@@ -17,7 +17,7 @@ Data Flow:
 import json
 from typing import Dict, Any, Optional, List
 from ..unified_meta_schema import (
-    Database, DatabaseType, EntityType, EntityKind, Attribute,
+    Database, DatabaseType, EntityType, EntityKind, Property,
     UniqueConstraint, UniqueProperty, PKTypeEnum,
     Embedded, Cardinality, PrimitiveDataType, PrimitiveType,
     ListDataType, SetDataType, MapDataType,
@@ -65,10 +65,10 @@ class MongoDBAdapter:
                 entity_types={
                     "person": EntityType(
                         object_name=["person"],
-                        attributes=[
-                            Attribute("_id", OBJECT_ID, is_key=True),
-                            Attribute("name", STRING),
-                            Attribute("age", INTEGER)
+                        properties=[
+                            Property("_id", OBJECT_ID, is_key=True),
+                            Property("name", STRING),
+                            Property("age", INTEGER)
                         ]
                     )
                 }
@@ -138,7 +138,7 @@ class MongoDBAdapter:
                 # Example 1 (object array): { "items": [{"name": "a"}, {"name": "b"}] }
                 #   -> Creates Embedded with Cardinality.ONE_TO_MANY
                 # Example 2 (primitive array): { "tags": ["tag1", "tag2"] }
-                #   -> Creates Attribute with ListDataType
+                #   -> Creates Property with ListDataType
                 items = prop_schema.get('items', {})
                 items_type = items.get('bsonType') or items.get('type', 'string')
 
@@ -160,26 +160,26 @@ class MongoDBAdapter:
                 else:
                     # Array of primitives - use ListDataType to preserve array semantics
                     # Example: { "tags": { "bsonType": "array", "items": { "bsonType": "string" } } }
-                    #   -> Attribute("tags", ListDataType(element_type=PrimitiveDataType(STRING)))
+                    #   -> Property("tags", ListDataType(element_type=PrimitiveDataType(STRING)))
                     element_type = self._parse_primitive_type(items_type, items)
-                    attr = Attribute(
+                    attr = Property(
                         attr_name=prop_name_lower,
                         data_type=ListDataType(element_type=element_type),
                         is_key=False,
                         is_optional=not is_required
                     )
-                    entity.add_attribute(attr)
+                    entity.add_property(attr)
 
             else:
                 # Primitive type
                 is_key = prop_name == '_id'
-                attr = Attribute(
+                attr = Property(
                     attr_name=prop_name_lower,
                     data_type=self._parse_primitive_type(bson_type, prop_schema),
                     is_key=is_key,
                     is_optional=not is_required and not is_key
                 )
-                entity.add_attribute(attr)
+                entity.add_property(attr)
 
                 # Add primary key if _id
                 if is_key:
@@ -257,8 +257,8 @@ class MongoDBAdapter:
                     "target": rt.target_entity,
                     "cardinality": rt.cardinality.value if rt.cardinality else "0..n"
                 }
-                if rt.attributes:
-                    rt_dict["properties"] = [attr.attr_name for attr in rt.attributes]
+                if rt.properties:
+                    rt_dict["properties"] = [attr.attr_name for attr in rt.properties]
                 rel_types_meta[rt_name] = rt_dict
             schema["_relationship_types"] = rel_types_meta
 
@@ -306,14 +306,14 @@ class MongoDBAdapter:
             schema["title"] = entity.name.replace('_', ' ')
             schema["description"] = f"MongoDB document schema for {entity.name}"
 
-        # Process attributes
-        for attr in entity.attributes:
+        # Process properties
+        for attr in entity.properties:
             prop_name = attr.attr_name
             # Convert _id for root document
             if is_root and attr.is_key and prop_name != '_id':
                 prop_name = '_id'
 
-            prop_schema = cls._export_attribute_to_property(attr)
+            prop_schema = cls._export_property_to_bson_type(attr)
             schema["properties"][prop_name] = prop_schema
 
             if not attr.is_optional:
@@ -348,20 +348,20 @@ class MongoDBAdapter:
         return schema
 
     @classmethod
-    def _export_attribute_to_property(cls, attr: Attribute) -> Dict[str, Any]:
+    def _export_property_to_bson_type(cls, attr: Property) -> Dict[str, Any]:
         """
-        Export an attribute to MongoDB property schema.
+        Export a property to MongoDB BSON type schema.
 
         Example 1 - Primitive type:
-            Input:  Attribute("name", PrimitiveDataType(STRING))
+            Input:  Property("name", PrimitiveDataType(STRING))
             Output: {"bsonType": "string"}
 
         Example 2 - Array type:
-            Input:  Attribute("tags", ListDataType(element_type=PrimitiveDataType(STRING)))
+            Input:  Property("tags", ListDataType(element_type=PrimitiveDataType(STRING)))
             Output: {"bsonType": "array", "items": {"bsonType": "string"}}
 
         Example 3 - ObjectId type:
-            Input:  Attribute("_id", PrimitiveDataType(OBJECT_ID))
+            Input:  Property("_id", PrimitiveDataType(OBJECT_ID))
             Output: {"bsonType": "objectId"}
         """
         data_type = attr.data_type
@@ -468,11 +468,11 @@ class MongoDBAdapter:
 #   database.entity_types = {
 #       "person": EntityType(
 #           object_name=["person"],
-#           attributes=[
-#               Attribute("_id", PrimitiveType.OBJECT_ID, is_key=True),
-#               Attribute("name", PrimitiveType.STRING),
-#               Attribute("age", PrimitiveType.INTEGER),
-#               Attribute("tags", ListDataType(element_type=PrimitiveDataType(STRING)))
+#           properties=[
+#               Property("_id", PrimitiveType.OBJECT_ID, is_key=True),
+#               Property("name", PrimitiveType.STRING),
+#               Property("age", PrimitiveType.INTEGER),
+#               Property("tags", ListDataType(element_type=PrimitiveDataType(STRING)))
 #           ],
 #           relationships=[
 #               Embedded(aggr_name="address", aggregates="person.address", cardinality=ZERO_TO_ONE)
@@ -480,9 +480,9 @@ class MongoDBAdapter:
 #       ),
 #       "person.address": EntityType(
 #           object_name=["person", "address"],  # from André Conrad
-#           attributes=[
-#               Attribute("street", PrimitiveType.STRING),
-#               Attribute("city", PrimitiveType.STRING)
+#           properties=[
+#               Property("street", PrimitiveType.STRING),
+#               Property("city", PrimitiveType.STRING)
 #           ]
 #       )
 #   }

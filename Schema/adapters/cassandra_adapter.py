@@ -1,6 +1,6 @@
 """
 Cassandra Adapter - Parse CQL DDL to Unified Meta Schema.
-Converts CREATE TABLE statements to Database/EntityType/Attribute objects.
+Converts CREATE TABLE statements to Database/EntityType/Property objects.
 
 This adapter provides bidirectional conversion:
   - parse(): Cassandra CQL DDL (CREATE TABLE) -> Unified Meta Schema
@@ -26,7 +26,7 @@ Design: from Andre Conrad
 import re
 from typing import Dict, List, Optional, Tuple
 from ..unified_meta_schema import (
-    Database, DatabaseType, EntityType, EntityKind, Attribute,
+    Database, DatabaseType, EntityType, EntityKind, Property,
     UniqueConstraint, UniqueProperty, PKTypeEnum,
     PrimitiveDataType, PrimitiveType, Cardinality, TypeMappings
 )
@@ -90,10 +90,10 @@ class CassandraAdapter:
                     "users": EntityType(
                         object_name=["users"],
                         entity_kind=EntityKind.WIDE_COLUMN_TABLE,
-                        attributes=[
-                            Attribute("user_id", UUID, is_key=True),
-                            Attribute("name", STRING),
-                            Attribute("email", STRING)
+                        properties=[
+                            Property("user_id", UUID, is_key=True),
+                            Property("name", STRING),
+                            Property("email", STRING)
                         ],
                         constraints=[UniqueConstraint(
                             is_primary_key=True,
@@ -105,7 +105,7 @@ class CassandraAdapter:
                     "user_activity": EntityType(
                         object_name=["user_activity"],
                         entity_kind=EntityKind.WIDE_COLUMN_TABLE,
-                        attributes=[...],
+                        properties=[...],
                         constraints=[UniqueConstraint(
                             is_primary_key=True,
                             unique_properties=[
@@ -185,10 +185,10 @@ class CassandraAdapter:
             -> EntityType(
                  object_name=["users"],
                  entity_kind=EntityKind.WIDE_COLUMN_TABLE,
-                 attributes=[
-                     Attribute("user_id", UUID, is_key=True),
-                     Attribute("name", STRING),
-                     Attribute("email", STRING)
+                 properties=[
+                     Property("user_id", UUID, is_key=True),
+                     Property("name", STRING),
+                     Property("email", STRING)
                  ],
                  constraints=[UniqueConstraint(is_primary_key=True, ...)]
                )
@@ -222,7 +222,7 @@ class CassandraAdapter:
             # Parse column definition
             attr, is_inline_pk = self._parse_column(col_def)
             if attr:
-                entity.add_attribute(attr)
+                entity.add_property(attr)
                 if is_inline_pk:
                     inline_pk_col = attr.attr_name
 
@@ -235,7 +235,7 @@ class CassandraAdapter:
         elif inline_pk_col:
             # Inline PRIMARY KEY (single column)
             # e.g., "user_id UUID PRIMARY KEY"
-            attr = entity.get_attribute(inline_pk_col)
+            attr = entity.get_property(inline_pk_col)
             if attr:
                 attr.is_key = True
                 constraint = UniqueConstraint(
@@ -284,7 +284,7 @@ class CassandraAdapter:
 
         return result
 
-    def _parse_column(self, col_def: str) -> Tuple[Optional[Attribute], bool]:
+    def _parse_column(self, col_def: str) -> Tuple[Optional[Property], bool]:
         """
         Parse a single column definition.
 
@@ -292,11 +292,11 @@ class CassandraAdapter:
             "user_id UUID PRIMARY KEY"
 
         Example Output:
-            Attribute("user_id", UUID, is_key=True)
+            Property("user_id", UUID, is_key=True)
             is_inline_pk = True
 
         Returns:
-            (Attribute, is_inline_pk) where is_inline_pk indicates inline PRIMARY KEY
+            (Property, is_inline_pk) where is_inline_pk indicates inline PRIMARY KEY
         """
         # Normalize whitespace (handle multi-line definitions)
         col_def = ' '.join(col_def.split())
@@ -322,7 +322,7 @@ class CassandraAdapter:
         data_type = self._parse_data_type(col_type)
 
         # is_key will be set later when building the PK constraint
-        attr = Attribute(
+        attr = Property(
             attr_name=col_name,
             data_type=data_type,
             is_key=is_inline_pk,
@@ -416,7 +416,7 @@ class CassandraAdapter:
 
         # Add partition key columns
         for col_name in partition_cols:
-            attr = entity.get_attribute(col_name)
+            attr = entity.get_property(col_name)
             if attr:
                 attr.is_key = True
                 attr.is_optional = False
@@ -427,7 +427,7 @@ class CassandraAdapter:
 
         # Add clustering key columns
         for col_name in clustering_cols:
-            attr = entity.get_attribute(col_name)
+            attr = entity.get_property(col_name)
             if attr:
                 attr.is_key = True
                 attr.is_optional = False
@@ -534,9 +534,9 @@ class CassandraAdapter:
 
         columns = []
 
-        # Process attributes -> column definitions
-        for attr in entity.attributes:
-            col_def = cls._export_attribute_to_column(attr)
+        # Process properties -> column definitions
+        for attr in entity.properties:
+            col_def = cls._export_property_to_column(attr)
             columns.append(f"    {col_def}")
 
         # Build PRIMARY KEY clause
@@ -550,9 +550,9 @@ class CassandraAdapter:
         return "\n".join(lines)
 
     @classmethod
-    def _export_attribute_to_column(cls, attr: Attribute) -> str:
+    def _export_property_to_column(cls, attr: Property) -> str:
         """
-        Export an attribute to CQL column definition.
+        Export a property to CQL column definition.
 
         Examples:
             "user_id UUID"
@@ -563,9 +563,9 @@ class CassandraAdapter:
         return f"{attr.attr_name} {cql_type}"
 
     @classmethod
-    def _get_cql_type(cls, attr: Attribute) -> str:
+    def _get_cql_type(cls, attr: Property) -> str:
         """
-        Get CQL type string from attribute.
+        Get CQL type string from property.
 
         Examples:
             PrimitiveType.STRING    -> "TEXT"
@@ -585,8 +585,8 @@ class CassandraAdapter:
         Build PRIMARY KEY clause from entity constraints.
 
         Logic:
-            1. Find PARTITION key attributes (UniqueProperty with PKTypeEnum.PARTITION)
-            2. Find CLUSTERING key attributes (UniqueProperty with PKTypeEnum.CLUSTERING)
+            1. Find PARTITION key properties (UniqueProperty with PKTypeEnum.PARTITION)
+            2. Find CLUSTERING key properties (UniqueProperty with PKTypeEnum.CLUSTERING)
             3. Build PRIMARY KEY clause:
                - Only partition keys: PRIMARY KEY (col1, col2)
                - Partition + clustering: PRIMARY KEY ((partition_cols), clustering_cols)
@@ -608,7 +608,7 @@ class CassandraAdapter:
         clustering_cols = []
 
         for up in pk_constraint.unique_properties:
-            attr = entity.get_attribute_by_id(up.property_id)
+            attr = entity.get_property_by_id(up.property_id)
             if not attr:
                 continue
 
@@ -690,10 +690,10 @@ class CassandraAdapter:
 #       "users": EntityType(
 #           object_name=["users"],
 #           entity_kind=EntityKind.WIDE_COLUMN_TABLE,
-#           attributes=[
-#               Attribute("user_id", UUID, is_key=True),
-#               Attribute("name", STRING, is_optional=True),
-#               Attribute("email", STRING, is_optional=True)
+#           properties=[
+#               Property("user_id", UUID, is_key=True),
+#               Property("name", STRING, is_optional=True),
+#               Property("email", STRING, is_optional=True)
 #           ],
 #           constraints=[UniqueConstraint(
 #               is_primary_key=True,
@@ -705,11 +705,11 @@ class CassandraAdapter:
 #       "user_activity": EntityType(
 #           object_name=["user_activity"],
 #           entity_kind=EntityKind.WIDE_COLUMN_TABLE,
-#           attributes=[
-#               Attribute("user_id", UUID, is_key=True),
-#               Attribute("activity_time", TIMESTAMP, is_key=True),
-#               Attribute("action", STRING),
-#               Attribute("details", STRING)
+#           properties=[
+#               Property("user_id", UUID, is_key=True),
+#               Property("activity_time", TIMESTAMP, is_key=True),
+#               Property("action", STRING),
+#               Property("details", STRING)
 #           ],
 #           constraints=[UniqueConstraint(
 #               is_primary_key=True,

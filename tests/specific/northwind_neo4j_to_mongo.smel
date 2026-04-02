@@ -9,11 +9,11 @@
 -- Operation Semantics:
 --   TRANSFORM:        Convert relationship to entity (or vice versa)
 --   RENAME_ENTITY:    Rename an entity
---   ADD_ATTRIBUTE:    Add new attribute to entity
+--   ADD_PROPERTY:    Add new attribute to entity
 --   DELETE_ENTITY:    Remove relationship type
 --   UNFLATTEN:        Combine flat fields into nested object
 --   NEST:             Embed separate entity into parent as nested object
---   RENAME_ATTRIBUTE: Rename a field within an entity
+--   RENAME_PROPERTY: Rename a field within an entity
 -- Note: Neo4j source already uses lowercase entity names (categories, suppliers, etc.)
 
 MIGRATION northwind_neo4j_to_mongo:1.0
@@ -65,8 +65,8 @@ USING northwind_schema:1
 -- Then rename from relationship name to table name, add FK columns.
 TRANSFORM CONTAINS INTO ENTITY
 RENAME_ENTITY CONTAINS TO order_details
-ADD_ATTRIBUTE order_id TO order_details WITH TYPE String
-ADD_ATTRIBUTE product_id TO order_details WITH TYPE String
+ADD_PROPERTY order_id TO order_details WITH TYPE String
+ADD_PROPERTY product_id TO order_details WITH TYPE String
 -- Result:
 -- order_details: { order_id, product_id, unit_price, quantity, discount }
 
@@ -75,22 +75,22 @@ ADD_ATTRIBUTE product_id TO order_details WITH TYPE String
 -- ============================================
 -- REPORTS_TO -> add reports_to field to employees (self-reference)
 DELETE_ENTITY REPORTS_TO
-ADD_ATTRIBUTE reports_to TO employees WITH TYPE String
+ADD_PROPERTY reports_to TO employees WITH TYPE String
 -- SUPPLIES -> add supplier_id to products
 DELETE_ENTITY SUPPLIES
-ADD_ATTRIBUTE supplier_id TO products WITH TYPE String
+ADD_PROPERTY supplier_id TO products WITH TYPE String
 -- PART_OF -> add category_id to products
 DELETE_ENTITY PART_OF
-ADD_ATTRIBUTE category_id TO products WITH TYPE String
+ADD_PROPERTY category_id TO products WITH TYPE String
 -- PURCHASED -> add customer_id to orders
 DELETE_ENTITY PURCHASED
-ADD_ATTRIBUTE customer_id TO orders WITH TYPE String
+ADD_PROPERTY customer_id TO orders WITH TYPE String
 -- SOLD -> add employee_id to orders
 DELETE_ENTITY SOLD
-ADD_ATTRIBUTE employee_id TO orders WITH TYPE String
+ADD_PROPERTY employee_id TO orders WITH TYPE String
 -- SHIPPED_VIA -> add shipper_id to orders
 DELETE_ENTITY SHIPPED_VIA
-ADD_ATTRIBUTE shipper_id TO orders WITH TYPE String
+ADD_PROPERTY shipper_id TO orders WITH TYPE String
 -- Result:
 -- employees: { ..., reports_to }
 -- products: { ..., supplier_id, category_id }
@@ -177,7 +177,7 @@ NEST order_details:unit_price, quantity, discount, product{product_name, unit_pr
 -- ============================================
 -- Step 11: Rename PK for MongoDB convention
 -- ============================================
-RENAME_ATTRIBUTE order_id TO _id IN orders
+RENAME_PROPERTY order_id TO _id IN orders
 CAST_CONSTRAINT orders._id TO DOCUMENT_ID
 -- Final Result:
 -- orders: {
@@ -201,7 +201,7 @@ CAST_CONSTRAINT orders._id TO DOCUMENT_ID
 -- ============================================
 -- Operation Summary (28 steps, 8 operation types):
 --   TRANSFORM:         1    RENAME_ENTITY:     1
---   ADD_ATTRIBUTE:      8    DELETE_ENTITY:     6
+--   ADD_PROPERTY:      8    DELETE_ENTITY:     6
 --   UNFLATTEN:          3    NEST:              7
---   RENAME_ATTRIBUTE:   1    CAST_CONSTRAINT:   1
+--   RENAME_PROPERTY:   1    CAST_CONSTRAINT:   1
 -- ============================================

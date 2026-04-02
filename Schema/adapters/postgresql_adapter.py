@@ -1,6 +1,6 @@
 """
 PostgreSQL Adapter - Parse SQL DDL to Unified Meta Schema.
-Converts CREATE TABLE statements to Database/EntityType/Attribute objects.
+Converts CREATE TABLE statements to Database/EntityType/Property objects.
 
 This adapter provides bidirectional conversion:
   - parse(): PostgreSQL DDL (CREATE TABLE) -> Unified Meta Schema
@@ -19,7 +19,7 @@ Design: from André Conrad
 import re
 from typing import Dict, List, Optional, Tuple
 from ..unified_meta_schema import (
-    Database, DatabaseType, EntityType, EntityKind, Attribute,
+    Database, DatabaseType, EntityType, EntityKind, Property,
     UniqueConstraint, ForeignKeyConstraint, UniqueProperty, ForeignKeyProperty, PKTypeEnum,
     Reference, Cardinality, PrimitiveDataType, PrimitiveType,
     ListDataType, SetDataType, MapDataType,
@@ -84,15 +84,15 @@ class PostgreSQLAdapter:
                 entity_types={
                     "person": EntityType(
                         object_name=["person"],
-                        attributes=[
-                            Attribute("id", INTEGER, is_key=True),
-                            Attribute("name", STRING(100)),
-                            Attribute("email", STRING(255))
+                        properties=[
+                            Property("id", INTEGER, is_key=True),
+                            Property("name", STRING(100)),
+                            Property("email", STRING(255))
                         ]
                     ),
                     "address": EntityType(
                         object_name=["address"],
-                        attributes=[...],
+                        properties=[...],
                         relationships=[Reference("person_id" -> "person")]
                     )
                 }
@@ -163,9 +163,9 @@ class PostgreSQLAdapter:
 
             -> EntityType(
                  object_name=["person"],
-                 attributes=[
-                     Attribute("id", INTEGER, is_key=True),
-                     Attribute("name", STRING(100), is_optional=False)
+                 properties=[
+                     Property("id", INTEGER, is_key=True),
+                     Property("name", STRING(100), is_optional=False)
                  ],
                  constraints=[UniqueConstraint(is_primary_key=True, ...)]
                )
@@ -192,7 +192,7 @@ class PostgreSQLAdapter:
             # Parse column definition
             attr, ref_info = self._parse_column(col_def)
             if attr:
-                entity.add_attribute(attr)
+                entity.add_property(attr)
 
                 # Handle inline PRIMARY KEY constraint
                 # e.g., "id SERIAL PRIMARY KEY"
@@ -220,7 +220,7 @@ class PostgreSQLAdapter:
                     pk_col_names = [c.strip() for c in pk_match.group(1).split(',')]
                     unique_props = []
                     for col_name in pk_col_names:
-                        attr = entity.get_attribute(col_name)
+                        attr = entity.get_property(col_name)
                         if attr:
                             attr.is_key = True
                             unique_props.append(UniqueProperty(
@@ -238,7 +238,7 @@ class PostgreSQLAdapter:
         # Auto-create primary key constraint for SERIAL columns
         # (SERIAL implies PRIMARY KEY even without explicit declaration)
         if not entity.get_primary_key():
-            for attr in entity.attributes:
+            for attr in entity.properties:
                 if attr.is_key:
                     constraint = UniqueConstraint(
                         is_primary_key=True,
@@ -284,7 +284,7 @@ class PostgreSQLAdapter:
 
         return result
 
-    def _parse_column(self, col_def: str) -> Tuple[Optional[Attribute], Optional[Tuple[str, str]]]:
+    def _parse_column(self, col_def: str) -> Tuple[Optional[Property], Optional[Tuple[str, str]]]:
         """
         Parse a single column definition.
 
@@ -292,11 +292,11 @@ class PostgreSQLAdapter:
             "person_id INTEGER NOT NULL REFERENCES person(id)"
 
         Example Output:
-            Attribute("person_id", INTEGER, is_key=False, is_optional=False)
+            Property("person_id", INTEGER, is_key=False, is_optional=False)
             ref_info = ("person_id", "person")
 
         Returns:
-            (Attribute, ref_info) where ref_info is (fk_column, target_table) or None
+            (Property, ref_info) where ref_info is (fk_column, target_table) or None
         """
         # Normalize whitespace (handle multi-line definitions)
         col_def = ' '.join(col_def.split())
@@ -323,7 +323,7 @@ class PostgreSQLAdapter:
         # is_optional: NOT NULL not present AND not a primary key
         is_optional = 'NOT NULL' not in constraints.upper() and not is_key
 
-        attr = Attribute(
+        attr = Property(
             attr_name=col_name,
             data_type=data_type,
             is_key=is_key,
@@ -389,8 +389,8 @@ class PostgreSQLAdapter:
             target = self.database.get_entity_type(target_name)
 
             if entity and target:
-                # Get FK column's is_optional from attribute
-                attr = entity.get_attribute(ref_name)
+                # Get FK column's is_optional from property
+                attr = entity.get_property(ref_name)
                 is_optional = attr.is_optional if attr else True
 
                 # Determine cardinality from SQL structure:
@@ -584,15 +584,15 @@ class PostgreSQLAdapter:
         pk_columns = []
         if pk_constraint and pk_constraint.unique_properties:
             for up in pk_constraint.unique_properties:
-                pk_attr = entity.get_attribute_by_id(up.property_id)
+                pk_attr = entity.get_property_by_id(up.property_id)
                 if pk_attr:
                     pk_columns.append(pk_attr.attr_name)
 
         is_composite_pk = len(pk_columns) > 1
 
-        # Process attributes -> columns
-        for attr in entity.attributes:
-            col_def = cls._export_attribute_to_column(attr, fk_refs.get(attr.attr_name), database, is_composite_pk)
+        # Process properties -> columns
+        for attr in entity.properties:
+            col_def = cls._export_property_to_column(attr, fk_refs.get(attr.attr_name), database, is_composite_pk)
             columns.append(f"    {col_def}")
 
         # Add composite PRIMARY KEY constraint if needed
@@ -607,9 +607,9 @@ class PostgreSQLAdapter:
         return "\n".join(lines)
 
     @classmethod
-    def _export_attribute_to_column(cls, attr: Attribute, fk_ref: Reference = None, database: Database = None, is_composite_pk: bool = False) -> str:
+    def _export_property_to_column(cls, attr: Property, fk_ref: Reference = None, database: Database = None, is_composite_pk: bool = False) -> str:
         """
-        Export an attribute to column definition.
+        Export a property to column definition.
 
         Examples:
             Single PK:    "id SERIAL PRIMARY KEY"
@@ -643,9 +643,9 @@ class PostgreSQLAdapter:
         return " ".join(parts)
 
     @classmethod
-    def _get_sql_type(cls, attr: Attribute) -> str:
+    def _get_sql_type(cls, attr: Property) -> str:
         """
-        Get SQL type string from attribute.
+        Get SQL type string from property.
 
         Examples:
             STRING with max_length=100  -> "VARCHAR(100)"
@@ -702,8 +702,8 @@ class PostgreSQLAdapter:
             if target_entity:
                 pk = target_entity.get_primary_key()
                 if pk and pk.unique_properties:
-                    # Use property_id to look up the attribute
-                    pk_attr = target_entity.get_attribute_by_id(pk.unique_properties[0].property_id)
+                    # Use property_id to look up the property
+                    pk_attr = target_entity.get_property_by_id(pk.unique_properties[0].property_id)
                     if pk_attr:
                         return pk_attr.attr_name
 
@@ -762,20 +762,20 @@ class PostgreSQLAdapter:
 #   database.entity_types = {
 #       "person": EntityType(
 #           object_name=["person"],
-#           attributes=[
-#               Attribute("id", INTEGER, is_key=True),
-#               Attribute("name", STRING(100), is_optional=False),
-#               Attribute("email", STRING(255), is_optional=True)
+#           properties=[
+#               Property("id", INTEGER, is_key=True),
+#               Property("name", STRING(100), is_optional=False),
+#               Property("email", STRING(255), is_optional=True)
 #           ],
 #           constraints=[UniqueConstraint(is_primary_key=True, ...)]
 #       ),
 #       "address": EntityType(
 #           object_name=["address"],
-#           attributes=[
-#               Attribute("id", INTEGER, is_key=True),
-#               Attribute("street", STRING(200)),
-#               Attribute("city", STRING(100)),
-#               Attribute("person_id", INTEGER, is_optional=False)
+#           properties=[
+#               Property("id", INTEGER, is_key=True),
+#               Property("street", STRING(200)),
+#               Property("city", STRING(100)),
+#               Property("person_id", INTEGER, is_optional=False)
 #           ],
 #           relationships=[Reference("person_id" -> "person")]
 #       )
@@ -822,9 +822,9 @@ class PostgreSQLAdapter:
 #
 # person_knows = EntityType(
 #     object_name=["person_knows"],
-#     attributes=[
-#         Attribute("person_id", STRING, is_key=True),
-#         Attribute("knows_person_id", STRING, is_key=True)
+#     properties=[
+#         Property("person_id", STRING, is_key=True),
+#         Property("knows_person_id", STRING, is_key=True)
 #     ],
 #     constraints=[UniqueConstraint(
 #         is_primary_key=True,

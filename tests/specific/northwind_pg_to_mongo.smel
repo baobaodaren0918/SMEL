@@ -132,8 +132,8 @@ NEST order_details:unit_price, quantity, discount, product{product_name, unit_pr
 -- ============================================
 -- Step 9: Rename PK for MongoDB convention
 -- ============================================
--- Reverse of: RENAME_ATTRIBUTE _id TO order_id IN orders
-RENAME_ATTRIBUTE order_id TO _id IN orders
+-- Reverse of: RENAME_PROPERTY _id TO order_id IN orders
+RENAME_PROPERTY order_id TO _id IN orders
 CAST_CONSTRAINT orders._id TO DOCUMENT_ID
 -- Final Result:
 -- orders: {
@@ -159,6 +159,6 @@ CAST_CONSTRAINT orders._id TO DOCUMENT_ID
 --   UNFLATTEN: 4       (address sub-objects for suppliers, customers, employees + ship_destination for orders)
 --   NEST: 7            (categories->products, suppliers->products, products->order_details,
 --                        shippers->orders, employees->orders, customers->orders, order_details->orders)
---   RENAME_ATTRIBUTE: 1 (order_id -> _id)
+--   RENAME_PROPERTY: 1 (order_id -> _id)
 --   CAST_CONSTRAINT: 1  (orders._id -> DOCUMENT_ID)
 -- ============================================

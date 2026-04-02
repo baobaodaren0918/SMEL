@@ -10,7 +10,7 @@
 --   DELETE_PARTITION_KEY:  Remove Cassandra partition key before restructuring
 --   DELETE_CLUSTERING_KEY: Remove Cassandra clustering key
 --   ADD_PRIMARY_KEY:       Add primary key to entity (graph node PK)
---   DELETE_ATTRIBUTE:      Remove FK-like attribute (replaced by graph edge)
+--   DELETE_PROPERTY:      Remove FK-like attribute (replaced by graph edge)
 --   ADD_ENTITY:            Add relationship type from source to target node (graph edge)
 --   TRANSFORM:             Convert entity (wide-column table) into relationship (graph edge)
 --   RENAME_ENTITY:         Rename relationship type after TRANSFORM
@@ -86,41 +86,41 @@ DELETE_PARTITION_KEY (order_id, product_id) FROM order_details
 -- ============================================
 
 -- employees self-reference: reports_to column -> REPORTS_TO relationship
-DELETE_ATTRIBUTE employees.reports_to
+DELETE_PROPERTY employees.reports_to
 ADD_ENTITY REPORTS_TO FROM employees TO employees
 -- Result:
 -- employees: { employee_id [PK], last_name, first_name, title, birth_date, hire_date, phone, notes, street, city, postal_code, country }
 -- + REPORTS_TO relationship (employees -> employees)
 
 -- products -> supplier: supplier_id column -> SUPPLIES relationship
-DELETE_ATTRIBUTE products.supplier_id
+DELETE_PROPERTY products.supplier_id
 ADD_ENTITY SUPPLIES FROM suppliers TO products
 -- Result:
 -- products: { product_id [PK], product_name, unit_price, units_in_stock, discontinued, quantity_per_unit, category_id }
 -- + SUPPLIES relationship (suppliers -> products)
 
 -- products -> category: category_id column -> PART_OF relationship
-DELETE_ATTRIBUTE products.category_id
+DELETE_PROPERTY products.category_id
 ADD_ENTITY PART_OF FROM products TO categories
 -- Result:
 -- products: { product_id [PK], product_name, unit_price, units_in_stock, discontinued, quantity_per_unit }
 
 -- orders -> customer: customer_id column -> PURCHASED relationship
-DELETE_ATTRIBUTE orders.customer_id
+DELETE_PROPERTY orders.customer_id
 ADD_ENTITY PURCHASED FROM customers TO orders
 -- Result:
 -- orders: { order_id [PK], order_date, required_date, shipped_date, freight, ship_name, ship_address, ship_city, ship_region, ship_postal_code, ship_country, employee_id, shipper_id }
 -- + PURCHASED relationship (customers -> orders)
 
 -- orders -> employee: employee_id column -> SOLD relationship
-DELETE_ATTRIBUTE orders.employee_id
+DELETE_PROPERTY orders.employee_id
 ADD_ENTITY SOLD FROM employees TO orders
 -- Result:
 -- orders: { order_id [PK], order_date, required_date, shipped_date, freight, ship_name, ship_address, ship_city, ship_region, ship_postal_code, ship_country, shipper_id }
 -- + SOLD relationship (employees -> orders)
 
 -- orders -> shipper: shipper_id column -> SHIPPED_VIA relationship
-DELETE_ATTRIBUTE orders.shipper_id
+DELETE_PROPERTY orders.shipper_id
 ADD_ENTITY SHIPPED_VIA FROM orders TO shippers
 -- Result:
 -- orders: { order_id [PK], order_date, required_date, shipped_date, freight, ship_name, ship_city }
@@ -131,8 +131,8 @@ ADD_ENTITY SHIPPED_VIA FROM orders TO shippers
 -- order_details has: order_id, product_id, unit_price, quantity, discount
 -- Remove FK-like columns, then transform entity to relationship.
 -- Remaining attributes (unit_price, quantity, discount) become relationship properties.
-DELETE_ATTRIBUTE order_details.order_id
-DELETE_ATTRIBUTE order_details.product_id
+DELETE_PROPERTY order_details.order_id
+DELETE_PROPERTY order_details.product_id
 TRANSFORM order_details INTO RELATIONSHIP FROM orders TO products
 RENAME_ENTITY order_details TO CONTAINS
 -- Result:
@@ -177,7 +177,7 @@ CAST_CONSTRAINT orders.order_id TO NODE KEY
 -- ============================================
 -- Operation Summary (30 steps, 8 operation types):
 --   DELETE_PARTITION_KEY:  3    DELETE_CLUSTERING_KEY: 3
---   ADD_PRIMARY_KEY:       2    DELETE_ATTRIBUTE:      8
+--   ADD_PRIMARY_KEY:       2    DELETE_PROPERTY:      8
 --   ADD_ENTITY(edge):      6    TRANSFORM:             1
 --   RENAME_ENTITY:         1    CAST_CONSTRAINT:       5
 --   EntityKind auto-convert: WIDE_COLUMN_TABLE -> VERTEX (all 8 entities)

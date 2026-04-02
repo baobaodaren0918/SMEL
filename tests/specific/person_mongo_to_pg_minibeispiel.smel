@@ -45,7 +45,7 @@ USING person_schema:1
 -- ============================================
 -- Step 0: Rename primary key
 -- ============================================
-RENAME_ATTRIBUTE _id TO person_id IN person
+RENAME_PROPERTY _id TO person_id IN person
 -- Result:
 -- person: { person_id, name{vorname,nachname}, age, address{street,city},
 --           employment{position,company{name,address{street,city}}}, tags[], knows[] }
@@ -106,7 +106,7 @@ ADD_CONSTRAINT company_address.company_id REFERENCES company(company_id) WITH CA
 -- ============================================
 SPLIT person INTO person:person_id, name, age, knows; person_tag:person_id, tags
 UNWIND person_tag.tags
-RENAME_ATTRIBUTE tags TO tag_value IN person_tag
+RENAME_PROPERTY tags TO tag_value IN person_tag
 ADD_PRIMARY_KEY person_tag.person_tag_id AS String
 ADD_CONSTRAINT person_tag.person_id REFERENCES person(person_id) WITH CARDINALITY ONE_TO_MANY
 -- Result:
@@ -119,7 +119,7 @@ ADD_CONSTRAINT person_tag.person_id REFERENCES person(person_id) WITH CARDINALIT
 -- ============================================
 SPLIT person INTO person:person_id, name, age; person_knows:person_id, knows
 UNWIND person_knows.knows
-RENAME_ATTRIBUTE knows TO knows_person_id IN person_knows
+RENAME_PROPERTY knows TO knows_person_id IN person_knows
 ADD_CONSTRAINT person_knows.person_id REFERENCES person(person_id) WITH CARDINALITY ONE_TO_MANY
 ADD_CONSTRAINT person_knows.knows_person_id REFERENCES person(person_id) WITH CARDINALITY ONE_TO_MANY
 ADD_PRIMARY_KEY (person_id, knows_person_id) TO person_knows
@@ -131,9 +131,9 @@ ADD_PRIMARY_KEY (person_id, knows_person_id) TO person_knows
 -- Step 7: Finalize person table
 -- ============================================
 FLATTEN person.name
-RENAME_ATTRIBUTE name_vorname TO vorname IN person
-RENAME_ATTRIBUTE name_nachname TO nachname IN person
-CAST_ATTRIBUTE person.age TO Integer
+RENAME_PROPERTY name_vorname TO vorname IN person
+RENAME_PROPERTY name_nachname TO nachname IN person
+CAST_PROPERTY person.age TO Integer
 -- Final Result (7 tables):
 -- person: { person_id, vorname, nachname, age }
 -- address: { address_id, person_id, street, city }

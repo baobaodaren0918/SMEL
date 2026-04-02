@@ -1,0 +1,154 @@
+<mxfile host="app.diagrams.net" modified="2026-03-12" agent="Claude" version="24.0.0" type="device">
+  <diagram name="SMILE Overview" id="smel-overview">
+    <mxGraphModel dx="900" dy="700" grid="0" gridSize="5" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="0" pageScale="1" pageWidth="700" pageHeight="500" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- ===== Windows-style Title Bar ===== -->
+        <mxCell id="2" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#0078D4;strokeColor=#005A9E;strokeWidth=1;" vertex="1" parent="1">
+          <mxGeometry x="580" y="300" width="462" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="3" value="SMILE — High-level Overview" style="text;html=1;fontSize=9;fontStyle=1;align=left;fontColor=#FFFFFF;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="586" y="300" width="300" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="4" value="—" style="text;html=1;fontSize=9;align=center;fontColor=#FFFFFF;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1000" y="300" width="20" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="5" value="☐" style="text;html=1;fontSize=9;align=center;fontColor=#FFFFFF;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1020" y="300" width="20" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="6" value="✕" style="text;html=1;fontSize=9;align=center;fontColor=#FFFFFF;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="1020" y="300" width="22" height="22" as="geometry" />
+        </mxCell>
+
+        <!-- Window body (white) -->
+        <mxCell id="7" value="" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#FFFFFF;strokeColor=#005A9E;strokeWidth=1;" vertex="1" parent="1">
+          <mxGeometry x="580" y="322" width="462" height="250" as="geometry" />
+        </mxCell>
+
+        <!-- ===== Source background region ===== -->
+        <mxCell id="8" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#EBF3FB;strokeColor=#6c8ebf;strokeWidth=1;dashed=0;opacity=40;" vertex="1" parent="1">
+          <mxGeometry x="592" y="328" width="96" height="238" as="geometry" />
+        </mxCell>
+        <mxCell id="9" value="Source" style="text;html=1;fontSize=9;fontStyle=1;align=center;fontColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="592" y="332" width="96" height="14" as="geometry" />
+        </mxCell>
+
+        <!-- ===== Target background region ===== -->
+        <mxCell id="10" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FDECE8;strokeColor=#c0674f;strokeWidth=1;dashed=0;opacity=40;" vertex="1" parent="1">
+          <mxGeometry x="932" y="328" width="96" height="238" as="geometry" />
+        </mxCell>
+        <mxCell id="11" value="Target" style="text;html=1;fontSize=9;fontStyle=1;align=center;fontColor=#c0674f;" vertex="1" parent="1">
+          <mxGeometry x="932" y="332" width="96" height="14" as="geometry" />
+        </mxCell>
+
+        <!-- ===== Source cylinders (48px spacing) ===== -->
+        <mxCell id="12" value="PostgreSQL" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=8;fontStyle=1;size=5;" vertex="1" parent="1">
+          <mxGeometry x="601" y="354" width="78" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="13" value="MongoDB" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=8;fontStyle=1;size=5;" vertex="1" parent="1">
+          <mxGeometry x="601" y="402" width="78" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="14" value="Neo4j" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=8;fontStyle=1;size=5;" vertex="1" parent="1">
+          <mxGeometry x="601" y="450" width="78" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="15" value="Cassandra" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=8;fontStyle=1;size=5;" vertex="1" parent="1">
+          <mxGeometry x="601" y="498" width="78" height="28" as="geometry" />
+        </mxCell>
+
+        <!-- ===== Target cylinders (48px spacing) ===== -->
+        <mxCell id="16" value="PostgreSQL" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#fce4d6;strokeColor=#c0674f;fontSize=8;fontStyle=1;size=5;" vertex="1" parent="1">
+          <mxGeometry x="941" y="354" width="78" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="17" value="MongoDB" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#fce4d6;strokeColor=#c0674f;fontSize=8;fontStyle=1;size=5;" vertex="1" parent="1">
+          <mxGeometry x="941" y="402" width="78" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="18" value="Neo4j" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#fce4d6;strokeColor=#c0674f;fontSize=8;fontStyle=1;size=5;" vertex="1" parent="1">
+          <mxGeometry x="941" y="450" width="78" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="19" value="Cassandra" style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#fce4d6;strokeColor=#c0674f;fontSize=8;fontStyle=1;size=5;" vertex="1" parent="1">
+          <mxGeometry x="941" y="498" width="78" height="28" as="geometry" />
+        </mxCell>
+
+        <!-- ===== SMILE Engine Hub hexagon ===== -->
+        <mxCell id="20" value="SMILE&#xa;Engine" style="shape=hexagon;perimeter=hexagonPerimeter2;whiteSpace=wrap;html=1;fixedSize=1;fillColor=#EDF7ED;strokeColor=#5a9e47;strokeWidth=3;fontSize=10;fontStyle=1;fontColor=#2d6a1f;shadow=1;" vertex="1" parent="1">
+          <mxGeometry x="725" y="386" width="170" height="95" as="geometry" />
+        </mxCell>
+        <mxCell id="21" value="&lt;b&gt;M-Model⁺&lt;/b&gt;" style="text;html=1;fontSize=8;fontStyle=0;align=center;fontColor=#5a9e47;" vertex="1" parent="1">
+          <mxGeometry x="710" y="483" width="140" height="18" as="geometry" />
+        </mxCell>
+
+        <!-- ===== SMILE Scripts ===== -->
+        <mxCell id="22" value="SMILE Scripts" style="shape=document;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=8;fontStyle=1;size=0.22;" vertex="1" parent="1">
+          <mxGeometry x="760" y="508" width="100" height="36" as="geometry" />
+        </mxCell>
+
+        <!-- ===== Globe icon ===== -->
+        <mxCell id="23" value="&#x1f310;" style="text;html=1;fontSize=16;align=center;verticalAlign=middle;" vertex="1" parent="1">
+          <mxGeometry x="640" y="580" width="30" height="28" as="geometry" />
+        </mxCell>
+
+        <!-- ===== User Actor (outside window, left side) ===== -->
+        <mxCell id="24" value="User" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;outlineConnect=0;fontSize=8;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="490" y="450" width="26" height="36" as="geometry" />
+        </mxCell>
+
+        <!-- ===== Arrows: Source -> Hub (blue) ===== -->
+        <mxCell id="25" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=1;strokeWidth=1.2;strokeColor=#6c8ebf;exitX=1;exitY=0.5;entryX=0;entryY=0.15;" edge="1" source="12" target="20" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="26" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=1;strokeWidth=1.2;strokeColor=#6c8ebf;exitX=1;exitY=0.5;entryX=0;entryY=0.38;" edge="1" source="13" target="20" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="27" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=1;strokeWidth=1.2;strokeColor=#6c8ebf;exitX=1;exitY=0.5;entryX=0;entryY=0.62;" edge="1" source="14" target="20" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="28" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=1;strokeWidth=1.2;strokeColor=#6c8ebf;exitX=1;exitY=0.5;entryX=0;entryY=0.85;" edge="1" source="15" target="20" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ===== Arrows: Hub -> Target (red/orange) ===== -->
+        <mxCell id="29" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=1;strokeWidth=1.2;strokeColor=#c0674f;exitX=1;exitY=0.15;entryX=0;entryY=0.5;" edge="1" source="20" target="16" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="30" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=1;strokeWidth=1.2;strokeColor=#c0674f;exitX=1;exitY=0.38;entryX=0;entryY=0.5;" edge="1" source="20" target="17" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="31" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=1;strokeWidth=1.2;strokeColor=#c0674f;exitX=1;exitY=0.62;entryX=0;entryY=0.5;" edge="1" source="20" target="18" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="32" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=1;strokeWidth=1.2;strokeColor=#c0674f;exitX=1;exitY=0.85;entryX=0;entryY=0.5;" edge="1" source="20" target="19" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ===== Script -> Hub (yellow) ===== -->
+        <mxCell id="33" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=1;strokeWidth=1.2;strokeColor=#d6b656;exitX=0.5;exitY=0;entryX=0.5;entryY=1;" edge="1" source="22" target="20" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ===== User -> Window (interacts) ===== -->
+        <mxCell id="34" value="&lt;b&gt;interacts&lt;/b&gt;" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=1;strokeWidth=1;strokeColor=#666666;dashed=1;exitX=0.5;exitY=0;entryX=0.5;entryY=1;fontSize=7;fontStyle=2;fontColor=#666666;" edge="1" source="24" target="7" parent="1">
+          <mxGeometry relative="1" x="0.2723" as="geometry">
+            <mxPoint as="offset" />
+            <Array as="points">
+              <mxPoint x="503" y="440" />
+              <mxPoint x="548" y="440" />
+              <mxPoint x="548" y="610" />
+              <mxPoint x="811" y="610" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- ===== RE / FE labels ===== -->
+        <mxCell id="35" value="RE" style="text;html=1;fontSize=7;fontStyle=3;fontColor=#6c8ebf;align=center;" vertex="1" parent="1">
+          <mxGeometry x="708" y="404" width="22" height="12" as="geometry" />
+        </mxCell>
+        <mxCell id="36" value="FE" style="text;html=1;fontSize=7;fontStyle=3;fontColor=#c0674f;align=center;" vertex="1" parent="1">
+          <mxGeometry x="890" y="404" width="22" height="12" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

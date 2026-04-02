@@ -80,15 +80,15 @@ NEST address:street,city IN person.address WHERE address.person_id = person.pers
 -- Reverse of (forward Step 5):
 --   SPLIT person INTO person(person_id, name, age, knows), person_tag(person_id, tags)
 --   UNWIND person_tag.tags
---   RENAME ATTRIBUTE tags TO tag_value IN person_tag
+--   RENAME PROPERTY tags TO tag_value IN person_tag
 --   ADD KEY person_tag.person_tag_id AS String
 --   ADD CONSTRAINT person_tag.person_id REFERENCES person(person_id) WITH CARDINALITY ONE_TO_MANY
 -- Reverse (reordered: data transformation first, then constraint cleanup):
-RENAME ATTRIBUTE tag_value TO tags IN person_tag
+RENAME PROPERTY tag_value TO tags IN person_tag
 WIND person_tag.tags
 DELETE CONSTRAINT person_tag.person_id
 DELETE PRIMARY KEY person_tag_id FROM person_tag
-DELETE ATTRIBUTE person_tag.person_tag_id
+DELETE PROPERTY person_tag.person_tag_id
 MERGE person, person_tag INTO person
 -- Result:
 -- person: { person_id, vorname, nachname, age, address{...}, employment{...}, tags[] }
@@ -99,7 +99,7 @@ MERGE person, person_tag INTO person
 -- Reverse of (forward Step 6):
 --   SPLIT person INTO person(person_id, name, age), person_knows(person_id, knows)
 --   UNWIND person_knows.knows
---   RENAME ATTRIBUTE knows TO knows_person_id IN person_knows
+--   RENAME PROPERTY knows TO knows_person_id IN person_knows
 --   ADD CONSTRAINT person_knows.person_id REFERENCES person(person_id) WITH CARDINALITY ONE_TO_MANY
 --   ADD CONSTRAINT person_knows.knows_person_id REFERENCES person(person_id) WITH CARDINALITY ONE_TO_MANY
 --   ADD KEY (person_id, knows_person_id) TO person_knows
@@ -107,7 +107,7 @@ MERGE person, person_tag INTO person
 DELETE PRIMARY KEY (person_id, knows_person_id) FROM person_knows
 DELETE CONSTRAINT person_knows.knows_person_id
 DELETE CONSTRAINT person_knows.person_id
-RENAME ATTRIBUTE knows_person_id TO knows IN person_knows
+RENAME PROPERTY knows_person_id TO knows IN person_knows
 WIND person_knows.knows
 MERGE person, person_knows INTO person
 -- Result:
@@ -128,8 +128,8 @@ UNFLATTEN person:vorname, nachname AS name
 -- ============================================
 -- Reverse of: RENAME _id TO person_id
 --             CAST age TO Integer
-RENAME ATTRIBUTE person_id TO _id IN person
-CAST ATTRIBUTE person.age TO String
+RENAME PROPERTY person_id TO _id IN person
+CAST PROPERTY person.age TO String
 -- Final Result:
 -- person: {
 --   _id,

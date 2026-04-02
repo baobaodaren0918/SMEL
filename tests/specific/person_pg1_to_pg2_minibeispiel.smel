@@ -9,9 +9,9 @@
 -- Operation Semantics:
 --   MERGE:            Combine two entities into one (denormalization)
 --   SPLIT:            Vertical partitioning into separate entities
---   RENAME_ATTRIBUTE: Rename a field within an entity
+--   RENAME_PROPERTY: Rename a field within an entity
 --   RENAME_ENTITY:    Rename an entity/table
---   ADD_ATTRIBUTE:    Add new field to entity
+--   ADD_PROPERTY:    Add new field to entity
 --   CAST:             Change field data type
 
 MIGRATION person_pg1_to_pg2:1.0
@@ -49,16 +49,16 @@ USING person_schema:1
 -- After:  company(company_id, employment_id, name, street, city)
 DELETE_PRIMARY_KEY company_address_id FROM company_address
 DELETE_CONSTRAINT company_address.company_id
-DELETE_ATTRIBUTE company_address.company_address_id
-DELETE_ATTRIBUTE company_address.company_id
+DELETE_PROPERTY company_address.company_address_id
+DELETE_PROPERTY company_address.company_id
 MERGE company, company_address INTO company
 
 -- ============================================
 -- Phase 2: Add new fields to existing entities
 -- ============================================
-ADD_ATTRIBUTE email TO person WITH TYPE String
-ADD_ATTRIBUTE phone TO person WITH TYPE String
-ADD_ATTRIBUTE start_date TO employment WITH TYPE String
+ADD_PROPERTY email TO person WITH TYPE String
+ADD_PROPERTY phone TO person WITH TYPE String
+ADD_PROPERTY start_date TO employment WITH TYPE String
 
 -- ============================================
 -- Phase 3: Split person into person + person_detail
@@ -75,27 +75,27 @@ ADD_CONSTRAINT person_detail.person_id REFERENCES person(person_id) WITH CARDINA
 -- ============================================
 -- Phase 4: Internationalize — rename German field names
 -- ============================================
-RENAME_ATTRIBUTE vorname TO first_name IN person
-RENAME_ATTRIBUTE nachname TO last_name IN person
+RENAME_PROPERTY vorname TO first_name IN person
+RENAME_PROPERTY nachname TO last_name IN person
 
 -- ============================================
 -- Phase 5: Business field renames
 -- ============================================
-RENAME_ATTRIBUTE position TO role IN employment
-RENAME_ATTRIBUTE name TO company_name IN company
+RENAME_PROPERTY position TO role IN employment
+RENAME_PROPERTY name TO company_name IN company
 
 -- ============================================
 -- Phase 6: Restructure person_tag -> tag
 -- ============================================
 RENAME_ENTITY person_tag TO tag
-RENAME_ATTRIBUTE person_tag_id TO tag_id IN tag
-RENAME_ATTRIBUTE tag_value TO label IN tag
+RENAME_PROPERTY person_tag_id TO tag_id IN tag
+RENAME_PROPERTY tag_value TO label IN tag
 
 -- ============================================
 -- Phase 7: Type change
 -- age: Integer -> String (support range values like "25-30")
 -- ============================================
-CAST_ATTRIBUTE person_detail.age TO String
+CAST_PROPERTY person_detail.age TO String
 
 -- ============================================
 -- Final Meta V2 (7 entities):
@@ -112,8 +112,8 @@ CAST_ATTRIBUTE person_detail.age TO String
 -- Operation Summary (19 steps):
 --   DELETE_PRIMARY_KEY: 1    ADD_PRIMARY_KEY: 2
 --   DELETE_CONSTRAINT:   1    ADD_CONSTRAINT:   1
---   DELETE_ATTRIBUTE:   2    ADD_ATTRIBUTE:    3
+--   DELETE_PROPERTY:   2    ADD_PROPERTY:    3
 --   MERGE:              1    SPLIT:           1
---   RENAME_ATTRIBUTE:   5    RENAME_ENTITY:   1
+--   RENAME_PROPERTY:   5    RENAME_ENTITY:   1
 --   CAST:               1
 -- ============================================

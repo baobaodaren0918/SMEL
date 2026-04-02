@@ -89,21 +89,21 @@ class SMEL_GeneralizedListener(ParseTreeListener):
         pass
 
 
-    # Enter a parse tree produced by SMEL_GeneralizedParser#attributeAdd.
-    def enterAttributeAdd(self, ctx:SMEL_GeneralizedParser.AttributeAddContext):
+    # Enter a parse tree produced by SMEL_GeneralizedParser#propertyAdd.
+    def enterPropertyAdd(self, ctx:SMEL_GeneralizedParser.PropertyAddContext):
         pass
 
-    # Exit a parse tree produced by SMEL_GeneralizedParser#attributeAdd.
-    def exitAttributeAdd(self, ctx:SMEL_GeneralizedParser.AttributeAddContext):
+    # Exit a parse tree produced by SMEL_GeneralizedParser#propertyAdd.
+    def exitPropertyAdd(self, ctx:SMEL_GeneralizedParser.PropertyAddContext):
         pass
 
 
-    # Enter a parse tree produced by SMEL_GeneralizedParser#attributeClause.
-    def enterAttributeClause(self, ctx:SMEL_GeneralizedParser.AttributeClauseContext):
+    # Enter a parse tree produced by SMEL_GeneralizedParser#propertyClause.
+    def enterPropertyClause(self, ctx:SMEL_GeneralizedParser.PropertyClauseContext):
         pass
 
-    # Exit a parse tree produced by SMEL_GeneralizedParser#attributeClause.
-    def exitAttributeClause(self, ctx:SMEL_GeneralizedParser.AttributeClauseContext):
+    # Exit a parse tree produced by SMEL_GeneralizedParser#propertyClause.
+    def exitPropertyClause(self, ctx:SMEL_GeneralizedParser.PropertyClauseContext):
         pass
 
 
@@ -242,12 +242,12 @@ class SMEL_GeneralizedListener(ParseTreeListener):
         pass
 
 
-    # Enter a parse tree produced by SMEL_GeneralizedParser#attributeDelete.
-    def enterAttributeDelete(self, ctx:SMEL_GeneralizedParser.AttributeDeleteContext):
+    # Enter a parse tree produced by SMEL_GeneralizedParser#propertyDelete.
+    def enterPropertyDelete(self, ctx:SMEL_GeneralizedParser.PropertyDeleteContext):
         pass
 
-    # Exit a parse tree produced by SMEL_GeneralizedParser#attributeDelete.
-    def exitAttributeDelete(self, ctx:SMEL_GeneralizedParser.AttributeDeleteContext):
+    # Exit a parse tree produced by SMEL_GeneralizedParser#propertyDelete.
+    def exitPropertyDelete(self, ctx:SMEL_GeneralizedParser.PropertyDeleteContext):
         pass
 
 
@@ -305,12 +305,12 @@ class SMEL_GeneralizedListener(ParseTreeListener):
         pass
 
 
-    # Enter a parse tree produced by SMEL_GeneralizedParser#attributeRename.
-    def enterAttributeRename(self, ctx:SMEL_GeneralizedParser.AttributeRenameContext):
+    # Enter a parse tree produced by SMEL_GeneralizedParser#propertyRename.
+    def enterPropertyRename(self, ctx:SMEL_GeneralizedParser.PropertyRenameContext):
         pass
 
-    # Exit a parse tree produced by SMEL_GeneralizedParser#attributeRename.
-    def exitAttributeRename(self, ctx:SMEL_GeneralizedParser.AttributeRenameContext):
+    # Exit a parse tree produced by SMEL_GeneralizedParser#propertyRename.
+    def exitPropertyRename(self, ctx:SMEL_GeneralizedParser.PropertyRenameContext):
         pass
 
 
@@ -422,12 +422,12 @@ class SMEL_GeneralizedListener(ParseTreeListener):
         pass
 
 
-    # Enter a parse tree produced by SMEL_GeneralizedParser#AttributeField.
-    def enterAttributeField(self, ctx:SMEL_GeneralizedParser.AttributeFieldContext):
+    # Enter a parse tree produced by SMEL_GeneralizedParser#SimpleField.
+    def enterSimpleField(self, ctx:SMEL_GeneralizedParser.SimpleFieldContext):
         pass
 
-    # Exit a parse tree produced by SMEL_GeneralizedParser#AttributeField.
-    def exitAttributeField(self, ctx:SMEL_GeneralizedParser.AttributeFieldContext):
+    # Exit a parse tree produced by SMEL_GeneralizedParser#SimpleField.
+    def exitSimpleField(self, ctx:SMEL_GeneralizedParser.SimpleFieldContext):
         pass
 
 
@@ -476,12 +476,12 @@ class SMEL_GeneralizedListener(ParseTreeListener):
         pass
 
 
-    # Enter a parse tree produced by SMEL_GeneralizedParser#attributeCopy.
-    def enterAttributeCopy(self, ctx:SMEL_GeneralizedParser.AttributeCopyContext):
+    # Enter a parse tree produced by SMEL_GeneralizedParser#propertyCopy.
+    def enterPropertyCopy(self, ctx:SMEL_GeneralizedParser.PropertyCopyContext):
         pass
 
-    # Exit a parse tree produced by SMEL_GeneralizedParser#attributeCopy.
-    def exitAttributeCopy(self, ctx:SMEL_GeneralizedParser.AttributeCopyContext):
+    # Exit a parse tree produced by SMEL_GeneralizedParser#propertyCopy.
+    def exitPropertyCopy(self, ctx:SMEL_GeneralizedParser.PropertyCopyContext):
         pass
 
 
@@ -539,12 +539,12 @@ class SMEL_GeneralizedListener(ParseTreeListener):
         pass
 
 
-    # Enter a parse tree produced by SMEL_GeneralizedParser#attributeCast.
-    def enterAttributeCast(self, ctx:SMEL_GeneralizedParser.AttributeCastContext):
+    # Enter a parse tree produced by SMEL_GeneralizedParser#propertyCast.
+    def enterPropertyCast(self, ctx:SMEL_GeneralizedParser.PropertyCastContext):
         pass
 
-    # Exit a parse tree produced by SMEL_GeneralizedParser#attributeCast.
-    def exitAttributeCast(self, ctx:SMEL_GeneralizedParser.AttributeCastContext):
+    # Exit a parse tree produced by SMEL_GeneralizedParser#propertyCast.
+    def exitPropertyCast(self, ctx:SMEL_GeneralizedParser.PropertyCastContext):
         pass
 
 
@@ -629,30 +629,30 @@ class SMEL_GeneralizedListener(ParseTreeListener):
         pass
 
 
-    # Enter a parse tree produced by SMEL_GeneralizedParser#withAttributesClause.
-    def enterWithAttributesClause(self, ctx:SMEL_GeneralizedParser.WithAttributesClauseContext):
+    # Enter a parse tree produced by SMEL_GeneralizedParser#withPropertiesClause.
+    def enterWithPropertiesClause(self, ctx:SMEL_GeneralizedParser.WithPropertiesClauseContext):
         pass
 
-    # Exit a parse tree produced by SMEL_GeneralizedParser#withAttributesClause.
-    def exitWithAttributesClause(self, ctx:SMEL_GeneralizedParser.WithAttributesClauseContext):
-        pass
-
-
-    # Enter a parse tree produced by SMEL_GeneralizedParser#attributeDefList.
-    def enterAttributeDefList(self, ctx:SMEL_GeneralizedParser.AttributeDefListContext):
-        pass
-
-    # Exit a parse tree produced by SMEL_GeneralizedParser#attributeDefList.
-    def exitAttributeDefList(self, ctx:SMEL_GeneralizedParser.AttributeDefListContext):
+    # Exit a parse tree produced by SMEL_GeneralizedParser#withPropertiesClause.
+    def exitWithPropertiesClause(self, ctx:SMEL_GeneralizedParser.WithPropertiesClauseContext):
         pass
 
 
-    # Enter a parse tree produced by SMEL_GeneralizedParser#attributeDef.
-    def enterAttributeDef(self, ctx:SMEL_GeneralizedParser.AttributeDefContext):
+    # Enter a parse tree produced by SMEL_GeneralizedParser#propertyDefList.
+    def enterPropertyDefList(self, ctx:SMEL_GeneralizedParser.PropertyDefListContext):
         pass
 
-    # Exit a parse tree produced by SMEL_GeneralizedParser#attributeDef.
-    def exitAttributeDef(self, ctx:SMEL_GeneralizedParser.AttributeDefContext):
+    # Exit a parse tree produced by SMEL_GeneralizedParser#propertyDefList.
+    def exitPropertyDefList(self, ctx:SMEL_GeneralizedParser.PropertyDefListContext):
+        pass
+
+
+    # Enter a parse tree produced by SMEL_GeneralizedParser#propertyDef.
+    def enterPropertyDef(self, ctx:SMEL_GeneralizedParser.PropertyDefContext):
+        pass
+
+    # Exit a parse tree produced by SMEL_GeneralizedParser#propertyDef.
+    def exitPropertyDef(self, ctx:SMEL_GeneralizedParser.PropertyDefContext):
         pass
 
 

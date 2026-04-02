@@ -15,7 +15,7 @@ from typing import Dict, List, Any, Optional
 
 sys.path.insert(0, str(Path(__file__).parent))
 from Schema.unified_meta_schema import (
-    Database, DatabaseType, EntityType, EntityKind, Attribute,
+    Database, DatabaseType, EntityType, EntityKind, Property,
     UniqueConstraint, ForeignKeyConstraint, UniqueProperty, ForeignKeyProperty, PKTypeEnum,
     Reference, Embedded, Edge, Cardinality, PrimitiveDataType, PrimitiveType, ListDataType,
     TypeMappings
@@ -41,22 +41,22 @@ SMEL_SYNTAX = {
         # CRUD verbs (Generalized grammar uses these directly)
         'ADD', 'DELETE', 'REMOVE', 'RENAME', 'COPY', 'MOVE', 'MERGE', 'SPLIT', 'CAST', 'RECARD', 'TRANSFORM',
         # Type parameters
-        'ATTRIBUTE', 'ATTRIBUTES', 'CONSTRAINT', 'EMBEDDED', 'ENTITY', 'LABEL', 'RELATIONSHIP',
+        'PROPERTY', 'ATTRIBUTE', 'ATTRIBUTES', 'CONSTRAINT', 'EMBEDDED', 'ENTITY', 'LABEL', 'RELATIONSHIP',
         # Key types
         'PRIMARY', 'UNIQUE', 'FOREIGN', 'PARTITION', 'CLUSTERING',
         'REFERENCE', 'REFERENCES', 'COLUMNS', 'STRUCTURE',
         # Cardinality
         'CARDINALITY', 'ONE_TO_ONE', 'ONE_TO_MANY', 'ZERO_TO_ONE', 'ZERO_TO_MANY',
         # Specific grammar compound keywords
-        'ADD_ATTRIBUTE', 'ADD_CONSTRAINT', 'ADD_EMBEDDED', 'ADD_ENTITY', 'ADD_LABEL',
+        'ADD_PROPERTY', 'ADD_CONSTRAINT', 'ADD_EMBEDDED', 'ADD_ENTITY', 'ADD_LABEL',
         'ADD_PRIMARY_KEY', 'ADD_FOREIGN_KEY', 'ADD_UNIQUE_KEY',
         'ADD_PARTITION_KEY', 'ADD_CLUSTERING_KEY',
-        'DELETE_ATTRIBUTE', 'DELETE_CONSTRAINT', 'DELETE_EMBEDDED', 'DELETE_ENTITY', 'DELETE_LABEL',
+        'DELETE_PROPERTY', 'DELETE_CONSTRAINT', 'DELETE_EMBEDDED', 'DELETE_ENTITY', 'DELETE_LABEL',
         'DELETE_PRIMARY_KEY', 'DELETE_UNIQUE_KEY', 'DELETE_FOREIGN_KEY',
         'DELETE_PARTITION_KEY', 'DELETE_CLUSTERING_KEY',
-        'RENAME_ATTRIBUTE', 'RENAME_ENTITY',
-        'COPY_ATTRIBUTE', 'COPY_ENTITY', 'MOVE_ATTRIBUTE',
-        'CAST_ATTRIBUTE', 'CAST_CONSTRAINT',
+        'RENAME_PROPERTY', 'RENAME_ENTITY',
+        'COPY_PROPERTY', 'COPY_ENTITY', 'MOVE_PROPERTY',
+        'CAST_PROPERTY', 'CAST_CONSTRAINT',
         'NODE', 'DOCUMENT_ID',
     ],
     "types": [
@@ -101,7 +101,7 @@ class SchemaTransformer:
         "CLUSTERING": PKTypeEnum.CLUSTERING,
     }
 
-    # Data type string -> PrimitiveType mapping (used by ADD_ATTRIBUTE, ADD_KEY, CAST)
+    # Data type string -> PrimitiveType mapping (used by ADD_PROPERTY, ADD_KEY, CAST)
     TYPE_STR_MAP = {
         "STRING": PrimitiveType.STRING, "TEXT": PrimitiveType.TEXT,
         "INT": PrimitiveType.INTEGER, "INTEGER": PrimitiveType.INTEGER,
@@ -132,11 +132,11 @@ class SchemaTransformer:
             OpType.DELETE_ENTITY: self._handle_delete_entity,
             OpType.RENAME_ENTITY: self._handle_rename_entity,
             OpType.COPY_ENTITY: self._handle_copy_entity,
-            OpType.ADD_ATTRIBUTE: self._handle_add_attribute,
-            OpType.DELETE_ATTRIBUTE: self._handle_delete_attribute,
-            OpType.RENAME: self._handle_rename,
-            OpType.COPY: self._handle_copy,
-            OpType.MOVE: self._handle_move,
+            OpType.ADD_PROPERTY: self._handle_add_property,
+            OpType.DELETE_PROPERTY: self._handle_delete_property,
+            OpType.RENAME_PROPERTY: self._handle_rename_property,
+            OpType.COPY_PROPERTY: self._handle_copy_property,
+            OpType.MOVE_PROPERTY: self._handle_move_property,
             OpType.ADD_KEY: self._handle_add_key,
             OpType.DELETE_KEY: self._handle_delete_key,
             OpType.ADD_CONSTRAINT: self._handle_add_constraint,
@@ -150,7 +150,7 @@ class SchemaTransformer:
             OpType.TRANSFORM: self._handle_transform,
             OpType.MERGE: self._handle_merge,
             OpType.SPLIT: self._handle_split,
-            OpType.CAST: self._handle_cast,
+            OpType.CAST_PROPERTY: self._handle_cast_property,
             OpType.RECARD: self._handle_recard,
         }
 
@@ -159,7 +159,7 @@ class SchemaTransformer:
         for entity_name, entity in self.database.entity_types.items():
             pk = entity.get_primary_key()
             if pk and pk.unique_properties:
-                pk_attr = entity.get_attribute_by_id(pk.unique_properties[0].property_id)
+                pk_attr = entity.get_property_by_id(pk.unique_properties[0].property_id)
                 if pk_attr:
                     self.key_registry[entity_name] = {
                         "key_field": pk_attr.attr_name,
@@ -213,7 +213,7 @@ class SchemaTransformer:
         - source: address (source entity to embed)
         - target: person (target entity)
         - alias: address (embedded field name)
-        - attributes: [street, city] (attributes to embed)
+        - attributes: [street, city] (properties to embed)
         - source_fk: address.person_id (source FK for matching)
         - target_pk: person.person_id (target PK for matching)
         - with_deletion: True/False (delete source after embedding)
@@ -248,23 +248,23 @@ class SchemaTransformer:
                     cardinality = Cardinality.ONE_TO_ONE if not rel.is_optional else Cardinality.ZERO_TO_ONE
                     break
 
-        # Create embedded entity with specified attributes (or all non-FK attributes if not specified)
+        # Create embedded entity with specified properties (or all non-FK properties if not specified)
         fk_attr_names = {rel.ref_name for rel in source_entity.get_references()}
         embedded_entity = EntityType(object_name=[alias])
 
         nested = params.get("nested", [])
 
         if attributes:
-            # Use specified attributes
+            # Use specified properties
             for attr_name in attributes:
-                attr = source_entity.get_attribute(attr_name)
+                attr = source_entity.get_property(attr_name)
                 if attr:
-                    embedded_entity.add_attribute(Attribute(attr.attr_name, attr.data_type, False, attr.is_optional))
+                    embedded_entity.add_property(Property(attr.attr_name, attr.data_type, False, attr.is_optional))
         else:
-            # Use all non-FK attributes (backward compatibility)
-            for attr in source_entity.attributes:
+            # Use all non-FK properties (backward compatibility)
+            for attr in source_entity.properties:
                 if attr.attr_name not in fk_attr_names:
-                    embedded_entity.add_attribute(Attribute(attr.attr_name, attr.data_type, False, attr.is_optional))
+                    embedded_entity.add_property(Property(attr.attr_name, attr.data_type, False, attr.is_optional))
 
         # Copy nested embedded relationships from source entity
         # e.g., NEST company:name, address{street,city} -> copy "address" Embedded from company
@@ -282,7 +282,7 @@ class SchemaTransformer:
         for rel in list(target_entity.relationships):
             if isinstance(rel, Reference) and rel.get_target_entity_name() == source_name:
                 # Also remove matching ForeignKeyConstraint
-                fk_attr = target_entity.get_attribute(rel.ref_name)
+                fk_attr = target_entity.get_property(rel.ref_name)
                 if fk_attr:
                     target_entity.constraints = [
                         c for c in target_entity.constraints
@@ -290,7 +290,7 @@ class SchemaTransformer:
                                 any(fkp.property_id == fk_attr.meta_id for fkp in c.foreign_key_properties))
                     ]
                 target_entity.remove_relationship(rel.ref_name)
-                target_entity.remove_attribute(rel.ref_name)
+                target_entity.remove_property(rel.ref_name)
                 fk_removed = True
 
         # Fallback cardinality: when no Reference objects exist (non-relational sources),
@@ -303,14 +303,14 @@ class SchemaTransformer:
                     # Source holds FK to target → ONE_TO_MANY (array)
                     cardinality = Cardinality.ONE_TO_MANY
 
-        # Fallback: remove FK attribute from target using WHERE clause
+        # Fallback: remove FK property from target using WHERE clause
         # (for non-relational sources that don't have Reference objects)
         if not fk_removed:
             source_fk = params.get("source_fk", "")
             if source_fk and "." in source_fk:
                 fk_entity, fk_attr = source_fk.split(".", 1)
                 if fk_entity == target_name:
-                    target_entity.remove_attribute(fk_attr)
+                    target_entity.remove_property(fk_attr)
 
         # Delete source entity BEFORE adding the new embedded entity
         # (otherwise when source_name == alias, remove would delete the newly created entity)
@@ -368,12 +368,12 @@ class SchemaTransformer:
             print(f"[NOTICE] FLATTEN skipped: embedded '{full_embedded_path}' not found")
             return False
 
-        # Flatten: copy all attributes from embedded entity to parent with prefix
+        # Flatten: copy all properties from embedded entity to parent with prefix
         prefix = nested_name + "_"
-        for attr in embedded_entity.attributes:
+        for attr in embedded_entity.properties:
             new_attr_name = prefix + attr.attr_name
-            if not parent_entity.get_attribute(new_attr_name):
-                parent_entity.add_attribute(Attribute(
+            if not parent_entity.get_property(new_attr_name):
+                parent_entity.add_property(Property(
                     new_attr_name, attr.data_type, False, attr.is_optional
                 ))
 
@@ -412,12 +412,12 @@ class SchemaTransformer:
 
         # Move specified fields from parent to nested entity
         for field_name in fields:
-            attr = entity.get_attribute(field_name)
+            attr = entity.get_property(field_name)
             if attr:
-                nested_entity.add_attribute(Attribute(
+                nested_entity.add_property(Property(
                     attr.attr_name, attr.data_type, attr.is_key, attr.is_optional
                 ))
-                entity.remove_attribute(field_name)
+                entity.remove_property(field_name)
 
         # Add nested entity to database
         self.database.add_entity_type(nested_entity)
@@ -449,14 +449,14 @@ class SchemaTransformer:
 
         Parameters:
         - source_path: person.address (the nested path to extract)
-        - attributes: [street, city] (attributes to include)
+        - attributes: [street, city] (properties to include)
         - nested: [] (nested objects to transfer, from {braces})
         - target: address (the new table name)
         - carry_fields: [{'source': 'person.person_id', 'target': 'address.person_id', 'field_name': 'person_id'}]
                         List of fields to copy from source to new table
         """
         source_path = params.get("source_path")
-        attributes = params.get("attributes", [])  # Regular attributes
+        attributes = params.get("attributes", [])  # Regular properties
         nested_raw = params.get("nested", [])  # Nested objects from parser
         target_name = params.get("target")
         carry_fields = params.get("carry_fields", [])  # Fields to copy from source
@@ -512,17 +512,17 @@ class SchemaTransformer:
             source_field = carry.get("source", "")  # e.g., person.person_id
             field_name = carry.get("field_name", "")  # e.g., person_id
 
-            # Parse source field to get the attribute name
+            # Parse source field to get the property name
             source_parts = source_field.split(".")
             source_attr_name = source_parts[-1] if source_parts else source_field
 
-            # Get the source attribute's type from parent entity
-            source_attr = parent_entity.get_attribute(source_attr_name)
+            # Get the source property's type from parent entity
+            source_attr = parent_entity.get_property(source_attr_name)
             field_type = source_attr.data_type if source_attr else PrimitiveDataType(PrimitiveType.STRING)
 
             # Add the field to the new entity
-            carry_attr = Attribute(field_name, field_type, False, False)
-            new_entity.add_attribute(carry_attr)
+            carry_attr = Property(field_name, field_type, False, False)
+            new_entity.add_property(carry_attr)
 
         # Collect embedded relationship names from the source entity
         embedded_map = {}  # name -> Embedded relationship
@@ -532,25 +532,25 @@ class SchemaTransformer:
                     embedded_map[rel.aggr_name] = rel
 
         # EXPLICIT DESIGN: attributes and nested are already separated by the parser
-        # - attributes: regular fields like 'position', 'name'
+        # - attributes: regular properties like 'position', 'name'
         # - nested_objects: nested objects like 'company', 'address' (from {braces})
         specified_embedded = set(nested_objects) & set(embedded_map.keys())
 
-        # Add specified attributes from embedded entity
+        # Add specified properties from embedded entity
         for field_name in attributes:
             if embedded_entity:
-                attr = embedded_entity.get_attribute(field_name)
+                attr = embedded_entity.get_property(field_name)
                 if attr:
-                    new_entity.add_attribute(Attribute(
+                    new_entity.add_property(Property(
                         attr.attr_name, attr.data_type, False, attr.is_optional
                     ))
                 else:
                     # Field not found, add as string
-                    new_entity.add_attribute(Attribute(
+                    new_entity.add_property(Property(
                         field_name, PrimitiveDataType(PrimitiveType.STRING), False, True
                     ))
             else:
-                new_entity.add_attribute(Attribute(
+                new_entity.add_property(Property(
                     field_name, PrimitiveDataType(PrimitiveType.STRING), False, True
                 ))
 
@@ -634,11 +634,11 @@ class SchemaTransformer:
 
         if mode == "expand_in_place":
             # Mode 2: Expand in place - UNWIND person_tag.tags
-            # Transform array attribute to its element type (for schema transformation)
+            # Transform array property to its element type (for schema transformation)
             # e.g., tags: ListDataType(STRING) -> tags: STRING
             entity, attr_name = self._resolve_entity_attr(source_path)
             if entity:
-                attr = entity.get_attribute(attr_name)
+                attr = entity.get_property(attr_name)
                 if attr and hasattr(attr.data_type, 'element_type'):
                     # Convert ListDataType to its element type
                     attr.data_type = attr.data_type.element_type
@@ -661,8 +661,8 @@ class SchemaTransformer:
         if not parent_entity:
             return False
 
-        # Check if source is an array attribute
-        attr = parent_entity.get_attribute(array_name)
+        # Check if source is an array property
+        attr = parent_entity.get_property(array_name)
         primitive_element_type = None
         if attr and hasattr(attr.data_type, 'element_type'):
             primitive_element_type = attr.data_type.element_type
@@ -672,21 +672,21 @@ class SchemaTransformer:
 
         # If it's a primitive array, add 'value' column
         if primitive_element_type:
-            new_entity.add_attribute(Attribute("value", primitive_element_type, False, False))
+            new_entity.add_property(Property("value", primitive_element_type, False, False))
 
         # Add new entity to database
         self.database.add_entity_type(new_entity)
         self._last_created_entity = target_name  # Track for subsequent ADD_KEY/ADD_CONSTRAINT
         self.changes.append(f"UNWIND:{target_name}")
 
-        # Remove the array attribute from parent
+        # Remove the array property from parent
         if attr:
-            parent_entity.remove_attribute(array_name)
+            parent_entity.remove_property(array_name)
         return True
 
     def _handle_wind(self, params: Dict) -> bool:
         """
-        WIND: Convert scalar attribute back to array (reverse of UNWIND).
+        WIND: Convert scalar property back to array (reverse of UNWIND).
 
         Syntax: WIND person_tag.tags
           Before: person_tag { person_id, tags } (multiple rows, scalar)
@@ -698,7 +698,7 @@ class SchemaTransformer:
         source_path = params.get("source", "")
         entity, attr_name = self._resolve_entity_attr(source_path)
         if entity:
-            attr = entity.get_attribute(attr_name)
+            attr = entity.get_property(attr_name)
             if attr:
                 # Convert scalar type to ListDataType (reverse of UNWIND which does List -> scalar)
                 # Skip if already a ListDataType to avoid double-wrapping
@@ -717,7 +717,7 @@ class SchemaTransformer:
             entity.remove_relationship(ref_name)
             # Also remove the matching ForeignKeyConstraint from entity.constraints
             # (matches SQL semantics: DROP CONSTRAINT removes FK but keeps the column)
-            fk_attr = entity.get_attribute(ref_name)
+            fk_attr = entity.get_property(ref_name)
             if fk_attr:
                 entity.constraints = [
                     c for c in entity.constraints
@@ -763,18 +763,18 @@ class SchemaTransformer:
         if not entity:
             return False
 
-        # Get target entity's primary key type for FK attribute
+        # Get target entity's primary key type for FK property
         target_entity = self._get_entity(target_table)
         fk_type = PrimitiveDataType(PrimitiveType.INTEGER)
         if target_entity:
             target_pk = target_entity.get_primary_key()
             if target_pk and target_pk.unique_properties:
-                pk_attr = target_entity.get_attribute_by_id(target_pk.unique_properties[0].property_id)
+                pk_attr = target_entity.get_property_by_id(target_pk.unique_properties[0].property_id)
                 if pk_attr:
                     fk_type = pk_attr.data_type
 
-        if not entity.get_attribute(field_name):
-            entity.add_attribute(Attribute(field_name, fk_type, False, True))
+        if not entity.get_property(field_name):
+            entity.add_property(Property(field_name, fk_type, False, True))
 
         # Parse cardinality from clauses (dict format from _parse_reference_clauses)
         cardinality = Cardinality.ONE_TO_ONE
@@ -794,8 +794,8 @@ class SchemaTransformer:
             entity.add_relationship(Reference(ref_name=field_name, refs_to=target_table,
                                               cardinality=cardinality, is_optional=not cardinality.is_required()))
 
-        # Sync FK attribute's is_optional with cardinality requirement
-        fk_attr = entity.get_attribute(field_name)
+        # Sync FK property's is_optional with cardinality requirement
+        fk_attr = entity.get_property(field_name)
         if fk_attr and cardinality.is_required():
             fk_attr.is_optional = False
 
@@ -815,8 +815,8 @@ class SchemaTransformer:
         self.changes.append(f"ADD_REF:{entity_name}.{field_name}")
         return True
 
-    def _handle_add_attribute(self, params: Dict) -> bool:
-        """ADD ATTRIBUTE email TO Customer WITH TYPE String NOT NULL"""
+    def _handle_add_property(self, params: Dict) -> bool:
+        """ADD PROPERTY email TO Customer WITH TYPE String NOT NULL"""
         name = params["name"]
         entity_name = params.get("entity")
         clauses = params.get("clauses", [])
@@ -832,11 +832,11 @@ class SchemaTransformer:
             elif c["type"] == "NOT_NULL":
                 is_optional = False
 
-        entity = self._get_entity(entity_name, "ADD_ATTRIBUTE") if entity_name else None
+        entity = self._get_entity(entity_name, "ADD_PROPERTY") if entity_name else None
         if not entity:
             return False
-        entity.add_attribute(Attribute(name, data_type, False, is_optional))
-        self.changes.append(f"ADD_ATTR:{entity_name}.{name}")
+        entity.add_property(Property(name, data_type, False, is_optional))
+        self.changes.append(f"ADD_PROP:{entity_name}.{name}")
         return True
 
     def _handle_add_embedded(self, params: Dict) -> bool:
@@ -854,7 +854,7 @@ class SchemaTransformer:
         if entity:
             is_optional = not cardinality.is_required()
             entity.add_relationship(Embedded(aggr_name=name, aggregates=name, cardinality=cardinality, is_optional=is_optional))
-            # Create the child entity so ADD_ATTRIBUTE can target it
+            # Create the child entity so ADD_PROPERTY can target it
             if not self.database.get_entity_type(name):
                 self.database.add_entity_type(EntityType(object_name=[name]))
             self.changes.append(f"ADD_EMBEDDED:{entity_name}.{name}")
@@ -872,7 +872,7 @@ class SchemaTransformer:
 
         new_entity = EntityType(object_name=[name])
 
-        # Process clauses for attributes and key (shared by regular and EDGE entities)
+        # Process clauses for properties and key (shared by regular and EDGE entities)
         key_name = None
         for c in clauses:
             if c["type"] == "ATTRIBUTES":
@@ -880,7 +880,7 @@ class SchemaTransformer:
                     attr_name = attr_def["name"]
                     data_type_str = attr_def.get("data_type", "String").upper()
                     prim_type = self.TYPE_STR_MAP.get(data_type_str, PrimitiveType.STRING)
-                    new_entity.add_attribute(Attribute(attr_name, PrimitiveDataType(prim_type), False, True))
+                    new_entity.add_property(Property(attr_name, PrimitiveDataType(prim_type), False, True))
             elif c["type"] == "KEY":
                 key_name = c["key_name"]
 
@@ -921,7 +921,7 @@ class SchemaTransformer:
 
         # Regular entity: set primary key if specified
         if key_name:
-            attr = new_entity.get_attribute(key_name)
+            attr = new_entity.get_property(key_name)
             if attr:
                 attr.is_key = True
                 attr.is_optional = False
@@ -936,20 +936,20 @@ class SchemaTransformer:
         self.changes.append(f"ADD_ENTITY:{name}")
         return True
 
-    def _handle_delete_attribute(self, params: Dict) -> bool:
-        """DELETE ATTRIBUTE Customer.email"""
+    def _handle_delete_property(self, params: Dict) -> bool:
+        """DELETE PROPERTY Customer.email"""
         target = params["target"]
         entity, attr_name = self._resolve_entity_attr(target)
         if not entity:
             return False
 
         # Get meta_id before removal for constraint cleanup
-        attr = entity.get_attribute(attr_name)
+        attr = entity.get_property(attr_name)
         attr_meta_id = attr.meta_id if attr else None
 
-        entity.remove_attribute(attr_name)
+        entity.remove_property(attr_name)
 
-        # Clean up constraints referencing the deleted attribute
+        # Clean up constraints referencing the deleted property
         if attr_meta_id:
             entity.constraints = [
                 c for c in entity.constraints
@@ -958,13 +958,13 @@ class SchemaTransformer:
                 and not (isinstance(c, ForeignKeyConstraint) and
                          any(fkp.property_id == attr_meta_id for fkp in c.foreign_key_properties))
             ]
-        # Clean up Reference relationships matching the deleted attribute
+        # Clean up Reference relationships matching the deleted property
         for rel in list(entity.relationships):
             if isinstance(rel, Reference) and rel.ref_name == attr_name:
                 entity.remove_relationship(attr_name)
                 break
 
-        self.changes.append(f"DELETE_ATTR:{target}")
+        self.changes.append(f"DELETE_PROP:{target}")
         return True
 
     def _handle_delete_entity(self, params: Dict) -> bool:
@@ -980,9 +980,9 @@ class SchemaTransformer:
             if source_ent:
                 source_ent.remove_relationship(name)
 
-        # Collect deleted entity's attribute meta_ids for FK cleanup
+        # Collect deleted entity's property meta_ids for FK cleanup
         deleted_attr_ids = set()
-        for attr in deleted_entity.attributes:
+        for attr in deleted_entity.properties:
             deleted_attr_ids.add(attr.meta_id)
         deleted_up_ids = set()
         for c in deleted_entity.constraints:
@@ -1078,13 +1078,13 @@ class SchemaTransformer:
             entity = EntityType(object_name=[entity_name] if entity_name else ["unnamed"])
             self.database.add_entity_type(entity)
 
-        # Get or create attributes for all key columns
+        # Get or create properties for all key columns
         key_attrs = []
         for col_name in key_columns:
-            attr = entity.get_attribute(col_name)
+            attr = entity.get_property(col_name)
             if not attr:
-                attr = Attribute(col_name, key_data_type, True, False)
-                entity.add_attribute(attr)
+                attr = Property(col_name, key_data_type, True, False)
+                entity.add_property(attr)
             else:
                 attr.is_key = True
                 attr.is_optional = False
@@ -1145,11 +1145,11 @@ class SchemaTransformer:
                     return True
             else:
                 # Regular PRIMARY KEY: replace existing PK
-                # Clear is_key on old PK attributes
+                # Clear is_key on old PK properties
                 for old_c in entity.constraints:
                     if isinstance(old_c, UniqueConstraint) and old_c.is_primary_key:
                         for up in old_c.unique_properties:
-                            old_attr = entity.get_attribute_by_id(up.property_id)
+                            old_attr = entity.get_property_by_id(up.property_id)
                             if old_attr and old_attr.attr_name not in key_columns:
                                 old_attr.is_key = False
                 # Remove old PK constraints
@@ -1162,7 +1162,7 @@ class SchemaTransformer:
         return True
 
     def _get_target_unique_property_id(self, target_entity_name: str, target_attr_name: str) -> str:
-        """Get the UniqueProperty meta_id for a target entity's attribute (for FK references)."""
+        """Get the UniqueProperty meta_id for a target entity's property (for FK references)."""
         if not target_entity_name:
             return ""
         target_entity = self.database.get_entity_type(target_entity_name)
@@ -1174,7 +1174,7 @@ class SchemaTransformer:
         # If target_attr_name is specified, find matching UniqueProperty
         if target_attr_name:
             for up in target_pk.unique_properties:
-                attr = target_entity.get_attribute_by_id(up.property_id)
+                attr = target_entity.get_property_by_id(up.property_id)
                 if attr and attr.attr_name == target_attr_name:
                     return up.meta_id
         # Default to first UniqueProperty
@@ -1197,13 +1197,13 @@ class SchemaTransformer:
                 # Check if all FK columns match
                 fk_attr_names = set()
                 for fk_prop in constraint.foreign_key_properties:
-                    fk_attr = entity.get_attribute_by_id(fk_prop.property_id)
+                    fk_attr = entity.get_property_by_id(fk_prop.property_id)
                     if fk_attr:
                         fk_attr_names.add(fk_attr.attr_name)
                 if fk_attr_names == key_columns_set:
                     entity.constraints.remove(constraint)
                     for fk_prop in constraint.foreign_key_properties:
-                        fk_attr = entity.get_attribute_by_id(fk_prop.property_id)
+                        fk_attr = entity.get_property_by_id(fk_prop.property_id)
                         if fk_attr:
                             fk_attr.is_key = False
                     key_names_str = ", ".join(key_columns)
@@ -1216,13 +1216,13 @@ class SchemaTransformer:
                     # Check if all constraint columns match
                     constraint_attr_names = set()
                     for up in constraint.unique_properties:
-                        up_attr = entity.get_attribute_by_id(up.property_id)
+                        up_attr = entity.get_property_by_id(up.property_id)
                         if up_attr:
                             constraint_attr_names.add(up_attr.attr_name)
                     if constraint_attr_names == key_columns_set:
                         entity.constraints.remove(constraint)
                         for up in constraint.unique_properties:
-                            up_attr = entity.get_attribute_by_id(up.property_id)
+                            up_attr = entity.get_property_by_id(up.property_id)
                             if up_attr:
                                 up_attr.is_key = False
                         key_names_str = ", ".join(key_columns)
@@ -1234,7 +1234,7 @@ class SchemaTransformer:
                 removed_any = False
                 for up in list(constraint.unique_properties):
                     if up.primary_key_type == key_type_str:
-                        up_attr = entity.get_attribute_by_id(up.property_id)
+                        up_attr = entity.get_property_by_id(up.property_id)
                         if up_attr and up_attr.attr_name in key_columns_set:
                             constraint.unique_properties.remove(up)
                             up_attr.is_key = False
@@ -1247,29 +1247,29 @@ class SchemaTransformer:
                     return True
         return False
 
-    def _handle_rename(self, params: Dict) -> bool:
-        """RENAME: Rename an attribute within an entity."""
+    def _handle_rename_property(self, params: Dict) -> bool:
+        """RENAME_PROPERTY: Rename a property within an entity."""
         old_name = params["old_name"]
         new_name = params["new_name"]
         entity_name = params.get("entity")
 
         if not entity_name:
-            print(f"[NOTICE] RENAME skipped: no entity specified for '{old_name}'")
+            print(f"[NOTICE] RENAME_PROPERTY skipped: no entity specified for '{old_name}'")
             return False
 
-        entity = self._get_entity(entity_name, "RENAME")
+        entity = self._get_entity(entity_name, "RENAME_PROPERTY")
         if not entity:
             return False
 
-        attr = entity.get_attribute(old_name)
+        attr = entity.get_property(old_name)
         if attr:
             attr.attr_name = new_name
-            # Update Reference.ref_name if this attribute is a FK
+            # Update Reference.ref_name if this property is a FK
             for rel in entity.relationships:
                 if isinstance(rel, Reference) and rel.ref_name == old_name:
                     rel.ref_name = new_name
                     break
-            self.changes.append(f"RENAME:{entity_name}.{old_name}->{new_name}")
+            self.changes.append(f"RENAME_PROP:{entity_name}.{old_name}->{new_name}")
             return True
         return False
 
@@ -1319,12 +1319,12 @@ class SchemaTransformer:
         self.changes.append(f"RENAME_ENTITY:{old_name}->{new_name}")
         return True
 
-    def _handle_copy(self, params: Dict) -> bool:
+    def _handle_copy_property(self, params: Dict) -> bool:
         """
-        COPY: Copy attribute from source to target.
+        COPY_PROPERTY: Copy property from source to target.
 
         Supports nested paths for embedded objects:
-        - COPY person.address.street TO address.street
+        - COPY PROPERTY person.address.street TO address.street
           Source: entity="person.address", attr="street"
           Target: entity="address", attr="street"
         """
@@ -1335,12 +1335,12 @@ class SchemaTransformer:
         tgt_entity, tgt_attr_name = self._resolve_entity_attr(target_path)
 
         if src_entity and tgt_entity:
-            # Copy attribute
-            src_attr = src_entity.get_attribute(src_attr_name)
+            # Copy property
+            src_attr = src_entity.get_property(src_attr_name)
             if src_attr:
-                new_attr = Attribute(tgt_attr_name, src_attr.data_type, False, src_attr.is_optional)
-                tgt_entity.add_attribute(new_attr)
-                self.changes.append(f"COPY:{source_path}->{target_path}")
+                new_attr = Property(tgt_attr_name, src_attr.data_type, False, src_attr.is_optional)
+                tgt_entity.add_property(new_attr)
+                self.changes.append(f"COPY_PROP:{source_path}->{target_path}")
                 return True
         elif "." not in source_path and "." not in target_path:
             # Copy entity
@@ -1350,7 +1350,7 @@ class SchemaTransformer:
                 # Update object_name with new target name
                 new_entity.object_name = [target_parts[0]]
                 self.database.add_entity_type(new_entity)
-                self.changes.append(f"COPY:{source_path}->{target_path}")
+                self.changes.append(f"COPY_PROP:{source_path}->{target_path}")
                 return True
         return False
 
@@ -1358,7 +1358,7 @@ class SchemaTransformer:
         """COPY_ENTITY: Duplicate an entire entity with all its structure.
 
         Reference: PRISM "COPY TABLE R INTO S", CoDEL "Addtable(S, R)"
-        Deep copies the source entity (attributes, keys, constraints, relationships)
+        Deep copies the source entity (properties, keys, constraints, relationships)
         and adds it as a new entity with the target name.
 
         Example: COPY_ENTITY person AS employee
@@ -1418,8 +1418,8 @@ class SchemaTransformer:
         self.changes.append(f"COPY_ENTITY:{source_name}->{target_name}")
         return True
 
-    def _handle_move(self, params: Dict) -> bool:
-        """MOVE: Move attribute from one entity to another."""
+    def _handle_move_property(self, params: Dict) -> bool:
+        """MOVE_PROPERTY: Move property from one entity to another."""
         source_path = params["source"]
         target_path = params["target"]
 
@@ -1427,14 +1427,14 @@ class SchemaTransformer:
         tgt_entity, tgt_attr_name = self._resolve_entity_attr(target_path)
 
         if src_entity and tgt_entity:
-                src_attr = src_entity.get_attribute(src_attr_name)
+                src_attr = src_entity.get_property(src_attr_name)
                 if src_attr:
                     # Add to target
-                    new_attr = Attribute(tgt_attr_name, src_attr.data_type, False, src_attr.is_optional)
-                    tgt_entity.add_attribute(new_attr)
+                    new_attr = Property(tgt_attr_name, src_attr.data_type, False, src_attr.is_optional)
+                    tgt_entity.add_property(new_attr)
                     # Remove from source
-                    src_entity.remove_attribute(src_attr_name)
-                    self.changes.append(f"MOVE:{source_path}->{target_path}")
+                    src_entity.remove_property(src_attr_name)
+                    self.changes.append(f"MOVE_PROP:{source_path}->{target_path}")
                     return True
         return False
 
@@ -1457,25 +1457,25 @@ class SchemaTransformer:
             print(f"[ERROR] MERGE failed: entity '{source2_name}' is an EDGE entity, MERGE does not support EDGE")
             return False
 
-        # Create new entity with combined attributes
+        # Create new entity with combined properties
         new_entity = EntityType(object_name=[target_name])
 
         # Track old->new meta_id mapping for constraint property_id remap
         meta_id_map = {}
 
-        # Add attributes from source1
-        for attr in source1.attributes:
-            new_attr = Attribute(attr.attr_name, attr.data_type, attr.is_key, attr.is_optional)
+        # Add properties from source1
+        for attr in source1.properties:
+            new_attr = Property(attr.attr_name, attr.data_type, attr.is_key, attr.is_optional)
             meta_id_map[attr.meta_id] = new_attr.meta_id
-            new_entity.add_attribute(new_attr)
+            new_entity.add_property(new_attr)
 
-        # Add attributes from source2 (avoid duplicates)
-        existing_names = {a.attr_name for a in new_entity.attributes}
-        for attr in source2.attributes:
+        # Add properties from source2 (avoid duplicates)
+        existing_names = {a.attr_name for a in new_entity.properties}
+        for attr in source2.properties:
             if attr.attr_name not in existing_names:
-                new_attr = Attribute(attr.attr_name, attr.data_type, attr.is_key, attr.is_optional)
+                new_attr = Property(attr.attr_name, attr.data_type, attr.is_key, attr.is_optional)
                 meta_id_map[attr.meta_id] = new_attr.meta_id
-                new_entity.add_attribute(new_attr)
+                new_entity.add_property(new_attr)
 
         # Copy constraints from source1 with remapped property_ids
         has_pk = False
@@ -1589,7 +1589,7 @@ class SchemaTransformer:
         created_entities = []
 
         # First pass: create NEW entities (parts with different name than source).
-        # Must happen before modifying source, so attribute copying works.
+        # Must happen before modifying source, so property copying works.
         source_part_fields = None  # track fields for in-place source modification
 
         for i, part in enumerate(parts):
@@ -1610,17 +1610,17 @@ class SchemaTransformer:
             # If fields are explicitly specified, use them
             if part_fields:
                 for field_name in part_fields:
-                    attr = source.get_attribute(field_name)
+                    attr = source.get_property(field_name)
                     if attr:
-                        # Create new attribute with is_key preserved from source
-                        new_attr = Attribute(
+                        # Create new property with is_key preserved from source
+                        new_attr = Property(
                             attr.attr_name, attr.data_type, attr.is_key, attr.is_optional
                         )
                         meta_id_map[attr.meta_id] = new_attr.meta_id
-                        new_entity.add_attribute(new_attr)
+                        new_entity.add_property(new_attr)
             else:
-                # Fallback: split attributes evenly (old behavior)
-                attrs = list(source.attributes)
+                # Fallback: split properties evenly (old behavior)
+                attrs = list(source.properties)
                 mid = len(attrs) // 2
                 if i == 0:
                     selected_attrs = attrs[:mid] if mid > 0 else attrs[:1]
@@ -1628,11 +1628,11 @@ class SchemaTransformer:
                     selected_attrs = attrs[mid:] if mid > 0 else attrs[1:]
 
                 for attr in selected_attrs:
-                    new_attr = Attribute(
+                    new_attr = Property(
                         attr.attr_name, attr.data_type, attr.is_key, attr.is_optional
                     )
                     meta_id_map[attr.meta_id] = new_attr.meta_id
-                    new_entity.add_attribute(new_attr)
+                    new_entity.add_property(new_attr)
 
             # Each part reuses the source primary key (only if ALL PK attrs are in this part)
             if pk:
@@ -1649,10 +1649,10 @@ class SchemaTransformer:
         # Second pass: modify source in-place (preserves edges, embedded, references)
         if source_part_fields is not None:
             keep_fields = set(source_part_fields)
-            attrs_to_remove = [a.attr_name for a in source.attributes
+            attrs_to_remove = [a.attr_name for a in source.properties
                                if a.attr_name not in keep_fields]
             for attr_name in attrs_to_remove:
-                source.remove_attribute(attr_name)
+                source.remove_property(attr_name)
 
         # Remove source if different from all targets
         if source_name not in [p["name"] for p in parts]:
@@ -1662,23 +1662,23 @@ class SchemaTransformer:
         self.changes.append(f"SPLIT:{source_name}->{parts_str}")
         return True
 
-    def _handle_cast(self, params: Dict) -> bool:
-        """CAST: Change attribute data type."""
+    def _handle_cast_property(self, params: Dict) -> bool:
+        """CAST_PROPERTY: Change property data type."""
         target = params["target"]
         new_type_str = params.get("data_type", params.get("type", "STRING")).upper()
 
-        entity, attr_name = self._resolve_entity_attr(target, "CAST")
+        entity, attr_name = self._resolve_entity_attr(target, "CAST_PROPERTY")
         if not entity:
             return False
 
-        attr = entity.get_attribute(attr_name)
+        attr = entity.get_property(attr_name)
         if not attr:
-            print(f"[NOTICE] CAST skipped: attribute '{attr_name}' not found")
+            print(f"[NOTICE] CAST_PROPERTY skipped: property '{attr_name}' not found")
             return False
 
         new_type = self.TYPE_STR_MAP.get(new_type_str, PrimitiveType.STRING)
         attr.data_type = PrimitiveDataType(new_type)
-        self.changes.append(f"CAST:{target}->{new_type_str}")
+        self.changes.append(f"CAST_PROP:{target}->{new_type_str}")
         return True
 
     def _handle_cast_constraint(self, params: Dict) -> bool:
@@ -1695,12 +1695,12 @@ class SchemaTransformer:
         if not entity:
             return False
 
-        # Find the attribute
-        attr = entity.get_attribute(attr_name)
+        # Find the property
+        attr = entity.get_property(attr_name)
         if not attr:
             return False
 
-        # Find constraint containing this attribute and modify its type
+        # Find constraint containing this property and modify its type
         for constraint in entity.constraints:
             if isinstance(constraint, UniqueConstraint):
                 for up in constraint.unique_properties:
@@ -1895,7 +1895,7 @@ def _serialize_entity(name: str, entity) -> Dict[str, Any]:
             pk_attr_names = []
             pk_types = []
             for up in c.unique_properties:
-                attr = entity.get_attribute_by_id(up.property_id)
+                attr = entity.get_property_by_id(up.property_id)
                 pk_attr_names.append(attr.attr_name if attr else up.property_id)
                 pk_types.append(up.primary_key_type.value)
             constraint_dict = {
@@ -1908,7 +1908,7 @@ def _serialize_entity(name: str, entity) -> Dict[str, Any]:
             constraints.append(constraint_dict)
         elif isinstance(c, ForeignKeyConstraint):
             for fkp in c.foreign_key_properties:
-                attr = entity.get_attribute_by_id(fkp.property_id)
+                attr = entity.get_property_by_id(fkp.property_id)
                 col_name = attr.attr_name if attr else fkp.property_id
                 # Resolve target entity from Reference relationships matching this FK column
                 ref_target = ""
@@ -1928,15 +1928,15 @@ def _serialize_entity(name: str, entity) -> Dict[str, Any]:
     for c in entity.constraints:
         if isinstance(c, UniqueConstraint) and c.is_primary_key:
             for up in c.unique_properties:
-                attr = entity.get_attribute_by_id(up.property_id)
+                attr = entity.get_property_by_id(up.property_id)
                 attr_name = attr.attr_name if attr else up.property_id
                 pk_val = up.primary_key_type.value
                 if pk_val != "simple":
                     pk_type_map[attr_name] = pk_val
 
-    # Build attribute list with optional key_type
+    # Build property list with optional key_type
     serialized_attrs = []
-    for a in entity.attributes:
+    for a in entity.properties:
         attr_dict = {
             "name": a.attr_name,
             "type": _get_type_str(a.data_type),
@@ -1950,17 +1950,17 @@ def _serialize_entity(name: str, entity) -> Dict[str, Any]:
     return {
         "name": name,
         "entity_kind": entity.entity_kind.value,
-        "attributes": serialized_attrs,
+        "properties": serialized_attrs,
         "constraints": constraints,
         "references": [
             {
                 "name": r.ref_name,
                 "target": r.get_target_entity_name(),
                 "cardinality": r.cardinality.value if hasattr(r, 'cardinality') else '1..1',
-                **({"edge_attributes": [
+                **({"edge_properties": [
                     {"name": a.attr_name, "type": _get_type_str(a.data_type)}
-                    for a in r.edge_attributes
-                ]} if r.edge_attributes else {})
+                    for a in r.edge_properties
+                ]} if r.edge_properties else {})
             }
             for r in entity.relationships if isinstance(r, Reference)
         ],
@@ -1995,9 +1995,9 @@ def _serialize_relationship_types(db: Database) -> Dict[str, Any]:
             "rel_name": e.name,
             "source_entity": e.source_entity or "",
             "target_entity": e.target_entity or "",
-            "attributes": [
+            "properties": [
                 {"name": a.attr_name, "type": _get_type_str(a.data_type)}
-                for a in e.attributes
+                for a in e.properties
             ],
             "cardinality": (e.edge_cardinality or Cardinality.ZERO_TO_MANY).value
         }
@@ -2035,8 +2035,8 @@ def db_to_dict(db: Database) -> Dict[str, Any]:
 # Type mappings for source format display (from centralized TypeMappings)
 
 
-def _get_source_type_str(attr: Attribute, source_type: str) -> str:
-    """Get the original type string for an attribute based on source database type."""
+def _get_source_type_str(attr: Property, source_type: str) -> str:
+    """Get the original type string for a property based on source database type."""
     # Handle complex types first
     if not hasattr(attr.data_type, 'primitive_type'):
         if source_type == SOURCE_TYPE_RELATIONAL:
@@ -2117,10 +2117,10 @@ def db_to_source_dict(db: Database, source_type: str) -> Dict[str, Any]:
             continue  # EDGE entities are serialized as relationship_types
         # Build entity dict with source-specific types
         entity_dict = _serialize_entity(name, entity)
-        # Override attribute type with source-specific format, preserve key_type etc.
-        for i, a in enumerate(entity.attributes):
-            if i < len(entity_dict["attributes"]):
-                entity_dict["attributes"][i]["type"] = _get_source_type_str(a, source_type)
+        # Override property type with source-specific format, preserve key_type etc.
+        for i, a in enumerate(entity.properties):
+            if i < len(entity_dict["properties"]):
+                entity_dict["properties"][i]["type"] = _get_source_type_str(a, source_type)
         entities[name] = entity_dict
 
     # Attach relationship_types (derived from EDGE entities)
@@ -2191,7 +2191,7 @@ def parse_original_source(raw_source: str, source_type: str) -> Dict[str, Any]:
                 collection_name: {
                     "name": collection_name,
                     "type": "collection",
-                    "attributes": parse_properties(properties)
+                    "properties": parse_properties(properties)
                 }
             }
         except json.JSONDecodeError:
@@ -2240,7 +2240,7 @@ def parse_original_source(raw_source: str, source_type: str) -> Dict[str, Any]:
                         if nl == '' or nl.startswith('// Node:') or nl.startswith('// Relationship:'):
                             break
                         j += 1
-                    result[label] = {"name": label, "type": "vertex", "attributes": attrs}
+                    result[label] = {"name": label, "type": "vertex", "properties": attrs}
                     i = j
                     continue
 
@@ -2270,7 +2270,7 @@ def parse_original_source(raw_source: str, source_type: str) -> Dict[str, Any]:
                     result[f"[{rel_name}]"] = {
                         "name": f"{source} -[{rel_name}]-> {target}",
                         "type": "edge",
-                        "attributes": attrs
+                        "properties": attrs
                     }
                     i = j
                     continue
@@ -2294,7 +2294,7 @@ def parse_original_source(raw_source: str, source_type: str) -> Dict[str, Any]:
                     result[label] = {
                         "name": label,
                         "type": "vertex",
-                        "attributes": attrs
+                        "properties": attrs
                     }
                 for rel_def in schema.get("relationships", []):
                     rel_name = rel_def.get("type", "RELATED_TO")
@@ -2308,7 +2308,7 @@ def parse_original_source(raw_source: str, source_type: str) -> Dict[str, Any]:
                     result[f"[{rel_name}]"] = {
                         "name": f"{rel_def.get('source', '')} -[{rel_name}]-> {rel_def.get('target', '')}",
                         "type": "edge",
-                        "attributes": attrs
+                        "properties": attrs
                     }
                 return result
             except json.JSONDecodeError:
@@ -2381,7 +2381,7 @@ def parse_original_source(raw_source: str, source_type: str) -> Dict[str, Any]:
             tables[table_name] = {
                 "name": table_name,
                 "type": "wide_column_table",
-                "attributes": attrs
+                "properties": attrs
             }
         return tables
 
@@ -2402,7 +2402,7 @@ def parse_original_source(raw_source: str, source_type: str) -> Dict[str, Any]:
                     tables[table_name] = {
                         "name": table_name,
                         "type": "table",
-                        "attributes": []
+                        "properties": []
                     }
             elif current_table and line and not line.startswith('--') and not line.startswith(')'):
                 # Parse column definition
@@ -2421,7 +2421,7 @@ def parse_original_source(raw_source: str, source_type: str) -> Dict[str, Any]:
                     col_type = ' '.join(type_parts) if type_parts else parts[1]
                     is_key = 'PRIMARY KEY' in line.upper()
                     is_fk = 'REFERENCES' in line.upper()
-                    tables[current_table]["attributes"].append({
+                    tables[current_table]["properties"].append({
                         "name": col_name,
                         "type": col_type,
                         "is_key": is_key,
@@ -2493,9 +2493,9 @@ def _calculate_changes(prev: Dict, after: Dict, op) -> Dict:
         prev_entity = prev[name]
         after_entity = after[name]
 
-        # Check for changes in attributes
-        prev_attrs = {a["name"]: a for a in prev_entity.get("attributes", [])}
-        after_attrs = {a["name"]: a for a in after_entity.get("attributes", [])}
+        # Check for changes in properties
+        prev_attrs = {a["name"]: a for a in prev_entity.get("properties", [])}
+        after_attrs = {a["name"]: a for a in after_entity.get("properties", [])}
 
         # Check for changes in embedded
         prev_embedded = {e["name"]: e for e in prev_entity.get("embedded", [])}
@@ -2518,7 +2518,7 @@ def _calculate_changes(prev: Dict, after: Dict, op) -> Dict:
         new_edges = set(after_edges.keys()) - set(prev_edges.keys())
         deleted_edges = set(prev_edges.keys()) - set(after_edges.keys())
 
-        # Check for attribute TYPE changes (for CAST and UNWIND operations)
+        # Check for property TYPE changes (for CAST and UNWIND operations)
         type_changed_attrs = []
         for attr_name in set(prev_attrs.keys()) & set(after_attrs.keys()):
             prev_type = prev_attrs[attr_name].get("type", "")
@@ -2544,15 +2544,15 @@ def _calculate_changes(prev: Dict, after: Dict, op) -> Dict:
                 "name": name,
                 "status": "modified",
                 "entity": after_entity,
-                "new_attributes": [after_attrs[a] for a in new_attrs],
-                "deleted_attributes": list(deleted_attrs),
+                "new_properties": [after_attrs[a] for a in new_attrs],
+                "deleted_properties": list(deleted_attrs),
                 "new_embedded": [after_embedded[e] for e in new_embedded],
                 "deleted_embedded": list(deleted_embedded),
                 "new_references": [after_refs[r] for r in new_refs],
                 "deleted_references": list(deleted_refs),
                 "new_edges": [after_edges[e] for e in new_edges],
                 "deleted_edges": list(deleted_edges),
-                "type_changed_attributes": type_changed_attrs
+                "type_changed_properties": type_changed_attrs
             })
 
     return changes

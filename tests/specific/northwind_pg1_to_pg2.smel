@@ -31,9 +31,9 @@ USING northwind_schema:1
 --         products(..., category_id [FK->categories])
 -- After:  products(..., category_name, description) -- categories removed
 DELETE_CONSTRAINT products.category_id
-DELETE_ATTRIBUTE products.category_id
+DELETE_PROPERTY products.category_id
 DELETE_PRIMARY_KEY category_id FROM categories
-DELETE_ATTRIBUTE categories.category_id
+DELETE_PROPERTY categories.category_id
 MERGE categories, products INTO products
 
 -- ============================================
@@ -52,14 +52,14 @@ ADD_CONSTRAINT customer_contacts.customer_id REFERENCES customers(customer_id) W
 -- Phase 3: ADD region (new entity)
 -- Business: Sales territory management -- geographic regions
 -- ============================================
-ADD_ENTITY region WITH ATTRIBUTES (region_id String, region_description String)
+ADD_ENTITY region WITH PROPERTIES (region_id String, region_description String)
 ADD_PRIMARY_KEY region_id TO region
 
 -- ============================================
 -- Phase 4: ADD territories (new entity, FK -> region)
 -- Business: Sales territories within regions
 -- ============================================
-ADD_ENTITY territories WITH ATTRIBUTES (territory_id String, territory_description String, region_id String)
+ADD_ENTITY territories WITH PROPERTIES (territory_id String, territory_description String, region_id String)
 ADD_PRIMARY_KEY territory_id TO territories
 ADD_CONSTRAINT territories.region_id REFERENCES region(region_id) WITH CARDINALITY ONE_TO_MANY
 
@@ -68,8 +68,8 @@ ADD_CONSTRAINT territories.region_id REFERENCES region(region_id) WITH CARDINALI
 -- Business: Assign employees to sales territories
 -- ============================================
 ADD_ENTITY employee_territories
-ADD_ATTRIBUTE employee_id TO employee_territories WITH TYPE String
-ADD_ATTRIBUTE territory_id TO employee_territories WITH TYPE String
+ADD_PROPERTY employee_id TO employee_territories WITH TYPE String
+ADD_PROPERTY territory_id TO employee_territories WITH TYPE String
 ADD_PRIMARY_KEY (employee_id, territory_id) TO employee_territories
 ADD_CONSTRAINT employee_territories.employee_id REFERENCES employees(employee_id) WITH CARDINALITY ONE_TO_MANY
 ADD_CONSTRAINT employee_territories.territory_id REFERENCES territories(territory_id) WITH CARDINALITY ONE_TO_MANY
@@ -77,16 +77,16 @@ ADD_CONSTRAINT employee_territories.territory_id REFERENCES territories(territor
 -- ============================================
 -- Phase 6: employees -- simplify
 -- ============================================
-DELETE_ATTRIBUTE employees.birth_date
-DELETE_ATTRIBUTE employees.notes
-ADD_ATTRIBUTE email TO employees WITH TYPE String
+DELETE_PROPERTY employees.birth_date
+DELETE_PROPERTY employees.notes
+ADD_PROPERTY email TO employees WITH TYPE String
 
 -- ============================================
 -- Phase 7: products + orders -- RENAME + ADD
 -- ============================================
-RENAME_ATTRIBUTE product_name TO name IN products
-RENAME_ATTRIBUTE freight TO shipping_cost IN orders
-ADD_ATTRIBUTE status TO orders WITH TYPE String
+RENAME_PROPERTY product_name TO name IN products
+RENAME_PROPERTY freight TO shipping_cost IN orders
+ADD_PROPERTY status TO orders WITH TYPE String
 
 -- ============================================
 -- Final Meta V2 (10 entities):
@@ -106,8 +106,8 @@ ADD_ATTRIBUTE status TO orders WITH TYPE String
 -- ============================================
 -- Operation Summary (26 steps, 10 operation types):
 --   MERGE: 1              SPLIT: 1
---   ADD_ENTITY: 3         ADD_ATTRIBUTE: 4
+--   ADD_ENTITY: 3         ADD_PROPERTY: 4
 --   ADD_PRIMARY_KEY: 5    ADD_CONSTRAINT: 4
 --   DELETE_CONSTRAINT: 1  DELETE_PRIMARY_KEY: 1
---   DELETE_ATTRIBUTE: 4   RENAME_ATTRIBUTE: 2
+--   DELETE_PROPERTY: 4   RENAME_PROPERTY: 2
 -- ============================================

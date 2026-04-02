@@ -35,7 +35,7 @@ USING northwind_schema:1
 -- Graph equivalent of denormalization: eliminate PART_OF relationship
 -- ============================================
 DELETE ENTITY PART_OF
-DELETE ATTRIBUTE categories.category_id
+DELETE PROPERTY categories.category_id
 MERGE categories, products INTO products
 
 -- ============================================
@@ -53,7 +53,7 @@ ADD ENTITY HAS_CONTACT FROM customers TO contact
 -- Phase 3: ADD region node (new entity)
 -- Business: Geographic region for sales territory management
 -- ============================================
-ADD ENTITY region WITH ATTRIBUTES (region_id String, region_description String)
+ADD ENTITY region WITH PROPERTIES (region_id String, region_description String)
 ADD KEY region_id TO region
 CAST CONSTRAINT region.region_id TO NODE KEY
 
@@ -61,7 +61,7 @@ CAST CONSTRAINT region.region_id TO NODE KEY
 -- Phase 4: ADD territories node (new entity, edge -> region)
 -- Business: Sales territories within regions
 -- ============================================
-ADD ENTITY territories WITH ATTRIBUTES (territory_id String, territory_description String)
+ADD ENTITY territories WITH PROPERTIES (territory_id String, territory_description String)
 ADD KEY territory_id TO territories
 CAST CONSTRAINT territories.territory_id TO NODE KEY
 ADD ENTITY BELONGS_TO FROM territories TO region
@@ -75,16 +75,16 @@ ADD ENTITY ASSIGNED_TO FROM employees TO territories
 -- ============================================
 -- Phase 6: employees -- simplify + ADD
 -- ============================================
-DELETE ATTRIBUTE employees.birth_date
-DELETE ATTRIBUTE employees.notes
-ADD ATTRIBUTE email TO employees WITH TYPE String
+DELETE PROPERTY employees.birth_date
+DELETE PROPERTY employees.notes
+ADD PROPERTY email TO employees WITH TYPE String
 
 -- ============================================
 -- Phase 7: products + orders -- RENAME + ADD
 -- ============================================
-RENAME ATTRIBUTE product_name TO name IN products
-RENAME ATTRIBUTE freight TO shipping_cost IN orders
-ADD ATTRIBUTE status TO orders WITH TYPE String
+RENAME PROPERTY product_name TO name IN products
+RENAME PROPERTY freight TO shipping_cost IN orders
+ADD PROPERTY status TO orders WITH TYPE String
 
 -- ============================================
 -- Phase 8: suppliers -- ADD_LABEL
@@ -111,9 +111,9 @@ ADD LABEL Vendor TO suppliers
 -- ============================================
 -- Operation Summary (24 steps, 11 operation types):
 --   MERGE: 1              SPLIT: 1
---   ADD ENTITY: 2         ADD ATTRIBUTE: 2
+--   ADD ENTITY: 2         ADD PROPERTY: 2
 --   ADD KEY: 4            CAST CONSTRAINT: 4
 --   ADD ENTITY(edge): 3   DELETE ENTITY: 1
---   DELETE ATTRIBUTE: 3   RENAME ATTRIBUTE: 2
+--   DELETE PROPERTY: 3   RENAME PROPERTY: 2
 --   ADD LABEL: 1
 -- ============================================

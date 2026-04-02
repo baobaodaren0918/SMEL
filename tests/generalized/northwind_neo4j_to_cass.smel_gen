@@ -9,7 +9,7 @@
 -- Operation Semantics:
 --   TRANSFORM:          Convert relationship (graph edge) to entity (wide-column table)
 --   RENAME_ENTITY:      Rename entity after TRANSFORM (relationship name -> table name)
---   ADD_ATTRIBUTE:      Add FK-like attribute to entity (graph edge replaced by column)
+--   ADD_PROPERTY:      Add FK-like attribute to entity (graph edge replaced by column)
 --   DELETE_ENTITY:      Remove relationship type (graph edge no longer needed)
 --   DELETE_PRIMARY_KEY: Remove graph PK before adding partition/clustering keys
 --   ADD_PARTITION_KEY:  Define partition key for query-driven data distribution
@@ -60,8 +60,8 @@ USING northwind_schema:1
 -- Then rename from relationship name to table name, add FK-like columns.
 TRANSFORM CONTAINS INTO ENTITY
 RENAME ENTITY CONTAINS TO order_details
-ADD ATTRIBUTE order_id TO order_details WITH TYPE String
-ADD ATTRIBUTE product_id TO order_details WITH TYPE String
+ADD PROPERTY order_id TO order_details WITH TYPE String
+ADD PROPERTY product_id TO order_details WITH TYPE String
 -- Result:
 -- order_details: { order_id, product_id, unit_price, quantity, discount }
 
@@ -72,37 +72,37 @@ ADD ATTRIBUTE product_id TO order_details WITH TYPE String
 
 -- employees self-reference: REPORTS_TO -> reports_to column
 DELETE ENTITY REPORTS_TO
-ADD ATTRIBUTE reports_to TO employees WITH TYPE String
+ADD PROPERTY reports_to TO employees WITH TYPE String
 -- Result:
 -- employees: { employee_id [PK], ..., reports_to }
 
 -- products <- supplier: SUPPLIES -> supplier_id column
 DELETE ENTITY SUPPLIES
-ADD ATTRIBUTE supplier_id TO products WITH TYPE String
+ADD PROPERTY supplier_id TO products WITH TYPE String
 -- Result:
 -- products: { product_id [PK], ..., supplier_id }
 
 -- products -> category: PART_OF -> category_id column
 DELETE ENTITY PART_OF
-ADD ATTRIBUTE category_id TO products WITH TYPE String
+ADD PROPERTY category_id TO products WITH TYPE String
 -- Result:
 -- products: { product_id [PK], ..., supplier_id, category_id }
 
 -- orders <- customer: PURCHASED -> customer_id column
 DELETE ENTITY PURCHASED
-ADD ATTRIBUTE customer_id TO orders WITH TYPE String
+ADD PROPERTY customer_id TO orders WITH TYPE String
 -- Result:
 -- orders: { order_id [PK], ..., customer_id }
 
 -- orders <- employee: SOLD -> employee_id column
 DELETE ENTITY SOLD
-ADD ATTRIBUTE employee_id TO orders WITH TYPE String
+ADD PROPERTY employee_id TO orders WITH TYPE String
 -- Result:
 -- orders: { order_id [PK], ..., customer_id, employee_id }
 
 -- orders -> shipper: SHIPPED_VIA -> shipper_id column
 DELETE ENTITY SHIPPED_VIA
-ADD ATTRIBUTE shipper_id TO orders WITH TYPE String
+ADD PROPERTY shipper_id TO orders WITH TYPE String
 -- Result:
 -- orders: { order_id [PK], ..., customer_id, employee_id, shipper_id }
 
@@ -156,7 +156,7 @@ CAST CONSTRAINT customers.customer_id TO PARTITION KEY
 -- ============================================
 -- Operation Summary (30 steps, 8 operation types):
 --   RENAME_ENTITY:      1    TRANSFORM:          1
---   ADD_ATTRIBUTE:      8    DELETE_ENTITY:       6
+--   ADD_PROPERTY:      8    DELETE_ENTITY:       6
 --   DELETE_PRIMARY_KEY: 2    ADD_PARTITION_KEY:   3
 --   ADD_CLUSTERING_KEY: 3    CAST_CONSTRAINT:     5
 -- ============================================

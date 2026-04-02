@@ -46,7 +46,7 @@ USING northwind_schema:1
 -- ============================================
 -- Step 1: Rename PK from MongoDB convention
 -- ============================================
-RENAME ATTRIBUTE _id TO order_id IN orders
+RENAME PROPERTY _id TO order_id IN orders
 CAST CONSTRAINT orders.order_id TO PRIMARY KEY
 -- Result:
 -- orders: { order_id, order_date, required_date, shipped_date, freight, ship_name,
@@ -66,16 +66,16 @@ UNNEST orders.details:unit_price, quantity, discount, product{product_name, unit
 -- ============================================
 UNNEST orders.customer:company_name, contact_name, contact_title, phone, fax, address{street, city, region, postal_code, country} AS customers WITH orders.order_id TO customers.order_id
 ADD KEY customers.customer_id AS String
-DELETE ATTRIBUTE customers.order_id
-ADD ATTRIBUTE customer_id TO orders WITH TYPE String
+DELETE PROPERTY customers.order_id
+ADD PROPERTY customer_id TO orders WITH TYPE String
 ADD CONSTRAINT orders.customer_id REFERENCES customers(customer_id) WITH CARDINALITY ONE_TO_MANY
 -- FLATTEN address into customers
 FLATTEN customers.address
-RENAME ATTRIBUTE address_street TO street IN customers
-RENAME ATTRIBUTE address_city TO city IN customers
-RENAME ATTRIBUTE address_region TO region IN customers
-RENAME ATTRIBUTE address_postal_code TO postal_code IN customers
-RENAME ATTRIBUTE address_country TO country IN customers
+RENAME PROPERTY address_street TO street IN customers
+RENAME PROPERTY address_city TO city IN customers
+RENAME PROPERTY address_region TO region IN customers
+RENAME PROPERTY address_postal_code TO postal_code IN customers
+RENAME PROPERTY address_country TO country IN customers
 -- Result:
 -- orders: { order_id, ..., customer_id [FK->customers], employee{...}, shipper{...} }
 -- customers: { customer_id, company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country }
@@ -85,17 +85,17 @@ RENAME ATTRIBUTE address_country TO country IN customers
 -- ============================================
 UNNEST orders.employee:last_name, first_name, title, birth_date, hire_date, phone, notes, reports_to, address{street, city, region, postal_code, country} AS employees WITH orders.order_id TO employees.order_id
 ADD KEY employees.employee_id AS String
-DELETE ATTRIBUTE employees.order_id
-ADD ATTRIBUTE employee_id TO orders WITH TYPE String
+DELETE PROPERTY employees.order_id
+ADD PROPERTY employee_id TO orders WITH TYPE String
 ADD CONSTRAINT orders.employee_id REFERENCES employees(employee_id) WITH CARDINALITY ONE_TO_MANY
 ADD CONSTRAINT employees.reports_to REFERENCES employees(employee_id) WITH CARDINALITY ZERO_TO_MANY
 -- FLATTEN address into employees
 FLATTEN employees.address
-RENAME ATTRIBUTE address_street TO street IN employees
-RENAME ATTRIBUTE address_city TO city IN employees
-RENAME ATTRIBUTE address_region TO region IN employees
-RENAME ATTRIBUTE address_postal_code TO postal_code IN employees
-RENAME ATTRIBUTE address_country TO country IN employees
+RENAME PROPERTY address_street TO street IN employees
+RENAME PROPERTY address_city TO city IN employees
+RENAME PROPERTY address_region TO region IN employees
+RENAME PROPERTY address_postal_code TO postal_code IN employees
+RENAME PROPERTY address_country TO country IN employees
 -- Result:
 -- orders: { order_id, ..., customer_id [FK], employee_id [FK], shipper{...} }
 -- employees: { employee_id, last_name, first_name, title, birth_date, hire_date, phone, notes, street, city, region, postal_code, country, reports_to [FK->self] }
@@ -105,8 +105,8 @@ RENAME ATTRIBUTE address_country TO country IN employees
 -- ============================================
 UNNEST orders.shipper:company_name, phone AS shippers WITH orders.order_id TO shippers.order_id
 ADD KEY shippers.shipper_id AS String
-DELETE ATTRIBUTE shippers.order_id
-ADD ATTRIBUTE shipper_id TO orders WITH TYPE String
+DELETE PROPERTY shippers.order_id
+ADD PROPERTY shipper_id TO orders WITH TYPE String
 ADD CONSTRAINT orders.shipper_id REFERENCES shippers(shipper_id) WITH CARDINALITY ONE_TO_MANY
 -- Result:
 -- orders: { order_id, order_date, required_date, shipped_date, freight, ship_name,
@@ -118,8 +118,8 @@ ADD CONSTRAINT orders.shipper_id REFERENCES shippers(shipper_id) WITH CARDINALIT
 -- ============================================
 UNNEST order_details.product:product_name, unit_price, units_in_stock, discontinued, quantity_per_unit, category{category_name, description}, supplier{company_name, contact_name, contact_title, phone, fax, address{street, city, region, postal_code, country}} AS products WITH order_details.order_id TO products.order_id
 ADD KEY products.product_id AS String
-DELETE ATTRIBUTE products.order_id
-ADD ATTRIBUTE product_id TO order_details WITH TYPE String
+DELETE PROPERTY products.order_id
+ADD PROPERTY product_id TO order_details WITH TYPE String
 ADD CONSTRAINT order_details.product_id REFERENCES products(product_id) WITH CARDINALITY ONE_TO_MANY
 -- Result:
 -- order_details: { order_id, product_id [FK], unit_price, quantity, discount }
@@ -131,16 +131,16 @@ ADD CONSTRAINT order_details.product_id REFERENCES products(product_id) WITH CAR
 -- ============================================
 UNNEST products.supplier:company_name, contact_name, contact_title, phone, fax, address{street, city, region, postal_code, country} AS suppliers WITH products.product_id TO suppliers.product_id
 ADD KEY suppliers.supplier_id AS String
-DELETE ATTRIBUTE suppliers.product_id
-ADD ATTRIBUTE supplier_id TO products WITH TYPE String
+DELETE PROPERTY suppliers.product_id
+ADD PROPERTY supplier_id TO products WITH TYPE String
 ADD CONSTRAINT products.supplier_id REFERENCES suppliers(supplier_id) WITH CARDINALITY ONE_TO_MANY
 -- FLATTEN address into suppliers
 FLATTEN suppliers.address
-RENAME ATTRIBUTE address_street TO street IN suppliers
-RENAME ATTRIBUTE address_city TO city IN suppliers
-RENAME ATTRIBUTE address_region TO region IN suppliers
-RENAME ATTRIBUTE address_postal_code TO postal_code IN suppliers
-RENAME ATTRIBUTE address_country TO country IN suppliers
+RENAME PROPERTY address_street TO street IN suppliers
+RENAME PROPERTY address_city TO city IN suppliers
+RENAME PROPERTY address_region TO region IN suppliers
+RENAME PROPERTY address_postal_code TO postal_code IN suppliers
+RENAME PROPERTY address_country TO country IN suppliers
 -- Result:
 -- products: { product_id, ..., supplier_id [FK->suppliers], category{...} }
 -- suppliers: { supplier_id, company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country }
@@ -150,8 +150,8 @@ RENAME ATTRIBUTE address_country TO country IN suppliers
 -- ============================================
 UNNEST products.category:category_name, description AS categories WITH products.product_id TO categories.product_id
 ADD KEY categories.category_id AS String
-DELETE ATTRIBUTE categories.product_id
-ADD ATTRIBUTE category_id TO products WITH TYPE String
+DELETE PROPERTY categories.product_id
+ADD PROPERTY category_id TO products WITH TYPE String
 ADD CONSTRAINT products.category_id REFERENCES categories(category_id) WITH CARDINALITY ONE_TO_MANY
 -- Result:
 -- products: { product_id, product_name, unit_price, units_in_stock, discontinued, quantity_per_unit,
@@ -162,11 +162,11 @@ ADD CONSTRAINT products.category_id REFERENCES categories(category_id) WITH CARD
 -- Step 9: FLATTEN orders.ship_destination
 -- ============================================
 FLATTEN orders.ship_destination
-RENAME ATTRIBUTE ship_destination_ship_address TO ship_address IN orders
-RENAME ATTRIBUTE ship_destination_ship_city TO ship_city IN orders
-RENAME ATTRIBUTE ship_destination_ship_region TO ship_region IN orders
-RENAME ATTRIBUTE ship_destination_ship_postal_code TO ship_postal_code IN orders
-RENAME ATTRIBUTE ship_destination_ship_country TO ship_country IN orders
+RENAME PROPERTY ship_destination_ship_address TO ship_address IN orders
+RENAME PROPERTY ship_destination_ship_city TO ship_city IN orders
+RENAME PROPERTY ship_destination_ship_region TO ship_region IN orders
+RENAME PROPERTY ship_destination_ship_postal_code TO ship_postal_code IN orders
+RENAME PROPERTY ship_destination_ship_country TO ship_country IN orders
 -- Result:
 -- orders: { order_id, order_date, required_date, shipped_date, freight, ship_name,
 --   ship_address, ship_city, ship_region, ship_postal_code, ship_country,
@@ -192,12 +192,12 @@ ADD KEY (order_id, product_id) TO order_details
 
 -- ============================================
 -- Operation Summary (43 steps):
---   RENAME_ATTRIBUTE: 13  (1 PK rename + 12 FLATTEN renames)
+--   RENAME_PROPERTY: 13  (1 PK rename + 12 FLATTEN renames)
 --   CAST_CONSTRAINT: 1    (orders.order_id -> PRIMARY KEY)
 --   UNNEST: 7             (details, customer, employee, shipper, product, supplier, category)
 --   FLATTEN: 4            (customers.address, employees.address, suppliers.address, orders.ship_destination)
 --   ADD_PRIMARY_KEY: 7    (customers, employees, shippers, products, suppliers, categories, order_details composite)
---   DELETE_ATTRIBUTE: 6   (carry-field cleanup for customers, employees, shippers, products, suppliers, categories)
---   ADD_ATTRIBUTE: 6      (FK fields: customer_id, employee_id, shipper_id, product_id, supplier_id, category_id)
+--   DELETE_PROPERTY: 6   (carry-field cleanup for customers, employees, shippers, products, suppliers, categories)
+--   ADD_PROPERTY: 6      (FK fields: customer_id, employee_id, shipper_id, product_id, supplier_id, category_id)
 --   ADD_CONSTRAINT: 9     (7 FK constraints + 1 self-ref + 1 order_details->orders)
 -- ============================================
