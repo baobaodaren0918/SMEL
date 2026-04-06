@@ -16,7 +16,7 @@
 
 MIGRATION northwind_pg_to_neo4j:1.0
 FROM RELATIONAL TO GRAPH
-USING northwind_schema:1
+USING adapted_northwind_schema VERSION 1
 
 -- ============================================
 -- Source: PostgreSQL 3NF Tables (8 tables, 8 FKs)

@@ -8,9 +8,9 @@
 --   Repartition orders:  Change partition key from customer_id to order_date
 --   ADD_ENTITY:          Create region, territories, employee_territories (with composite partition key)
 
-MIGRATION northwind_cass1_to_cass2:1.0
+EVOLUTION northwind_cass1_to_cass2:1.0
 FROM COLUMNAR TO COLUMNAR
-USING northwind_schema:1
+USING adapted_northwind_schema VERSION 1 TO 2
 
 -- ============================================
 -- Meta V1 (after Reverse Engineering of northwind_cassandra.cql)

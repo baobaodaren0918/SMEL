@@ -7,9 +7,9 @@
 --   UNFLATTEN:     Group customer contact fields into contacts sub-object (reorganize)
 --   ADD_EMBEDDED:  Add territories array to employee with nested region (sales territory tracking)
 
-MIGRATION northwind_mongo1_to_mongo2:1.0
+EVOLUTION northwind_mongo1_to_mongo2:1.0
 FROM DOCUMENT TO DOCUMENT
-USING northwind_schema:1
+USING adapted_northwind_schema VERSION 1 TO 2
 
 -- ============================================
 -- Meta V1 (after Reverse Engineering of northwind_mongodb.json)

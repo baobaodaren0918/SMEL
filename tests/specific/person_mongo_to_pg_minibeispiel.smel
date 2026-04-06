@@ -10,7 +10,7 @@
 
 MIGRATION person_mongo_to_pg:1.0
 FROM DOCUMENT TO RELATIONAL
-USING person_schema:1
+USING person_schema VERSION 1
 
 -- ============================================
 -- Source: MongoDB Person Document

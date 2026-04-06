@@ -14,7 +14,7 @@
 
 MIGRATION northwind_cass_to_mongo:1.0
 FROM COLUMNAR TO DOCUMENT
-USING northwind_schema:1
+USING adapted_northwind_schema VERSION 1
 
 -- ============================================
 -- Source: Cassandra Wide-column Tables (8 tables)

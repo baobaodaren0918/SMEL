@@ -14,7 +14,7 @@
 
 MIGRATION northwind_pg_to_cass:1.0
 FROM RELATIONAL TO COLUMNAR
-USING northwind_schema:1
+USING adapted_northwind_schema VERSION 1
 
 -- ============================================
 -- Source: PostgreSQL 3NF Tables (8 tables)
@@ -123,7 +123,7 @@ CAST_CONSTRAINT customers.customer_id TO PARTITION KEY
 -- ============================================
 -- Final Target (8 wide-column tables):
 -- categories:     { category_id [PARTITION], category_name, description }
--- suppliers:      { supplier_id [PARTITION], company_name, contact_name, contact_title, phone, fax, street, city, postal_code, country }
+-- suppliers:      { supplier_id [PARTITION], company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country }
 -- shippers:       { shipper_id [PARTITION], company_name, phone }
 -- employees:      { employee_id [PARTITION], last_name, first_name, title, birth_date, hire_date, phone, notes, street, city, region, postal_code, country, reports_to }
 -- customers:      { customer_id [PARTITION], company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country }

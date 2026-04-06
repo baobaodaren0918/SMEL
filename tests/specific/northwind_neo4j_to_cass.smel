@@ -18,19 +18,19 @@
 
 MIGRATION northwind_neo4j_to_cass:1.0
 FROM GRAPH TO COLUMNAR
-USING northwind_schema:1
+USING adapted_northwind_schema VERSION 1
 
 -- ============================================
 -- Source: Neo4j Graph (7 nodes, 7 relationships)
 -- ============================================
 -- Nodes:
 --   categories:  { category_id [PK], category_name, description }
---   suppliers:   { supplier_id [PK], company_name, contact_name, contact_title, phone, fax, street, city, postal_code, country }
+--   suppliers:   { supplier_id [PK], company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country }
 --   shippers:    { shipper_id [PK], company_name, phone }
---   employees:   { employee_id [PK], last_name, first_name, title, birth_date, hire_date, phone, notes, street, city, postal_code, country }
---   customers:   { customer_id [PK], company_name, contact_name, contact_title, phone, fax, street, city, postal_code, country }
+--   employees:   { employee_id [PK], last_name, first_name, title, birth_date, hire_date, phone, notes, street, city, region, postal_code, country }
+--   customers:   { customer_id [PK], company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country }
 --   products:    { product_id [PK], product_name, unit_price, units_in_stock, discontinued, quantity_per_unit }
---   orders:      { order_id [PK], order_date, required_date, shipped_date, freight, ship_name, ship_city }
+--   orders:      { order_id [PK], order_date, required_date, shipped_date, freight, ship_name, ship_address, ship_city, ship_region, ship_postal_code, ship_country }
 -- Relationships:
 --   REPORTS_TO  (employees -> employees)
 --   SUPPLIES    (suppliers -> products)
@@ -144,10 +144,10 @@ CAST_CONSTRAINT customers.customer_id TO PARTITION KEY
 -- ============================================
 -- Final Target (8 wide-column tables):
 -- categories:     { category_id [PARTITION], category_name, description }
--- suppliers:      { supplier_id [PARTITION], company_name, contact_name, contact_title, phone, fax, street, city, postal_code, country }
+-- suppliers:      { supplier_id [PARTITION], company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country }
 -- shippers:       { shipper_id [PARTITION], company_name, phone }
 -- employees:      { employee_id [PARTITION], last_name, first_name, title, birth_date, hire_date, phone, notes, street, city, region, postal_code, country, reports_to }
--- customers:      { customer_id [PARTITION], company_name, contact_name, contact_title, phone, fax, street, city, postal_code, country }
+-- customers:      { customer_id [PARTITION], company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country }
 -- products:       { category_id [PARTITION], supplier_id [PARTITION], product_id [CLUSTERING], product_name, unit_price, units_in_stock, discontinued, quantity_per_unit, supplier_id }
 -- orders:         { customer_id [PARTITION], order_date [CLUSTERING], order_id [CLUSTERING], required_date, shipped_date, freight, ship_name, ship_address, ship_city, ship_region, ship_postal_code, ship_country, employee_id, shipper_id }
 -- order_details:  { order_id [PARTITION], product_id [PARTITION], unit_price, quantity, discount }

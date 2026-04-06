@@ -17,7 +17,7 @@
 
 MIGRATION northwind_neo4j_to_pg:1.0
 FROM GRAPH TO RELATIONAL
-USING northwind_schema:1
+USING adapted_northwind_schema VERSION 1
 
 -- ============================================
 -- Source: Neo4j Graph (7 nodes, 7 relationships)
@@ -29,7 +29,7 @@ USING northwind_schema:1
 --   employees:   { employee_id [PK], last_name, first_name, title, birth_date, hire_date, phone, notes, street, city, region, postal_code, country }
 --   customers:   { customer_id [PK], company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country }
 --   products:    { product_id [PK], product_name, unit_price, units_in_stock, discontinued, quantity_per_unit }
---   orders:      { order_id [PK], order_date, required_date, shipped_date, freight, ship_name, ship_city }
+--   orders:      { order_id [PK], order_date, required_date, shipped_date, freight, ship_name, ship_address, ship_city, ship_region, ship_postal_code, ship_country }
 -- Relationships:
 --   REPORTS_TO  (employees -> employees)
 --   SUPPLIES    (suppliers -> products)

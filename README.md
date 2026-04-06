@@ -21,8 +21,8 @@ A formally defined DSL for schema migration and evolution between heterogeneous 
 
 ### Setup
 ```bash
-git clone https://github.com/baobaodaren0918/SMEL.git
-cd SMEL
+git clone https://github.com/baobaodaren0918/SMEL-3.0.git
+cd SMEL-3.0
 
 python -m venv .venv
 .venv\Scripts\activate  # Windows
@@ -110,7 +110,7 @@ SMEL/
 │   ├── specific/                      # Specific grammar (38 keywords)
 │   │   ├── SMEL_Specific.g4
 │   │   └── generate_parser.bat
-│   ├── generalized/                   # Generalized grammar (26 composable tokens)
+│   ├── generalized/                   # Generalized grammar (27 composable tokens)
 │   │   ├── SMEL_Generalized.g4
 │   │   └── generate_parser.bat
 │   └── antlr-4.13.2-complete.jar
@@ -136,7 +136,7 @@ SMEL/
 ├── validate_meta.py                   # Layer 1: Meta V2 vs expected schema
 ├── validate_export.py                 # Layer 2: Export round-trip verification
 ├── main.py                            # CLI entry point
-└── web_server.py                      # Web interface (Flask)
+└── web_server.py                      # Web interface (http.server)
 ```
 
 ## Architecture
@@ -196,7 +196,7 @@ The hub representation (`Schema/unified_meta_schema.py`) that makes cross-model 
 ```
 Database
   └── EntityType (TABLE / DOCUMENT / VERTEX / WIDE_COLUMN_TABLE / EDGE)
-        ├── Attribute (name, data_type, is_key, is_optional)
+        ├── Property (name, data_type, is_key, is_optional)
         ├── Constraint
         │     ├── UniqueConstraint (PK: simple / partition / clustering)
         │     └── ForeignKeyConstraint
@@ -222,15 +222,16 @@ Database
 | `SPLIT` | Partition entity vertically | R2R: split table |
 | `TRANSFORM` | Entity ↔ Relationship conversion | R↔G: table ↔ edge |
 
-### Attribute Operations (5)
+### Property Operations (6)
 
 | Operation | Description |
 |-----------|-------------|
-| `ADD_ATTRIBUTE` | Add field to entity |
-| `DELETE_ATTRIBUTE` | Remove field from entity |
-| `RENAME_ATTRIBUTE` | Rename field |
-| `COPY_ATTRIBUTE` | Copy field to another entity |
-| `MOVE_ATTRIBUTE` | Move field to another entity |
+| `ADD_PROPERTY` | Add field to entity |
+| `DELETE_PROPERTY` | Remove field from entity |
+| `RENAME_PROPERTY` | Rename field |
+| `COPY_PROPERTY` | Copy field to another entity |
+| `MOVE_PROPERTY` | Move field to another entity |
+| `CAST_PROPERTY` | Change property data type |
 
 ### Entity Operations (4)
 
@@ -253,11 +254,10 @@ Database
 | `DELETE_CONSTRAINT` | Remove FK reference by field |
 | `CAST_CONSTRAINT` | Change constraint type (e.g., UNIQUE → PARTITION) |
 
-### Type & Cardinality Operations (3)
+### Type & Cardinality Operations (2)
 
 | Operation | Description |
 |-----------|-------------|
-| `CAST_ATTRIBUTE` | Change attribute data type |
 | `CAST_ENTITY` | Change entity kind (e.g., TABLE → DOCUMENT) |
 | `RECARD` | Change relationship cardinality |
 
@@ -274,10 +274,10 @@ Two functionally equivalent grammars — same abstract syntax, different concret
 
 | Grammar | Extension | Keywords | Example |
 |---------|-----------|----------|---------|
-| **Specific** | `.smel` | 38 dedicated | `ADD_ATTRIBUTE name TO person WITH TYPE String` |
-| **Generalized** | `.smel_gen` | 26 composable | `ADD ATTRIBUTE name TO person WITH TYPE String` |
+| **Specific** | `.smel` | 38 dedicated | `ADD_PROPERTY name TO person WITH TYPE String` |
+| **Generalized** | `.smel_gen` | 27 composable | `ADD PROPERTY name TO person WITH TYPE String` |
 
-The Generalized grammar reduces keyword count by ~32% through verb+object composition (6 verbs × 5 object types + modifiers). Structural operations (`NEST`, `UNNEST`, `FLATTEN`, `UNFLATTEN`, `WIND`, `UNWIND`, `MERGE`, `SPLIT`, `TRANSFORM`) are identical in both variants.
+The Generalized grammar reduces keyword count by ~29% through verb+object composition (6 verbs × 5 object types + modifiers). Structural operations (`NEST`, `UNNEST`, `FLATTEN`, `UNFLATTEN`, `WIND`, `UNWIND`, `MERGE`, `SPLIT`, `TRANSFORM`) are identical in both variants.
 
 ## SMEL Script Examples
 
@@ -286,7 +286,7 @@ The Generalized grammar reduces keyword count by ~32% through verb+object compos
 ```smel
 MIGRATION northwind_pg_to_mongo:1.0
 FROM RELATIONAL TO DOCUMENT
-USING northwind_schema:1
+USING adapted_northwind_schema VERSION 1
 
 -- Embed tables as nested objects (deepest first)
 NEST categories:category_name, description IN products.category
@@ -299,21 +299,21 @@ UNFLATTEN orders:ship_address, ship_city, ship_region, ship_postal_code, ship_co
   AS ship_destination
 
 -- Rename PK for MongoDB convention
-RENAME_ATTRIBUTE order_id TO _id IN orders
+RENAME_PROPERTY order_id TO _id IN orders
 ```
 
 ### Same-Model Evolution: Relational V1 → V2 (R2R)
 
 ```smel
-MIGRATION northwind_pg1_to_pg2:1.0
+EVOLUTION northwind_r2r:1.0
 FROM RELATIONAL TO RELATIONAL
-USING northwind_schema:1
+USING adapted_northwind_schema VERSION 1 TO 2
 
 -- Denormalize: merge categories into products
 DELETE_CONSTRAINT products.category_id
-DELETE_ATTRIBUTE products.category_id
+DELETE_PROPERTY products.category_id
 DELETE_PRIMARY_KEY category_id FROM categories
-DELETE_ATTRIBUTE categories.category_id
+DELETE_PROPERTY categories.category_id
 MERGE categories, products INTO products
 
 -- Vertical partition: split customer contacts
@@ -322,8 +322,8 @@ SPLIT customers INTO customers:customer_id, company_name, street, city, region,
   phone, fax
 
 -- Add new entities for territory management
-ADD_ENTITY region WITH ATTRIBUTES (region_id String, region_description String)
-ADD_ENTITY territories WITH ATTRIBUTES (territory_id String, territory_description String, region_id String)
+ADD_ENTITY region WITH PROPERTIES (region_id String, region_description String)
+ADD_ENTITY territories WITH PROPERTIES (territory_id String, territory_description String, region_id String)
 ```
 
 ## Regenerating Parsers

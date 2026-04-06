@@ -1348,7 +1348,7 @@ class SchemaTransformer:
             if src_entity:
                 new_entity = copy.deepcopy(src_entity)
                 # Update object_name with new target name
-                new_entity.object_name = [target_parts[0]]
+                new_entity.object_name = [target_path]
                 self.database.add_entity_type(new_entity)
                 self.changes.append(f"COPY_PROP:{source_path}->{target_path}")
                 return True

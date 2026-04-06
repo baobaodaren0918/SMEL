@@ -18,7 +18,7 @@
 
 MIGRATION northwind_cass_to_neo4j:1.0
 FROM COLUMNAR TO GRAPH
-USING northwind_schema:1
+USING adapted_northwind_schema VERSION 1
 
 -- ============================================
 -- Source: Cassandra Wide-column Tables (8 tables)
@@ -37,12 +37,12 @@ USING northwind_schema:1
 -- ============================================
 -- Nodes:
 --   categories:  { category_id [PK], category_name, description }
---   suppliers:   { supplier_id [PK], company_name, contact_name, contact_title, phone, fax, street, city, postal_code, country }
+--   suppliers:   { supplier_id [PK], company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country }
 --   shippers:    { shipper_id [PK], company_name, phone }
---   employees:   { employee_id [PK], last_name, first_name, title, birth_date, hire_date, phone, notes, street, city, postal_code, country }
---   customers:   { customer_id [PK], company_name, contact_name, contact_title, phone, fax, street, city, postal_code, country }
+--   employees:   { employee_id [PK], last_name, first_name, title, birth_date, hire_date, phone, notes, street, city, region, postal_code, country }
+--   customers:   { customer_id [PK], company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country }
 --   products:    { product_id [PK], product_name, unit_price, units_in_stock, discontinued, quantity_per_unit }
---   orders:      { order_id [PK], order_date, required_date, shipped_date, freight, ship_name, ship_city }
+--   orders:      { order_id [PK], order_date, required_date, shipped_date, freight, ship_name, ship_address, ship_city, ship_region, ship_postal_code, ship_country }
 -- Relationships:
 --   REPORTS_TO  (employees -> employees)
 --   SUPPLIES    (suppliers -> products)
@@ -89,7 +89,7 @@ DELETE PARTITION KEY (order_id, product_id) FROM order_details
 DELETE PROPERTY employees.reports_to
 ADD ENTITY REPORTS_TO FROM employees TO employees
 -- Result:
--- employees: { employee_id [PK], last_name, first_name, title, birth_date, hire_date, phone, notes, street, city, postal_code, country }
+-- employees: { employee_id [PK], last_name, first_name, title, birth_date, hire_date, phone, notes, street, city, region, postal_code, country }
 -- + REPORTS_TO relationship (employees -> employees)
 
 -- products -> supplier: supplier_id column -> SUPPLIES relationship
@@ -123,7 +123,7 @@ ADD ENTITY SOLD FROM employees TO orders
 DELETE PROPERTY orders.shipper_id
 ADD ENTITY SHIPPED_VIA FROM orders TO shippers
 -- Result:
--- orders: { order_id [PK], order_date, required_date, shipped_date, freight, ship_name, ship_city }
+-- orders: { order_id [PK], order_date, required_date, shipped_date, freight, ship_name, ship_address, ship_city, ship_region, ship_postal_code, ship_country }
 
 -- ============================================
 -- Step 3: TRANSFORM order_details to CONTAINS relationship
@@ -158,12 +158,12 @@ CAST CONSTRAINT orders.order_id TO NODE KEY
 -- Final Meta V2 (7 nodes, 7 relationship types):
 -- ============================================
 -- categories:  { category_id [PK], category_name, description }
--- suppliers:   { supplier_id [PK], company_name, contact_name, contact_title, phone, fax, street, city, postal_code, country }
+-- suppliers:   { supplier_id [PK], company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country }
 -- shippers:    { shipper_id [PK], company_name, phone }
--- employees:   { employee_id [PK], last_name, first_name, title, birth_date, hire_date, phone, notes, street, city, postal_code, country }
--- customers:   { customer_id [PK], company_name, contact_name, contact_title, phone, fax, street, city, postal_code, country }
+-- employees:   { employee_id [PK], last_name, first_name, title, birth_date, hire_date, phone, notes, street, city, region, postal_code, country }
+-- customers:   { customer_id [PK], company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country }
 -- products:    { product_id [PK], product_name, unit_price, units_in_stock, discontinued, quantity_per_unit }
--- orders:      { order_id [PK], order_date, required_date, shipped_date, freight, ship_name, ship_city }
+-- orders:      { order_id [PK], order_date, required_date, shipped_date, freight, ship_name, ship_address, ship_city, ship_region, ship_postal_code, ship_country }
 -- REPORTS_TO  (employees -> employees)
 -- SUPPLIES    (suppliers -> products)
 -- PART_OF     (products -> categories)

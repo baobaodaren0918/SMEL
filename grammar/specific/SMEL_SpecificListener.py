@@ -35,6 +35,15 @@ class SMEL_SpecificListener(ParseTreeListener):
         pass
 
 
+    # Enter a parse tree produced by SMEL_SpecificParser#evolutionDecl.
+    def enterEvolutionDecl(self, ctx:SMEL_SpecificParser.EvolutionDeclContext):
+        pass
+
+    # Exit a parse tree produced by SMEL_SpecificParser#evolutionDecl.
+    def exitEvolutionDecl(self, ctx:SMEL_SpecificParser.EvolutionDeclContext):
+        pass
+
+
     # Enter a parse tree produced by SMEL_SpecificParser#fromToDecl.
     def enterFromToDecl(self, ctx:SMEL_SpecificParser.FromToDeclContext):
         pass

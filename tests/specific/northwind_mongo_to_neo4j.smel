@@ -17,7 +17,7 @@
 
 MIGRATION northwind_mongo_to_neo4j:1.0
 FROM DOCUMENT TO GRAPH
-USING northwind_schema:1
+USING adapted_northwind_schema VERSION 1
 
 -- ============================================
 -- Source: MongoDB Orders Document (1 root, 4-level nesting)
@@ -183,7 +183,7 @@ RENAME_PROPERTY ship_destination_ship_country TO ship_country IN orders
 ADD_PRIMARY_KEY orders.order_id AS String
 -- Result:
 -- orders: { order_id [PK], order_date, required_date, shipped_date, freight, ship_name,
---   ship_destination: { ship_address, ship_city, ship_region, ship_postal_code, ship_country },
+--           ship_address, ship_city, ship_region, ship_postal_code, ship_country,
 --           customer_id, employee_id, shipper_id }
 
 -- ============================================
@@ -207,7 +207,7 @@ ADD_ENTITY PURCHASED FROM customers TO orders
 ADD_ENTITY SOLD FROM employees TO orders
 ADD_ENTITY SHIPPED_VIA FROM orders TO shippers
 -- Result:
--- orders node: { order_id, order_date, required_date, shipped_date, freight, ship_name, ship_city }
+-- orders node: { order_id, order_date, required_date, shipped_date, freight, ship_name, ship_address, ship_city, ship_region, ship_postal_code, ship_country }
 -- Relationships: PURCHASED, SOLD, SHIPPED_VIA
 
 -- ============================================
@@ -250,7 +250,7 @@ CAST_CONSTRAINT orders.order_id TO NODE KEY
 -- employees:   { employee_id [NK], last_name, first_name, title, birth_date, hire_date, phone, notes, street, city, region, postal_code, country }
 -- customers:   { customer_id [NK], company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country }
 -- products:    { product_id [NK], product_name, unit_price, units_in_stock, discontinued, quantity_per_unit }
--- orders:      { order_id [NK], order_date, required_date, shipped_date, freight, ship_name, ship_city }
+-- orders:      { order_id [NK], order_date, required_date, shipped_date, freight, ship_name, ship_address, ship_city, ship_region, ship_postal_code, ship_country }
 -- SUPPLIES (suppliers -> products), PART_OF (products -> categories)
 -- PURCHASED (customers -> orders), SOLD (employees -> orders), SHIPPED_VIA (orders -> shippers)
 -- REPORTS_TO (employees -> employees)

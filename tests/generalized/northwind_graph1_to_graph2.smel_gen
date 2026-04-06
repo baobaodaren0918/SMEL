@@ -9,9 +9,9 @@
 --   ADD_ENTITY:    Create HAS_CONTACT, BELONGS_TO, ASSIGNED_TO edges
 --   ADD_LABEL:     Multi-label node (suppliers + Vendor)
 
-MIGRATION northwind_graph1_to_graph2:1.0
+EVOLUTION northwind_graph1_to_graph2:1.0
 FROM GRAPH TO GRAPH
-USING northwind_schema:1
+USING adapted_northwind_schema VERSION 1 TO 2
 
 -- ============================================
 -- Meta V1 (after Reverse Engineering of northwind_neo4j.cypher)

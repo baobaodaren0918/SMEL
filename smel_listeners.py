@@ -69,11 +69,15 @@ class OpType(str, Enum):
 
 @dataclass
 class MigrationContext:
-    """Context information from SMEL migration declaration."""
+    """Context information from SMEL script declaration."""
     name: str = ""
     version: str = ""
+    is_evolution: bool = False
     source_db_type: str = ""
     target_db_type: str = ""
+    schema_name: str = ""
+    schema_version: str = ""
+    target_schema_version: str = ""  # only for evolution: VERSION x TO y
 
 
 @dataclass
@@ -274,8 +278,20 @@ class SMELSpecificListener(SMEL_SpecificListener, BaseSMELListener):
 
     # Header parsing (same for all versions)
     def enterMigrationDecl(self, ctx):
+        self.context.is_evolution = False
         self.context.name = ctx.identifier().getText()
         self.context.version = ctx.version().getText()
+
+    def enterEvolutionDecl(self, ctx):
+        self.context.is_evolution = True
+        self.context.name = ctx.identifier().getText()
+        self.context.version = ctx.version().getText()
+
+    def enterUsingDecl(self, ctx):
+        self.context.schema_name = ctx.identifier().getText()
+        self.context.schema_version = ctx.version(0).getText()
+        if len(ctx.version()) > 1:
+            self.context.target_schema_version = ctx.version(1).getText()
 
     def enterFromToDecl(self, ctx):
         self.context.source_db_type = ctx.databaseType(0).getText()
@@ -749,8 +765,20 @@ class SMELGeneralizedListener(SMEL_GeneralizedListener, BaseSMELListener):
 
     # Header parsing (same for all versions)
     def enterMigrationDecl(self, ctx):
+        self.context.is_evolution = False
         self.context.name = ctx.identifier().getText()
         self.context.version = ctx.version().getText()
+
+    def enterEvolutionDecl(self, ctx):
+        self.context.is_evolution = True
+        self.context.name = ctx.identifier().getText()
+        self.context.version = ctx.version().getText()
+
+    def enterUsingDecl(self, ctx):
+        self.context.schema_name = ctx.identifier().getText()
+        self.context.schema_version = ctx.version(0).getText()
+        if len(ctx.version()) > 1:
+            self.context.target_schema_version = ctx.version(1).getText()
 
     def enterFromToDecl(self, ctx):
         self.context.source_db_type = ctx.databaseType(0).getText()

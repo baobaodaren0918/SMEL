@@ -14,7 +14,7 @@
 
 MIGRATION northwind_mongo_to_cass:1.0
 FROM DOCUMENT TO COLUMNAR
-USING northwind_schema:1
+USING adapted_northwind_schema VERSION 1
 
 -- ============================================
 -- Source: MongoDB Orders Document
@@ -152,7 +152,7 @@ ADD_PROPERTY category_id TO products WITH TYPE String
 -- ============================================
 -- Step 9: FLATTEN address sub-objects (3 entities -> flat fields)
 -- ============================================
--- Reverse of: UNFLATTEN suppliers/customers/employees:street, city, postal_code, country AS address
+-- Reverse of: UNFLATTEN suppliers/customers/employees:street, city, region, postal_code, country AS address
 
 -- 9a: FLATTEN suppliers.address
 FLATTEN suppliers.address
@@ -162,7 +162,7 @@ RENAME_PROPERTY address_region TO region IN suppliers
 RENAME_PROPERTY address_postal_code TO postal_code IN suppliers
 RENAME_PROPERTY address_country TO country IN suppliers
 -- Result:
--- suppliers: { supplier_id, company_name, contact_name, contact_title, phone, fax, street, city, postal_code, country }
+-- suppliers: { supplier_id, company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country }
 
 -- 9b: FLATTEN customers.address
 FLATTEN customers.address
@@ -172,7 +172,7 @@ RENAME_PROPERTY address_region TO region IN customers
 RENAME_PROPERTY address_postal_code TO postal_code IN customers
 RENAME_PROPERTY address_country TO country IN customers
 -- Result:
--- customers: { customer_id, company_name, contact_name, contact_title, phone, fax, street, city, postal_code, country }
+-- customers: { customer_id, company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country }
 
 -- 9c: FLATTEN employees.address
 FLATTEN employees.address
@@ -236,7 +236,7 @@ ADD_PARTITION_KEY (order_id, product_id) TO order_details
 -- ============================================
 -- Final Target (8 wide-column tables):
 -- categories:     { category_id [PARTITION], category_name, description }
--- suppliers:      { supplier_id [PARTITION], company_name, contact_name, contact_title, phone, fax, street, city, postal_code, country }
+-- suppliers:      { supplier_id [PARTITION], company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country }
 -- shippers:       { shipper_id [PARTITION], company_name, phone }
 -- employees:      { employee_id [PARTITION], last_name, first_name, title, birth_date, hire_date, phone, notes, street, city, region, postal_code, country, reports_to }
 -- customers:      { customer_id [PARTITION], company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country }

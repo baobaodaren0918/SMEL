@@ -7,9 +7,9 @@
 --   SPLIT:      Separate customer identity from contact info (CRM)
 --   ADD_ENTITY: Create region, territories, employee_territories (sales territory tracking)
 
-MIGRATION northwind_pg1_to_pg2:1.0
+EVOLUTION northwind_pg1_to_pg2:1.0
 FROM RELATIONAL TO RELATIONAL
-USING northwind_schema:1
+USING adapted_northwind_schema VERSION 1 TO 2
 
 -- ============================================
 -- Meta V1 (after Reverse Engineering of northwind_postgresql.sql)

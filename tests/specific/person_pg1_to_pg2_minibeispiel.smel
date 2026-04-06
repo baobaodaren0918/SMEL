@@ -14,9 +14,9 @@
 --   ADD_PROPERTY:    Add new field to entity
 --   CAST:             Change field data type
 
-MIGRATION person_pg1_to_pg2:1.0
+EVOLUTION person_pg1_to_pg2:1.0
 FROM RELATIONAL TO RELATIONAL
-USING person_schema:1
+USING person_schema VERSION 1 TO 2
 
 -- ============================================
 -- Meta V1 (after Reverse Engineering of person_postgresql.sql)

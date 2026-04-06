@@ -8,7 +8,7 @@
 
 MIGRATION northwind_mongo_to_pg:1.0
 FROM DOCUMENT TO RELATIONAL
-USING northwind_schema:1
+USING adapted_northwind_schema VERSION 1
 
 -- ============================================
 -- Source: MongoDB Orders Document

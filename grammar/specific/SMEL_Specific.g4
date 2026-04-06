@@ -11,10 +11,15 @@
  * Supported database models: RELATIONAL, DOCUMENT, GRAPH, COLUMNAR
  * Design: from André Conrad
  *
- * Example SMEL script:
+ * Example SMEL migration script:
  *   MIGRATION person_migration:1.0
  *   FROM DOCUMENT TO RELATIONAL
- *   USING person_schema:1.0
+ *   USING person_schema VERSION 1.0
+ *
+ * Example SMEL evolution script:
+ *   EVOLUTION person_evolution:1.0
+ *   FROM DOCUMENT TO DOCUMENT
+ *   USING person_schema VERSION 1.0 TO 2.0
  *
  *   -- Extract nested object to table
  *   FLATTEN person.address AS address
@@ -34,10 +39,11 @@ grammar SMEL_Specific;
 
 // Entry point: migration script = header + operations
 migration: header operation* EOF;
-header: migrationDecl fromToDecl usingDecl;                         // MIGRATION name:ver FROM type TO type USING schema:ver
+header: (migrationDecl | evolutionDecl) fromToDecl usingDecl;        // MIGRATION|EVOLUTION name:ver FROM type TO type USING schema VERSION ver
 migrationDecl: MIGRATION identifier COLON version;                  // MIGRATION payment_migration:1.0
+evolutionDecl: EVOLUTION identifier COLON version;                  // EVOLUTION payment_evolution:1.0
 fromToDecl: FROM databaseType TO databaseType;                      // FROM RELATIONAL TO Document
-usingDecl: USING identifier COLON version;                          // USING iso20022_schema:1.0
+usingDecl: USING identifier VERSION_KW version (TO version)?;       // USING iso20022_schema VERSION 1.0 [TO 2.0]
 databaseType: RELATIONAL | DOCUMENT | GRAPH | COLUMNAR;             // Abstract database model types
 version: VERSION_NUMBER | INTEGER_LITERAL;                          // 1 | 1.0 | 1.0.0
 
@@ -377,7 +383,8 @@ literal: STRING_LITERAL | INTEGER_LITERAL | DECIMAL_LITERAL | TRUE | FALSE | NUL
 // ----------------------------------------------------------------------------
 // KEYWORDS - Reserved words in SMEL_Specific
 // ----------------------------------------------------------------------------
-MIGRATION: 'MIGRATION'; FROM: 'FROM'; TO: 'TO'; USING: 'USING'; AS: 'AS';
+MIGRATION: 'MIGRATION'; EVOLUTION: 'EVOLUTION'; VERSION_KW: 'VERSION';
+FROM: 'FROM'; TO: 'TO'; USING: 'USING'; AS: 'AS';
 INTO: 'INTO'; WITH: 'WITH'; WHERE: 'WHERE'; IN: 'IN'; KEY: 'KEY'; AND: 'AND'; DELETION: 'DELETION';
 ON: 'ON';
 

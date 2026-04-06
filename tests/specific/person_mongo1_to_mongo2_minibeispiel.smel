@@ -12,9 +12,9 @@
 --   CAST:             Change field data type
 --   ADD_PROPERTY:    Add new field to entity
 
-MIGRATION person_mongo1_to_mongo2:1.0
+EVOLUTION person_mongo1_to_mongo2:1.0
 FROM DOCUMENT TO DOCUMENT
-USING person_schema:1
+USING person_schema VERSION 1 TO 2
 
 -- ============================================
 -- Meta V1 (after Reverse Engineering of person_mongodb.json)

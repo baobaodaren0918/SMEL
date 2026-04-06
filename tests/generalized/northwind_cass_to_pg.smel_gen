@@ -15,7 +15,7 @@
 
 MIGRATION northwind_cass_to_pg:1.0
 FROM COLUMNAR TO RELATIONAL
-USING northwind_schema:1
+USING adapted_northwind_schema VERSION 1
 
 -- ============================================
 -- Source: Cassandra Wide-column Tables (8 tables)
@@ -124,10 +124,10 @@ CAST CONSTRAINT customers.customer_id TO PRIMARY KEY
 -- ============================================
 -- Final Target (8 relational tables):
 -- categories:     { category_id [PK], category_name, description }
--- suppliers:      { supplier_id [PK], company_name, contact_name, contact_title, phone, fax, street, city, postal_code, country }
+-- suppliers:      { supplier_id [PK], company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country }
 -- shippers:       { shipper_id [PK], company_name, phone }
 -- employees:      { employee_id [PK], last_name, first_name, title, birth_date, hire_date, phone, notes, street, city, region, postal_code, country, reports_to [FK->employees] }
--- customers:      { customer_id [PK], company_name, contact_name, contact_title, phone, fax, street, city, postal_code, country }
+-- customers:      { customer_id [PK], company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country }
 -- products:       { product_id [PK], product_name, unit_price, units_in_stock, discontinued, quantity_per_unit, supplier_id [FK->suppliers], category_id [FK->categories] }
 -- orders:         { order_id [PK], order_date, required_date, shipped_date, freight, ship_name, ship_address, ship_city, ship_region, ship_postal_code, ship_country, customer_id [FK->customers], employee_id [FK->employees], shipper_id [FK->shippers] }
 -- order_details:  { order_id [PK, FK->orders], product_id [PK, FK->products], unit_price, quantity, discount }

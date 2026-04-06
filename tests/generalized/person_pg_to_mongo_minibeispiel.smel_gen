@@ -10,7 +10,7 @@
 
 MIGRATION person_pg_to_mongo:1.0
 FROM RELATIONAL TO DOCUMENT
-USING person_schema:1
+USING person_schema VERSION 1
 
 -- ============================================
 -- Source: PostgreSQL 3NF Tables (7 tables)

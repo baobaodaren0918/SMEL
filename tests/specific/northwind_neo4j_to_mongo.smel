@@ -18,7 +18,7 @@
 
 MIGRATION northwind_neo4j_to_mongo:1.0
 FROM GRAPH TO DOCUMENT
-USING northwind_schema:1
+USING adapted_northwind_schema VERSION 1
 
 -- ============================================
 -- Source: Neo4j Graph (7 nodes, 7 relationships)
