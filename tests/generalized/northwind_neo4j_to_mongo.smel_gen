@@ -1,4 +1,4 @@
--- SMEL Northwind: Neo4j -> MongoDB (Specific Operations Version)
+-- SMEL Northwind: Neo4j -> MongoDB (Generalized Operations Version)
 -- Graph (Nodes + Relationships) -> Document (Embedded 4-level nesting)
 -- Direction: Graph (Nodes + Edges) -> Denormalized (Embedded)
 --
@@ -97,7 +97,7 @@ ADD PROPERTY shipper_id TO orders WITH TYPE String
 -- orders: { ..., customer_id, employee_id, shipper_id }
 
 -- ============================================
--- Step 3: UNFLATTEN address fields (3 entities have flat address -> sub-objects)
+-- Step 3: UNFLATTEN address fields (4 entities have flat address -> sub-objects)
 -- ============================================
 UNFLATTEN suppliers:street, city, region, postal_code, country AS address
 UNFLATTEN customers:street, city, region, postal_code, country AS address
@@ -199,9 +199,9 @@ CAST CONSTRAINT orders._id TO DOCUMENT_ID
 -- }
 
 -- ============================================
--- Operation Summary (28 steps, 8 operation types):
+-- Operation Summary (29 steps, 8 operation types):
 --   TRANSFORM:         1    RENAME_ENTITY:     1
 --   ADD_PROPERTY:      8    DELETE_ENTITY:     6
---   UNFLATTEN:          3    NEST:              7
+--   UNFLATTEN:          4    NEST:              7
 --   RENAME_PROPERTY:   1    CAST_CONSTRAINT:   1
 -- ============================================

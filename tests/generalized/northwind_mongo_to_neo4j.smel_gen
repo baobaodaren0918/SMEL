@@ -1,4 +1,4 @@
--- SMEL Northwind: MongoDB -> Neo4j (Specific Operations Version)
+-- SMEL Northwind: MongoDB -> Neo4j (Generalized Operations Version)
 -- Document (Embedded 4-level nesting) -> Graph (Nodes + Relationships)
 -- Direction: Denormalized (Embedded) -> Graph (Nodes + Edges)
 --

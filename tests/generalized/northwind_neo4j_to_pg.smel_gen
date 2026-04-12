@@ -1,4 +1,4 @@
--- SMEL: Neo4j -> PostgreSQL (Specific Operations Version)
+-- SMEL: Neo4j -> PostgreSQL (Generalized Operations Version)
 -- Cross-model Schema Migration: Graph -> Relational
 -- Direction: northwind_neo4j.cypher -> northwind_postgresql.sql
 --

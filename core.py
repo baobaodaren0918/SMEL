@@ -213,7 +213,7 @@ class SchemaTransformer:
         - source: address (source entity to embed)
         - target: person (target entity)
         - alias: address (embedded field name)
-        - attributes: [street, city] (properties to embed)
+        - properties: [street, city] (properties to embed)
         - source_fk: address.person_id (source FK for matching)
         - target_pk: person.person_id (target PK for matching)
         - with_deletion: True/False (delete source after embedding)
@@ -221,7 +221,7 @@ class SchemaTransformer:
         source_name = params.get("source")
         target_name = params.get("target")
         alias = params.get("alias")
-        attributes = params.get("attributes", [])
+        properties = params.get("properties", [])
         with_deletion = params.get("with_deletion", False)
 
         source_entity = self._get_entity(source_name, "NEST")
@@ -254,9 +254,9 @@ class SchemaTransformer:
 
         nested = params.get("nested", [])
 
-        if attributes:
+        if properties:
             # Use specified properties
-            for attr_name in attributes:
+            for attr_name in properties:
                 attr = source_entity.get_property(attr_name)
                 if attr:
                     embedded_entity.add_property(Property(attr.attr_name, attr.data_type, False, attr.is_optional))
@@ -449,20 +449,20 @@ class SchemaTransformer:
 
         Parameters:
         - source_path: person.address (the nested path to extract)
-        - attributes: [street, city] (properties to include)
+        - properties: [street, city] (properties to include)
         - nested: [] (nested objects to transfer, from {braces})
         - target: address (the new table name)
         - carry_fields: [{'source': 'person.person_id', 'target': 'address.person_id', 'field_name': 'person_id'}]
                         List of fields to copy from source to new table
         """
         source_path = params.get("source_path")
-        attributes = params.get("attributes", [])  # Regular properties
+        properties = params.get("properties", [])  # Regular properties
         nested_raw = params.get("nested", [])  # Nested objects from parser
         target_name = params.get("target")
         carry_fields = params.get("carry_fields", [])  # Fields to copy from source
 
         # Extract nested object names from the new recursive format
-        # New format: [{'name': 'company', 'attributes': [...], 'nested': [...]}]
+        # New format: [{'name': 'company', 'properties': [...], 'nested': [...]}]
         # Old format: ['company', 'address'] (for backward compatibility)
         nested_objects = []
         for item in nested_raw:
@@ -531,13 +531,13 @@ class SchemaTransformer:
                 if isinstance(rel, Embedded):
                     embedded_map[rel.aggr_name] = rel
 
-        # EXPLICIT DESIGN: attributes and nested are already separated by the parser
-        # - attributes: regular properties like 'position', 'name'
+        # EXPLICIT DESIGN: properties and nested are already separated by the parser
+        # - properties: regular properties like 'position', 'name'
         # - nested_objects: nested objects like 'company', 'address' (from {braces})
         specified_embedded = set(nested_objects) & set(embedded_map.keys())
 
         # Add specified properties from embedded entity
-        for field_name in attributes:
+        for field_name in properties:
             if embedded_entity:
                 attr = embedded_entity.get_property(field_name)
                 if attr:
@@ -862,8 +862,8 @@ class SchemaTransformer:
         return False
 
     def _handle_add_entity(self, params: Dict) -> bool:
-        """ADD_ENTITY Product WITH ATTRIBUTES (id String, name String)
-        Also handles EDGE entities: ADD_ENTITY name FROM src TO tgt WITH ATTRIBUTES (...)
+        """ADD_ENTITY Product WITH PROPERTIES (id String, name String)
+        Also handles EDGE entities: ADD_ENTITY name FROM src TO tgt WITH PROPERTIES (...)
         """
         name = params["name"]
         clauses = params.get("clauses", [])
@@ -875,8 +875,8 @@ class SchemaTransformer:
         # Process clauses for properties and key (shared by regular and EDGE entities)
         key_name = None
         for c in clauses:
-            if c["type"] == "ATTRIBUTES":
-                for attr_def in c["attributes"]:
+            if c["type"] == "PROPERTIES":
+                for attr_def in c["properties"]:
                     attr_name = attr_def["name"]
                     data_type_str = attr_def.get("data_type", "String").upper()
                     prim_type = self.TYPE_STR_MAP.get(data_type_str, PrimitiveType.STRING)

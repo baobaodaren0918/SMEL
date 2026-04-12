@@ -1,4 +1,4 @@
--- SMEL Northwind: Cassandra -> Neo4j (Specific Operations Version)
+-- SMEL Northwind: Cassandra -> Neo4j (Generalized Operations Version)
 -- Cross-model Schema Migration: Columnar -> Graph
 -- Direction: northwind_cassandra.cql -> northwind_neo4j.cypher
 --

@@ -1,4 +1,4 @@
--- SMEL Northwind: PostgreSQL -> MongoDB (Specific Operations Version)
+-- SMEL Northwind: PostgreSQL -> MongoDB (Generalized Operations Version)
 -- Normalized Tables (3NF) -> Orders Document (multi-level nested objects + arrays)
 -- Direction: Normalized (3NF) -> Denormalized (Embedded)
 --

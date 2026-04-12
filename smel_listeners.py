@@ -124,8 +124,8 @@ class BaseSMELListener:
                 pairs.extend(self._parse_condition_pairs(sub))
         return pairs
 
-    def _parse_attribute_clauses(self, clause_list):
-        """Parse attribute clauses: WITH TYPE, WITH DEFAULT, NOT NULL.
+    def _parse_property_clauses(self, clause_list):
+        """Parse property clauses: WITH TYPE, WITH DEFAULT, NOT NULL.
         Returns list of dicts, e.g. [{'type': 'TYPE', 'data_type': 'String'}, {'type': 'NOT_NULL'}]
         """
         result = []
@@ -165,19 +165,19 @@ class BaseSMELListener:
 
     def _parse_entity_clauses(self, clause_list):
         """Parse entity clauses.
-        Returns list of dicts, e.g. [{'type': 'ATTRIBUTES', 'attributes': [{'name': 'id', 'data_type': 'String'}, ...]}, {'type': 'KEY', 'key_name': 'id'}]
+        Returns list of dicts, e.g. [{'type': 'PROPERTIES', 'properties': [{'name': 'id', 'data_type': 'String'}, ...]}, {'type': 'KEY', 'key_name': 'id'}]
         """
         result = []
         for clause in clause_list:
             if hasattr(clause, 'withPropertiesClause') and clause.withPropertiesClause():
-                attr_def_list = clause.withPropertiesClause().propertyDefList()
-                attrs = []
-                for attr_def in attr_def_list.propertyDef():
-                    attrs.append({
-                        'name': attr_def.identifier().getText(),
-                        'data_type': attr_def.dataType().getText()
+                prop_def_list = clause.withPropertiesClause().propertyDefList()
+                props = []
+                for prop_def in prop_def_list.propertyDef():
+                    props.append({
+                        'name': prop_def.identifier().getText(),
+                        'data_type': prop_def.dataType().getText()
                     })
-                result.append({'type': 'ATTRIBUTES', 'attributes': attrs})
+                result.append({'type': 'PROPERTIES', 'properties': props})
             elif hasattr(clause, 'withKeyClause') and clause.withKeyClause():
                 result.append({'type': 'KEY', 'key_name': clause.withKeyClause().identifier().getText()})
         return result
@@ -224,7 +224,7 @@ class BaseSMELListener:
 
     def _parse_unnest_field_list(self, field_list_ctx, parser_module):
         """
-        Recursively parse UNNEST field list to separate attributes and nested objects.
+        Recursively parse UNNEST field list to separate properties and nested objects.
 
         Grammar structure:
           unnestFieldList: unnestField (COMMA unnestField)*;
@@ -236,30 +236,30 @@ class BaseSMELListener:
             parser_module: Either SMEL_SpecificParser or SMEL_GeneralizedParser
 
         Returns:
-            tuple: (attributes, nested)
-                   - attributes: list of simple attribute names ['position', 'name']
+            tuple: (properties, nested)
+                   - properties: list of simple property names ['position', 'name']
                    - nested: list of nested object dicts [{'name': 'company', 'children': {...}}]
         """
-        attributes = []
+        properties = []
         nested = []
 
         for field_ctx in field_list_ctx.unnestField():
             if isinstance(field_ctx, parser_module.SimpleFieldContext):
-                # Simple attribute: position, name, street, city
-                attributes.append(field_ctx.identifier().getText())
+                # Simple property: position, name, street, city
+                properties.append(field_ctx.identifier().getText())
             elif isinstance(field_ctx, parser_module.NestedFieldContext):
                 # Nested object: company{name, address{street, city}}
                 nested_name = field_ctx.identifier().getText()
                 # Recursively parse nested field list
                 nested_field_list = field_ctx.unnestFieldList()
-                child_attrs, child_nested = self._parse_unnest_field_list(nested_field_list, parser_module)
+                child_props, child_nested = self._parse_unnest_field_list(nested_field_list, parser_module)
                 nested.append({
                     'name': nested_name,
-                    'attributes': child_attrs,
+                    'properties': child_props,
                     'nested': child_nested
                 })
 
-        return attributes, nested
+        return properties, nested
 
 
 # ==============================================================================
@@ -341,7 +341,7 @@ class SMELSpecificListener(SMEL_SpecificListener, BaseSMELListener):
             }, original_keyword="UNWIND"))
 
     def enterWind(self, ctx):
-        # WIND - Convert scalar attribute back to array (reverse of UNWIND)
+        # WIND - Convert scalar property back to array (reverse of UNWIND)
         # Syntax: WIND person_tag.tags
         # Cross-entity movement is handled by MERGE, not WIND.
         source = ctx.qualifiedName().getText()  # person_tag.tags
@@ -367,15 +367,15 @@ class SMELSpecificListener(SMEL_SpecificListener, BaseSMELListener):
         target_entity = target_parts[0] if target_parts else target_location
         embedded_name = target_parts[1] if len(target_parts) > 1 else source_entity
 
-        # Parse field list: attributes to embed
-        attributes, nested = self._parse_unnest_field_list(
+        # Parse field list: properties to embed
+        properties, nested = self._parse_unnest_field_list(
             ctx.unnestFieldList(), SMEL_SpecificParser)
 
         self.operations.append(Operation(OpType.NEST, {
             "source": source_entity,       # source entity to embed (address)
             "target": target_entity,       # target entity (person)
             "alias": embedded_name,        # embedded field name (address)
-            "attributes": attributes,      # attributes to embed (street, city)
+            "properties": properties,      # properties to embed (street, city)
             "nested": nested,              # nested objects
             "source_fk": source_fk,        # first join condition left (address.person_id)
             "target_pk": target_pk,        # first join condition right (person.person_id)
@@ -409,14 +409,14 @@ class SMELSpecificListener(SMEL_SpecificListener, BaseSMELListener):
                     "field_name": field_name     # person_id
                 })
 
-        # Parse field list: recursively separate attributes and nested objects
-        attributes, nested = self._parse_unnest_field_list(
+        # Parse field list: recursively separate properties and nested objects
+        properties, nested = self._parse_unnest_field_list(
             ctx.unnestFieldList(), SMEL_SpecificParser)
 
         self.operations.append(Operation(OpType.UNNEST, {
             "source_path": source_path,
-            "attributes": attributes,  # Regular attributes ['street', 'city']
-            "nested": nested,          # Nested objects [{'name': 'company', 'attributes': [...], 'nested': [...]}]
+            "properties": properties,  # Regular properties ['street', 'city']
+            "nested": nested,          # Nested objects [{'name': 'company', 'properties': [...], 'nested': [...]}]
             "target": target_name,
             "carry_fields": carry_fields  # List of fields to copy from source to new table
         }, original_keyword="UNNEST"))
@@ -426,7 +426,7 @@ class SMELSpecificListener(SMEL_SpecificListener, BaseSMELListener):
         self.operations.append(Operation(OpType.ADD_PROPERTY, {
             "name": ctx.identifier(0).getText(),
             "entity": ctx.identifier(1).getText() if len(ctx.identifier()) > 1 else None,
-            "clauses": self._parse_attribute_clauses(ctx.propertyClause())
+            "clauses": self._parse_property_clauses(ctx.propertyClause())
         }))
 
     def enterAdd_constraint(self, ctx):
@@ -828,7 +828,7 @@ class SMELGeneralizedListener(SMEL_GeneralizedListener, BaseSMELListener):
             }, original_keyword="UNWIND"))
 
     def enterWind_gen(self, ctx):
-        # WIND - Convert scalar attribute back to array (reverse of UNWIND)
+        # WIND - Convert scalar property back to array (reverse of UNWIND)
         # Syntax: WIND person_tag.tags
         # Cross-entity movement is handled by MERGE, not WIND.
         source = ctx.qualifiedName().getText()  # person_tag.tags
@@ -854,15 +854,15 @@ class SMELGeneralizedListener(SMEL_GeneralizedListener, BaseSMELListener):
         target_entity = target_parts[0] if target_parts else target_location
         embedded_name = target_parts[1] if len(target_parts) > 1 else source_entity
 
-        # Parse field list: attributes to embed
-        attributes, nested = self._parse_unnest_field_list(
+        # Parse field list: properties to embed
+        properties, nested = self._parse_unnest_field_list(
             ctx.unnestFieldList(), SMEL_GeneralizedParser)
 
         self.operations.append(Operation(OpType.NEST, {
             "source": source_entity,       # source entity to embed (address)
             "target": target_entity,       # target entity (person)
             "alias": embedded_name,        # embedded field name (address)
-            "attributes": attributes,      # attributes to embed (street, city)
+            "properties": properties,      # properties to embed (street, city)
             "nested": nested,              # nested objects
             "source_fk": source_fk,        # first join condition left (address.person_id)
             "target_pk": target_pk,        # first join condition right (person.person_id)
@@ -896,14 +896,14 @@ class SMELGeneralizedListener(SMEL_GeneralizedListener, BaseSMELListener):
                     "field_name": field_name     # person_id
                 })
 
-        # Parse field list: recursively separate attributes and nested objects
-        attributes, nested = self._parse_unnest_field_list(
+        # Parse field list: recursively separate properties and nested objects
+        properties, nested = self._parse_unnest_field_list(
             ctx.unnestFieldList(), SMEL_GeneralizedParser)
 
         self.operations.append(Operation(OpType.UNNEST, {
             "source_path": source_path,
-            "attributes": attributes,  # Regular attributes ['street', 'city']
-            "nested": nested,          # Nested objects [{'name': 'company', 'attributes': [...], 'nested': [...]}]
+            "properties": properties,  # Regular properties ['street', 'city']
+            "nested": nested,          # Nested objects [{'name': 'company', 'properties': [...], 'nested': [...]}]
             "target": target_name,
             "carry_fields": carry_fields  # List of fields to copy from source to new table
         }, original_keyword="UNNEST"))
@@ -913,7 +913,7 @@ class SMELGeneralizedListener(SMEL_GeneralizedListener, BaseSMELListener):
         self.operations.append(Operation(OpType.ADD_PROPERTY, {
             "name": ctx.identifier(0).getText(),
             "entity": ctx.identifier(1).getText() if len(ctx.identifier()) > 1 else None,
-            "clauses": self._parse_attribute_clauses(ctx.propertyClause())
+            "clauses": self._parse_property_clauses(ctx.propertyClause())
         }))
 
     def enterConstraintAdd(self, ctx):
