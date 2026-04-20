@@ -92,6 +92,41 @@ class Cardinality(str, Enum):
 
 
 # ============================================================================
+# SMEL STRING <-> META ENUM MAPPINGS
+# ============================================================================
+# Translate SMEL-script literals into meta-model enum values. Centralized here
+# so that the transformer, validators, and any future consumer share one
+# canonical vocabulary instead of reaching into SchemaTransformer or cloning
+# the mappings.
+
+CARDINALITY_MAP: Dict[str, Cardinality] = {
+    "ONE_TO_ONE": Cardinality.ONE_TO_ONE,
+    "ONE_TO_MANY": Cardinality.ONE_TO_MANY,
+    "ZERO_TO_ONE": Cardinality.ZERO_TO_ONE,
+    "ZERO_TO_MANY": Cardinality.ZERO_TO_MANY,
+}
+
+KEY_TYPE_MAP: Dict[str, Any] = {
+    "PRIMARY": "primary",
+    "UNIQUE": "unique",
+    "FOREIGN": "foreign",
+    "PARTITION": PKTypeEnum.PARTITION,
+    "CLUSTERING": PKTypeEnum.CLUSTERING,
+}
+
+TYPE_STR_MAP: Dict[str, PrimitiveType] = {
+    "STRING": PrimitiveType.STRING, "TEXT": PrimitiveType.TEXT,
+    "INT": PrimitiveType.INTEGER, "INTEGER": PrimitiveType.INTEGER,
+    "LONG": PrimitiveType.LONG, "DOUBLE": PrimitiveType.DOUBLE,
+    "FLOAT": PrimitiveType.FLOAT, "DECIMAL": PrimitiveType.DECIMAL,
+    "BOOLEAN": PrimitiveType.BOOLEAN, "DATE": PrimitiveType.DATE,
+    "TIMESTAMP": PrimitiveType.TIMESTAMP,
+    "UUID": PrimitiveType.UUID, "BINARY": PrimitiveType.BINARY,
+    "DATETIME": PrimitiveType.TIMESTAMP,
+}
+
+
+# ============================================================================
 # TYPE MAPPINGS
 # ============================================================================
 

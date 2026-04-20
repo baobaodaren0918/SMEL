@@ -50,7 +50,7 @@ version: VERSION_NUMBER | INTEGER_LITERAL;                          // 1 | 1.0 |
 // ============================================================================
 // OPERATIONS - Generalized operations with parameters
 // ============================================================================
-// Structure:  NEST, UNNEST, FLATTEN, UNWIND, EXTRACT
+// Structure:  NEST, UNNEST, FLATTEN, UNFLATTEN, WIND, UNWIND
 // Movement:   COPY, MOVE, MERGE, SPLIT
 // Type:       CAST
 // CRUD:       ADD, DELETE, RENAME

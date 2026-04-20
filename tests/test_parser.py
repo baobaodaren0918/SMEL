@@ -66,7 +66,8 @@ def parse_smel_file(filepath: str, verbose: bool = True) -> tuple:
                 if op.original_keyword and op.original_keyword != op.op_type:
                     print(f"   (Original keyword: {op.original_keyword})")
                 if op.params:
-                    for key, value in op.params.items():
+                    import dataclasses as _dc
+                    for key, value in _dc.asdict(op.params).items():
                         if isinstance(value, list):
                             print(f"   - {key}: {value}")
                         elif isinstance(value, dict):

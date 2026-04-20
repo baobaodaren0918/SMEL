@@ -7,6 +7,7 @@ from Schema.adapters.postgresql_adapter import PostgreSQLAdapter
 from Schema.adapters.mongodb_adapter import MongoDBAdapter
 from Schema.adapters.neo4j_adapter import Neo4jAdapter
 from Schema.adapters.cassandra_adapter import CassandraAdapter
+from Schema.unified_meta_schema import EntityKind
 
 TESTS_DIR = Path('tests')
 
@@ -23,10 +24,19 @@ def get_reference_db(target_type):
         return CassandraAdapter.load_from_file(str(TESTS_DIR / 'northwind_cassandra.cql'), 'ref')
 
 
-def db_entity_attrs(db):
-    """Extract {entity_name: sorted [attr_names]} from Database object."""
+def db_entity_attrs(db, include_edges=True):
+    """Extract {entity_name: sorted [attr_names]} from Database object.
+
+    Neo4jAdapter stores EDGE relationships twice: once as EntityType in
+    `entity_types` and once in `relationship_types`. Migration results only
+    put EDGEs under `__relationship_types__`, never under entity_types.
+    Pass include_edges=False to filter EDGE entries out of the reference
+    when comparing entity sets for Graph targets.
+    """
     result = {}
     for name, entity in db.entity_types.items():
+        if not include_edges and entity.entity_kind == EntityKind.EDGE:
+            continue
         attrs = sorted([a.attr_name for a in entity.properties])
         result[name] = attrs
     return result
@@ -90,9 +100,11 @@ for cfg_key in specific_keys:
     result_meta = result.get('result', {})
     ref_db = ref_cache[target_type]
 
-    # Get entity attrs from both
+    # Get entity attrs from both. For Graph targets, exclude EDGE entries
+    # from the reference entity list — they're stored twice by Neo4jAdapter
+    # and are compared separately below via db_reltypes / result_reltypes.
     res_attrs = result_entity_attrs(result_meta)
-    ref_attrs = db_entity_attrs(ref_db)
+    ref_attrs = db_entity_attrs(ref_db, include_edges=(target_type != SOURCE_TYPE_GRAPH))
 
     entry_issues = []
 
@@ -138,7 +150,7 @@ for cfg_key in specific_keys:
         if extra_ents:
             entry_issues.append(f'  extra entities: {extra_ents}')
 
-        # Compare attributes per shared entity
+        # Compare properties per shared entity
         for ename in sorted(ref_entities & res_entities):
             r_attrs = set(res_attrs.get(ename, []))
             e_attrs = set(ref_attrs.get(ename, []))

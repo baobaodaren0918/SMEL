@@ -230,7 +230,7 @@ def generate_en(path):
     rows = [
         [('Structural Depth', 40, ''), ('FLATTEN / UNFLATTEN', 50, 'code'), ('Object', 35, 'bold'), ('Nested object <-> flat fields (within same entity)', 0, '')],
         [('Entity Boundary', 40, ''), ('NEST / UNNEST', 50, 'code'), ('Entity', 35, 'bold'), ('Independent entity <-> embedded object/array (cross-entity)', 0, '')],
-        [('Type Dimension', 40, ''), ('WIND / UNWIND', 50, 'code'), ('Array', 35, 'bold'), ('Scalar attribute <-> array attribute (type change)', 0, '')],
+        [('Type Dimension', 40, ''), ('WIND / UNWIND', 50, 'code'), ('Array', 35, 'bold'), ('Scalar property <-> array property (type change)', 0, '')],
     ]
     for i, r in enumerate(rows):
         pdf.table_row(r, i)
@@ -244,7 +244,7 @@ def generate_en(path):
         'The 6 operations handle three different structural concepts:\n'
         '  - Object (nested/embedded): A sub-structure within an entity (e.g., address inside person)\n'
         '  - Entity (independent table): A standalone entity with its own identity (e.g., customers table)\n'
-        '  - Array (list/collection): A multi-valued attribute (e.g., tags[], details[])')
+        '  - Array (list/collection): A multi-valued property (e.g., tags[], details[])')
     pdf.ln(1)
     pdf.table_header([('Operation', 28), ('Input', 22), ('Output', 22), ('What It Does', 0)])
     detail = [
@@ -252,7 +252,7 @@ def generate_en(path):
         [('UNFLATTEN', 28, 'code'), ('Fields', 22, ''), ('Object', 22, ''), ('Groups flat fields into a new nested object', 0, '')],
         [('NEST', 28, 'code'), ('Entity', 22, ''), ('Obj/Array', 22, ''), ('Absorbs independent entity as embedded object or array', 0, '')],
         [('UNNEST', 28, 'code'), ('Obj/Array', 22, ''), ('Entity', 22, ''), ('Extracts embedded object/array into independent entity', 0, '')],
-        [('WIND', 28, 'code'), ('Scalar', 22, ''), ('Array', 22, ''), ('Wraps scalar attribute into array type (ListDataType)', 0, '')],
+        [('WIND', 28, 'code'), ('Scalar', 22, ''), ('Array', 22, ''), ('Wraps scalar property into array type (ListDataType)', 0, '')],
         [('UNWIND', 28, 'code'), ('Array', 22, ''), ('Scalar', 22, ''), ('Unwraps array into scalar, or extracts into new entity', 0, '')],
     ]
     for i, r in enumerate(detail):
@@ -309,9 +309,9 @@ def generate_en(path):
     pdf.code_block(UNNEST_CODE)
 
     pdf.section_title(5, 'WIND  --  Scalar -> Array', (52, 199, 89))
-    pdf.label_value('Operates On', 'Scalar Attribute (converts to Array type)')
+    pdf.label_value('Operates On', 'Scalar Property (converts to Array type)')
     pdf.label_value('Direction', 'Relational (multi-row) -> Document/Columnar (single-row array)')
-    pdf.label_value('Syntax', 'WIND_PS entity.attribute')
+    pdf.label_value('Syntax', 'WIND_PS entity.property')
     pdf.label_value('Reverse', 'UNWIND')
     pdf.ln(1)
     pdf._font('B', 9); pdf.cell(0, 5, 'Example:', new_x="LMARGIN", new_y="NEXT")
@@ -463,7 +463,7 @@ def generate_zh(path):
     pdf.section_title(5, 'WIND  --  \u6807\u91cf -> \u6570\u7ec4', (52, 199, 89))
     pdf.label_value('\u4f5c\u7528\u5bf9\u8c61', '\u6807\u91cf\u5c5e\u6027\uff08\u8f6c\u6362\u4e3a\u6570\u7ec4\u7c7b\u578b\uff09')
     pdf.label_value('\u65b9\u5411', '\u5173\u7cfb\u578b\uff08\u591a\u884c\u5b58\u50a8\uff09-> \u6587\u6863/\u5217\u5f0f\uff08\u5355\u884c\u6570\u7ec4\uff09')
-    pdf.label_value('\u8bed\u6cd5', 'WIND_PS entity.attribute')
+    pdf.label_value('\u8bed\u6cd5', 'WIND_PS entity.property')
     pdf.label_value('\u9006\u64cd\u4f5c', 'UNWIND')
     pdf.ln(1)
     pdf._font('B', 9); pdf.cell(0, 5, '\u793a\u4f8b\uff1a', new_x="LMARGIN", new_y="NEXT")

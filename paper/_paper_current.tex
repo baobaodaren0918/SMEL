@@ -1,5 +1,6 @@
-\documentclass[sigconf,review]{acmart}
+\documentclass{llncs}
 
+\usepackage{graphicx}
 \graphicspath{{gfx/}}
 
 \usepackage{paralist}
@@ -22,7 +23,7 @@
 \tikzset{
   classbox/.style={
     draw, rectangle split, rectangle split parts=2,
-    rounded corners=2pt, font=\small, align=left,
+    rounded corners=2pt, font=\small, align=left,c
     minimum width=3.8cm, inner sep=4pt
   },
   msLbl/.style={font=\scriptsize, midway, right, xshift=1pt},
@@ -35,7 +36,10 @@
 \usepackage{subfig}
 \usepackage{hyperref}
 \usepackage{wrapfig}
+\usepackage{amsmath}
+\usepackage{amssymb}
 \emergencystretch=1em
+
 
 \definecolor{evocolor}{RGB}{198, 224, 180}
 \definecolor{migcolor}{RGB}{189, 215, 238}
@@ -51,108 +55,93 @@
   captionpos=b
 }
 
-\AtBeginDocument{%
-  \providecommand\BibTeX{{%
-    Bib\TeX}}}
-
-\setcopyright{acmlicensed}
-\copyrightyear{2018}
-\acmYear{2018}
-\acmDOI{XXXXXXX.XXXXXXX}
-\acmConference[Conference acronym 'XX]{Make sure to enter the correct
-  conference title from your rights confirmation email}{June 03--05,
-  2018}{Woodstock, NY}
-\acmISBN{978-1-4503-XXXX-X/2018/06}
 
 \begin{document}
 
 \title{
 % SMILE: Schema Migration and Evolution Language
-SMILE: A Unifying Evolution Language to Transform Schemas Across Data Models}
+SMILE: A Unifying Evolution Language to Transform Schemas Across Data Models
+}
 
-\author{Lu Li}
-\affiliation{%
-  \institution{FernUniversit\"{a}t in Hagen}
-  \country{Germany}}
-\email{lu.li@fernuni-hagen.de}
+\author{Lu Li\inst{1}\orcidID{} \and Andr\'e Conrad\inst{1}\orcidID{0000-0001-6681-2798} \and Dominique Hausler\inst{2}\orcidID{0000-0004-2381-133X} \and Uta St\"orl\inst{1}\orcidID{0000-0003-2771-142X}}
 
-\author{Andr\'e Conrad}
-\orcid{0000-0001-6681-2798}
-\affiliation{%
-  \institution{FernUniversit\"{a}t in Hagen}
-  \country{Germany}}
-\email{andre.conrad@fernuni-hagen.de}
 
-\author{Dominique Hausler}
-\orcid{0009-0004-2381-133X}
-\affiliation{%
-  \institution{University of Regensburg}
-  \country{Germany}}
-\email{dominique.hausler@ur.de}
+\institute{
+    Databases and Information Systems, FernUniversit\"{a}t of Hagen, Hagen, Germany \email{\{firstname.lastname\}@fernuni-hagen.de}\and
+    Data Engineering Group, University of Regensburg, Regensburg, Germany
+    \email{\{firstname.lastname\}@ur.de}\\
+}
 
-\author{Uta St\"orl}
-\orcid{0000-0003-2771-142X}
-\affiliation{%
-  \institution{FernUniversit\"{a}t in Hagen}
-  \country{Germany}}
-\email{uta.stoerl@fernuni-hagen.de}
+\maketitle
 
-\renewcommand{\shortauthors}{Li et al.}
+
+
 
 \begin{abstract}
   Modern applications often combine relational, document, graph, and wide-column databases to serve different workloads.
-  As application requirements change, schemas must often evolve within a system or be migrated across systems.
-  Existing schema evolution languages are mostly limited to intra-system scenarios, while a common formal grammar spanning both intra-system evolution and inter-system migration remains underexplored.
-  We present SMILE (Schema Migration and Evolution Language), a domain-specific language that addresses this gap.
-  The language defines a taxonomy of schema change operations covering schema structure, constraints, and paradigm-specific constructs, formalized through an ANTLR4-based grammar.
+  As application requirements change, schemas must often evolve within a system or be migrated across systems. Nevertheless, when migrating across database systems (e.g., to optimize data storage), the schema undergoes an evolutionary process that often remains undocumented. In addition, existing schema evolution languages are mostly limited to a single database system, thus operating in intra-system scenarios, while a common formal grammar spanning both intra-system evolution and inter-system transformation remains underexplored.\todo{or missing?}
+  We present \textsc{Smile} (Schema Migration and Evolution Language), a domain-specific language\todo{specific to which domain} that addresses this gap.
+  The language defines a taxonomy of schema change operations covering schema structures, constraints, and paradigm-specific\todo{database-specific?} constructs, formalized through an ANTLR4-based grammar.
   To operationalize SMILE, we further develop the SMILE Engine, which builds on a canonical metamodel and adopts a Hub-and-Spoke architecture to reduce inter-system mapping complexity.
-  We validate the approach across all 16 migration and evolution scenarios, with 32/32 test configurations passing a two-layer validation pipeline.
-  The results show that a unified language-based approach to schema evolution and migration across heterogeneous database paradigms is feasible.
+  We validate the approach across all 16 transformation and evolution scenarios -- across relational, document, graph and wide-column databases, with 32/32 test configurations passing a two-layer validation pipeline.
+  The results show that a unified language-based approach to schema evolution and migration across heterogeneous databases is feasible.\todo{only feasaible? It does not supass other approaches?}
+
+  \keywords{Schema Transformation \and Schema Evolution \and Data Migration \and Evolution Language \and NoSQL \and Metamodel \and ANTLR4}
 \end{abstract}
 
-\keywords{Schema Migration, Schema Evolution, Domain-Specific Language, NoSQL, Metamodel, ANTLR4}
 
-\maketitle
+
+
 
 % ============================================================
 \section{Introduction}
 \label{sec:introduction}
 % ============================================================
 
-Heterogeneous data architectures have become common in modern applications, where different workloads are often served by different data models. For example, Sega reported a migration from an RDBMS to MongoDB to improve performance~\cite{bansal2021journey}. In such environments, schema change is required both within individual systems and across system boundaries. SMILE targets four database paradigms: relational, document, graph, and wide-column. These paradigms differ substantially in how they represent structure and relationships, which makes unified schema change support challenging.
+
+Heterogeneous data architectures have become common in modern applications, where different workloads\todo{Why do we start with workload? Do we do something with a workload?} are often served by different data models.
+For instance, Sega applied a migration from an relational to a document database, aiming to improve performance~\cite{bansal2021journey}. When optimizing the schema to allow optimal storage for the underlying data, schema adjustments are required both within individual systems (intra-system evolution) and across system boundaries (inter-system transformation). \textsc{Smile} targets four database systems: relational, document, graph, and wide-column. These paradigms differ substantially in how they represent structure and relationships, which requires a unified schema change to express the schema transformation process between database systems in a generalized manner. Nevertheless, system-specifics add even further challenges.
 
 
+\todo[inline]{wiederholung -- mit erstem Absatz verbinden, add something about model-based and model-driven approaches here}
 \emph{Schema evolution} refers to modifying a schema within the same database system (intra-system)~\cite{brahmia2024literature}, while
-\emph{schema migration} refers to transforming a schema between different database systems (inter-system)~\cite{googlecloud2024heterogeneous}.
+\emph{schema transformation} refers to transforming a schema between different database systems (inter-system)~\cite{googlecloud2024heterogeneous}.
 For the four paradigms considered in this work, this results in 4 evolution scenarios on the diagonal and 12 migration scenarios off the diagonal, i.e., 16 scenarios in total (Table~\ref{tab:migration-matrix}).
 
 
-Existing schema evolution languages are mostly limited to intra-system scenarios~\cite{storl2022darwin, chillon2022taxonomy, curino2008graceful,
-herrmann2015codel, herrmann2017living, hausler2023language}, while inter-system migration work~\cite{meier2023datenmigration} addresses cross-paradigm structural transformations. Because these lines of work rely on different operation sets and are not expressed in a shared grammar, they do not directly yield a unified DSL for both evolution and migration.
+Existing schema evolution languages are mostly limited to intra-system scenarios~\cite{storl2022darwin,chillon2022taxonomy,curino2008graceful,herrmann2015codel,herrmann2017living,hausler2023language}, while inter-system migration work~\cite{meier2023datenmigration} addresses cross-paradigm structural transformations. Because these lines of work rely on different operation sets and are not expressed in a shared grammar, they do not directly yield a unified DSL for both evolution and migration.
 
-To address this gap, we present \textbf{SMILE}, a domain-specific language that supports both schema evolution (intra-system) and schema migration (inter-system) within a single ANTLR4-based grammar. Rather than combining existing approaches unchanged, SMILE organizes evolution operations from the Orion taxonomy~\cite{chillon2022taxonomy}, structural transformation operations from prior work within our research group, and additional key and constraint operations into a unified taxonomy of schema change primitives.
 
-To operationalize SMILE, we develop a prototype implementation referred to as the \textbf{SMILE Engine}. The engine uses M-Model\textsuperscript{+} as a canonical representation and adopts a Hub-and-Spoke architecture with adapters for PostgreSQL, MongoDB, Neo4j, and Cassandra. This design replaces point-to-point schema mappings with transformations through a shared metamodel, reducing the number of required mappings from $O(N^2)$ to $O(N)$. It thereby makes a single language-based approach feasible across all 16 migration and evolution scenarios.
+To address this gap, we present \textbf{\textsc{Smile}}, a domain-specific language that supports both schema evolution (intra-system) and schema migration (inter-system) within a single ANTLR4-based grammar. Rather than combining existing approaches unchanged, \textsc{Smile} organizes evolution operations from the Orion taxonomy~\cite{chillon2022taxonomy}, structural transformation operations from prior work ,
+% within our research group,
+and additional key and constraint operations into a unified taxonomy of schema change primitives.
+
+\todo[inline]{add teaser fig + description here}
+
+To operationalize \textsc{Smile}, we develop a prototype implementation referred to as \emph{\textsc{Smile} Engine}. The engine uses M-Model\textsuperscript{+} as a canonical representation and adopts a Hub-and-Spoke architecture with adapters for PostgreSQL, MongoDB, Neo4j, and Cassandra. This design replaces point-to-point schema mappings with transformations through a shared metamodel, reducing the number of required mappings from $O(N^2)$ to $O(N)$. It thereby makes a single language-based approach feasible across all 16 migration and evolution scenarios.
 
 % \begin{figure}[htbp]
 %   \centering
 %   \includegraphics[width=\columnwidth]{{overview.drawio}.pdf}
-%   \caption{Overview of the SMILE language and engine.}
+%   \caption{Overview of the \textsc{Smile} language and engine.}
 %   \label{fig:SMILE-overview}
 % \end{figure}
 
 \paragraph{Contributions.}
-SMILE focuses on schema-level change and does not address data migration or runtime query rewriting.
+\textsc{Smile} focuses on schema-level change to make the transformation process across database systems explicit.
+% and does not address data migration or runtime query rewriting.
 Within this scope, we make four contributions:
-\begin{compactitem}
-    \item A \textbf{unified taxonomy of schema change primitives} that brings together schema evolution and schema migration operations within a single operation model, together with two ANTLR4-based grammar variants for expressing these changes across all 16 migration and evolution scenarios.
+\begin{enumerate}
+    \item A \textbf{unified taxonomy of schema change primitives} that brings together intra-system schema evolution and inter-system schema transformation operations within a single operation model.
+    % , together with two ANTLR4-based grammar variants for expressing these changes across all 16 migration and evolution scenarios.
 
-    \item An \textbf{extended canonical metamodel, M-Model\textsuperscript{+}}, which refines the M-Model~\cite{conrad2022metamodels} with the constructs required for cross-paradigm schema migration and serves as the hub representation of the approach.
+    \item An \textbf{extended canonical metamodel, M-Model\textsuperscript{+}}, which refines the M-Model~\cite{conrad2022metamodels} extended by cross-paradigm schema transformation operations, additionally serving as the hub representation of the approach.
 
-    \item A \textbf{prototype framework, the SMILE Engine}, which realizes the language through a Hub-and-Spoke architecture while providing execution, validation, and interactive web-based visualization for PostgreSQL, MongoDB, Neo4j, and Cassandra.
+    \item A \textbf{framework, the \textsc{Smile} Engine}, which realizes our unifying \textsc{Smile} language through a Hub-and-Spoke architecture while providing execution, validation, and interactive web-based visualization for PostgreSQL, MongoDB, Neo4j, and Cassandra.
 
-    \item A \textbf{comprehensive validation and evaluation} across the full $4 \times 4$ scenario matrix, covering 32 test configurations based on two grammar variants for each of the 16 directions, with all configurations passing both validation layers.
-\end{compactitem}
+    \item A \textbf{comprehensive validation and evaluation} across the full $4 \times 4$ scenario matrix, resembling schema transformations between all integrated database systems.
+    % , covering 32 test configurations based on two grammar variants\todo{?} for each of the 16 directions, with all configurations passing both validation layers.
+\end{enumerate}
 
 % ============================================================
 \section{Related Work}
@@ -160,11 +149,11 @@ Within this scope, we make four contributions:
 % ============================================================
 
 The following paragraphs review prior work on schema matching and mapping, schema evolution, schema migration, and evolution languages.
-\todo[inline]{add work on constraints e.g. PG-Keys \cite{DBLP:conf/sigmod/AnglesBDFHHLLLM21,DBLP:conf/kcap/TomaszukG25}}
+% \todo[inline]{add work on constraints e.g. PG-Keys \cite{DBLP:conf/sigmod/AnglesBDFHHLLLM21,DBLP:conf/kcap/TomaszukG25}}
 
 
 \paragraph{Schema Matching \& Mapping.}
-Schema migration presupposes schema matching and mapping, since source and target structures must be related before transformations can be specified. A widely used categorization of schema matching techniques is given in~\cite{DBLP:journals/vldb/RahmB01}. Mapping strategies across data models are discussed in~\cite{DBLP:conf/idt2/CeresnakDMK21,DBLP:journals/sp/AftabIABA20,DBLP:journals/kais/BansalSA24}, while graph-based and pattern-based approaches are presented in~\cite{DBLP:journals/dpd/DingSW20,DBLP:journals/pvldb/MartensNPRVV23, DBLP:conf/icdt/Barcelo0R13,DBLP:conf/pods/FrancisL17}. These works address how correspondences between schemas are identified, whereas the present work focuses on a unified language for expressing the resulting schema changes.
+Schema migration presupposes schema matching and mapping, since source and target structures must be related before transformations can be specified. A widely used categorization of schema matching techniques is given in~\cite{DBLP:journals/vldb/RahmB01}. Mapping strategies across data models are discussed in~\cite{DBLP:conf/idt2/CeresnakDMK21,DBLP:journals/sp/AftabIABA20,DBLP:journals/kais/BansalSA24}, while graph-based and pattern-based approaches are presented in~\cite{DBLP:journals/dpd/DingSW20,DBLP:journals/pvldb/MartensNPRVV23,DBLP:conf/icdt/Barcelo0R13,DBLP:conf/pods/FrancisL17}. These works address how correspondences between schemas are identified, whereas the present work focuses on a unified language for expressing the resulting schema changes.
 
 
 \paragraph{Schema Evolution.}
@@ -172,47 +161,39 @@ Schema evolution addresses the adaptation of database schemas to changing applic
 
 With the rise of NoSQL systems, schema evolution research expanded beyond the relational paradigm. Scherzinger, Klettke, and St\"orl~\cite{scherzinger2013managing} introduced a declarative evolution language and distinguished between eager and lazy migration strategies, while Holubov\'a, Klettke, and St\"orl~\cite{holubova2019evolution} discuss corresponding challenges in multi-model settings. For specific paradigms, MoDEvo~\cite{suarez2025data} targets column-family evolution through model transformations, Hausler et al.~\cite{hausler2023language} define evolution operations for graph databases, and Chabin et al.~\cite{DBLP:journals/ijwis/ChabinEFH21} study RDF evolution through graph rewriting rules.
 
-In addition, prior work within our research group introduces structural transformation operations such as \texttt{NEST}, \texttt{FLATTEN}, \texttt{LINKING}, and \texttt{UNWIND} for schema restructuring across heterogeneous systems~\cite{meier2023datenmigration}. This work reuses basic evolution operations from earlier evolution proposals~\cite{scherzinger2013managing, holubova2019evolution}, but extends them with transformation-specific operations required for cross-paradigm migration.
-
-\textit{Across the reviewed work, schema evolution and schema migration remain modeled through separate operation sets and formalisms. What is still lacking is a common taxonomy and grammar that cover both intra-system evolution and inter-system structural transformations.}
+In addition, prior work within our research group introduces structural transformation operations such as \texttt{NEST}, \texttt{FLATTEN}, \texttt{LINKING}, and \texttt{UNWIND} for schema restructuring across heterogeneous systems~\cite{meier2023datenmigration}. This work reuses basic evolution operations from earlier evolution proposals~\cite{scherzinger2013managing,holubova2019evolution}, but extends them with transformation-specific operations required for cross-paradigm migration. \textit{Across the reviewed work, schema evolution and schema migration remain modeled through separate operation sets and formalisms. What is still lacking is a common taxonomy and grammar that cover both intra-system evolution and inter-system structural transformations.}
 
 \paragraph{Evolution Languages.}
 Model Management~2.0~\cite{bernstein2007model} introduced generic operators for manipulating schemas and mappings and thus established an important foundation for formal schema transformation. Building on this idea, PRISM~\cite{curino2008graceful} proposed Schema Modification Operators (SMOs) for relational schema evolution and additionally supported automatic query rewriting. PRIMA~\cite{moon2009prima} extended this line of work toward temporal querying over evolving schemas, while CoDEL~\cite{herrmann2015codel} and BiDEL~\cite{herrmann2017living} further developed the relational setting toward relational completeness and bidirectional propagation across co-existing schema versions.
 
-With the rise of NoSQL and multi-model systems, evolution language research moved beyond the relational paradigm. Holubov\'a, Klettke, and St\"orl~\cite{holubova2019evolution} identified key challenges for multi-model evolution and outlined an EBNF syntax for a corresponding language. Orion~\cite{chillon2022taxonomy}, grounded in U-Schema~\cite{candel2022unified}, organizes schema change operations for NoSQL databases into five categories and implements them as a platform-independent DSL. Darwin~\cite{storl2022darwin} complements this perspective with a data platform for schema evolution management, including schema version tracking and migration support. For graph databases specifically, Hausler et al.~\cite{hausler2023language} define evolution operations in an EBNF-like grammar with an implementation in Neo4j.
-
-\textit{These languages formalize schema evolution precisely, but their grammars remain tied to particular paradigms or intra-system settings. Their abstractions therefore do not transfer directly to cross-paradigm migration scripts.}
+With the rise of NoSQL and multi-model systems, evolution language research moved beyond the relational paradigm. Holubov\'a, Klettke, and St\"orl~\cite{holubova2019evolution} identified key challenges for multi-model evolution and outlined an EBNF syntax for a corresponding language. Orion~\cite{chillon2022taxonomy}, grounded in U-Schema~\cite{candel2022unified}, organizes schema change operations for NoSQL databases into five categories and implements them as a platform-independent DSL. Darwin~\cite{storl2022darwin} complements this perspective with a data platform for schema evolution management, including schema version tracking and migration support. For graph databases specifically, Hausler et al.~\cite{hausler2023language} define evolution operations in an EBNF-like grammar with an implementation in Neo4j. \textit{These languages formalize schema evolution precisely, but their grammars remain tied to particular paradigms or intra-system settings. Their abstractions therefore do not transfer directly to cross-paradigm migration scripts.}
 
 \paragraph{Schema Transformation.}
-Schema transformation generalizes schema evolution to changes between different source and target schemas and therefore depends on schema matching and mapping to relate their structures. Existing work in this area often focuses on specific model pairs or transformation settings. For example, Rabbani et al.~\cite{DBLP:journals/pacmmod/RabbaniLBH24} present a transformation strategy between RDF and property graphs, while Hausler et al.~\cite{DBLP:conf/er/HauslerEKGT25} propose a model-driven, GQL-conform transformation approach between versions of property graph schemas. Other work adopts a metamodel-based perspective for schema transformation, for instance in UMLtoNoSQL~\cite{DBLP:conf/aiccsa/AbdelhediBAZ17}. In the context of property graphs, Bonifati~\cite{DBLP:journals/pvldb/Bonifati25}, building on PG-Schema~\cite{DBLP:journals/pacmmod/AnglesBD0GHLLMM23}, discusses a declarative approach for expressing transformations and integrating data into property graphs.
-
-\textit{These studies show that schema transformation can be specified effectively for particular model pairs, standards, or metamodel-driven settings. What they do not yet offer is a language layer that spans both intra-system evolution and cross-paradigm migration across heterogeneous database paradigms.}
+Schema transformation generalizes schema evolution to changes between different source and target schemas and therefore depends on schema matching and mapping to relate their structures. Existing work in this area often focuses on specific model pairs or transformation settings. For example, Rabbani et al.~\cite{DBLP:journals/pacmmod/RabbaniLBH24} present a transformation strategy between RDF and property graphs, while Hausler et al.~\cite{DBLP:conf/er/HauslerEKGT25} propose a model-driven, GQL-conform transformation approach between versions of property graph schemas. Other work adopts a metamodel-based perspective for schema transformation, for instance in UMLtoNoSQL~\cite{DBLP:conf/aiccsa/AbdelhediBAZ17}. In the context of property graphs, Bonifati~\cite{DBLP:journals/pvldb/Bonifati25}, building on PG-Schema~\cite{DBLP:journals/pacmmod/AnglesBD0GHLLMM23}, discusses a declarative approach for expressing transformations and integrating data into property graphs. \textit{These studies show that schema transformation can be specified effectively for particular model pairs, standards, or metamodel-driven settings. What they do not yet offer is a language layer that spans both intra-system evolution and cross-paradigm migration across heterogeneous database paradigms.}
 
 
 \paragraph{Constraints.}
-Recent work has formalized key and constraint concepts in the property-graph setting. PG-Keys~\cite{DBLP:conf/sigmod/AnglesBDFHHLLLM21} proposes a flexible framework for key constraints in property graphs, introducing the modes \emph{exclusive}, \emph{mandatory}, and \emph{singleton} for nodes, edges, and properties as part of the GQL standardization effort. Tomaszuk and Labra Gayo~\cite{DBLP:conf/kcap/TomaszukG25} further extend PG-Schema with property constraints.
-
-\textit{This line of work formalizes keys and constraints rigorously at the schema level. In the current literature, however, these notions remain largely bound to the graph paradigm rather than being generalized into a common cross-paradigm operation layer.}
+Recent work has formalized key and constraint concepts in the property-graph setting. PG-Keys~\cite{DBLP:conf/sigmod/AnglesBDFHHLLLM21} proposes a flexible framework for key constraints in property graphs, introducing the modes \emph{exclusive}, \emph{mandatory}, and \emph{singleton} for nodes, edges, and properties as part of the GQL standardization effort. Tomaszuk and Labra Gayo~\cite{DBLP:conf/kcap/TomaszukG25} further extend PG-Schema with property constraints. \textit{This line of work formalizes keys and constraints rigorously at the schema level. In the current literature, however, these notions remain largely bound to the graph paradigm rather than being generalized into a common cross-paradigm operation layer.}
 
 \paragraph{Metamodels.}
-A canonical hub for cross-paradigm schema transformation requires a central, platform-independent metamodel. Several metamodels have been proposed for multi-model database systems~\cite{atzeni2020data, abdelhedi2017umltonosql, vanhove2017data, mali2020modeldrivenguide, zdepski2020pddm, candel2022unified, conrad2022metamodels}. Among them, U-Schema~\cite{candel2022unified} and the M-Model~\cite{conrad2022metamodels} are the most relevant to this work because both cover the four database paradigms targeted by SMILE and provide sufficiently rich structural abstractions for cross-paradigm representation (Table~\ref{tab:metamodel-comparison-rw}).
-
-U-Schema is a unified logical metamodel for relational, document, graph, key-value, and columnar systems. It introduces \texttt{StructuralVariation}s to capture schema-on-read variability and distinguishes between structural and logical features. However, concepts such as \texttt{Aggregate} and \texttt{Reference} are represented in separate branches of its feature hierarchy.
-
-\textit{Compared with U-Schema, the M-Model offers a more suitable starting point for SMILE because its relationship hierarchy and explicit key typing align more directly with cross-paradigm transformation requirements. At the same time, the present work requires additional constructs beyond the original model, which motivates the extension to M-Model\textsuperscript{+}.}
+% A canonical hub for
+Cross-paradigm schema transformations require a central, platform-independent metamodel to ensure a generalized, higher level of abstraction to transparently depict all modifications.
+Several metamodels have been proposed for multi-model database systems~\cite{atzeni2020data,abdelhedi2017umltonosql,vanhove2017data,mali2020modeldrivenguide,zdepski2020pddm,candel2022unified,conrad2022metamodels}. Among them, U-Schema~\cite{candel2022unified} and the M-Model~\cite{conrad2022metamodels} are the most relevant for our approach, as both cover the four database systems targeted by \textsc{Smile} and provide rich structural abstractions for cross-paradigm representation, as depicted in Table~\ref{tab:metamodel-comparison-rw}.
 
 \begin{table}[h!]
   \centering
   \caption{Comparison of U-Schema and M-Model as candidate canonical metamodels}
   \label{tab:metamodel-comparison-rw}
   \renewcommand{\arraystretch}{1.25}
-  \setlength{\tabcolsep}{3pt}
-  \scriptsize
+  % \setlength{\tabcolsep}{3pt}
+  % \scriptsize
   \begin{tabular}{@{}
-    >{\bfseries\raggedright\arraybackslash}p{1.8cm}
-    >{\raggedright\arraybackslash}p{3.2cm}
-    >{\raggedright\arraybackslash}p{3.2cm}
+    >{\bfseries\raggedright\arraybackslash}p{2.2cm}
+    >{\raggedright\arraybackslash}p{4.8cm}
+    >{\raggedright\arraybackslash}p{4.8cm}
   @{}}
+  % \resizebox{\textwidth}{!}{
+  % \begin{tabular}{lll}
   \toprule
   \rowcolor{gray!15}
   \textbf{Criterion} &
@@ -232,7 +213,7 @@ U-Schema is a unified logical metamodel for relational, document, graph, key-val
   Explicit \texttt{keyType} (partition, clustering) for composite keys \\
   \addlinespace
   Structural Variations &
-  First-class concept with Full Variability and Union Schema modes &
+  First-class concept with full variability and union schema modes &
   Not supported; single fixed structure per EntityType \\
   \addlinespace
   Graph Support &
@@ -244,7 +225,15 @@ U-Schema is a unified logical metamodel for relational, document, graph, key-val
   Minimal complexity, migration-focused \\
   \bottomrule
   \end{tabular}
+  % }
 \end{table}
+
+
+U-Schema is a unified logical metamodel for relational, document, graph, key-value, and columnar systems. It introduces \texttt{StructuralVariation}s to capture schema-on-read variability and distinguishes between structural and logical features. However, concepts such as \texttt{Aggregate} and \texttt{Reference} are represented in separate branches of its feature hierarchy. \textit{Compared with U-Schema, the M-Model offers a more suitable starting point for \textsc{Smile} because its relationship hierarchy and explicit key typing align more directly with cross-paradigm transformation requirements.
+% At the same time, the present work requires additional constructs beyond the original model, which motivates the extension to M-Model\textsuperscript{+}.
+}
+
+
 
 \paragraph{Summary of Research Gaps.}
 Across the reviewed literature, schema evolution and schema
@@ -256,35 +245,36 @@ paradigms considered here. At the tool level, existing systems
 support individual parts of the process but do not yet combine
 a canonical hub representation, systematic validation, and
 interactive support for cross-paradigm schema change in one
-environment. These gaps motivate the design of SMILE as a
+environment. These gaps motivate the design of \textsc{Smile} as a
 common foundation for language design, metamodel-based
 representation, and tool support.
 
 
-\section{SMILE Language}
+\section{\textsc{Smile} Language}
 \label{sec:operation-taxonomy}
 
-SMILE organizes schema change operations into a taxonomy of atomic primitives.
-The taxonomy brings together evolution operations from the reviewed approaches and structural transformation operations from prior work within our research group into seven categories.
-Table~\ref{tab:terminology-comparison} aligns the terminology used across prior approaches, and Table~\ref{tab:operation-comparison} compares their operation coverage with SMILE.
+\textsc{Smile} organizes schema change operations into a taxonomy of atomic operations.
+The taxonomy brings together evolution operations from the reviewed approaches and structural transformation operations from prior work
+% within our research group
+into seven categories.
+Table~\ref{tab:terminology-comparison} aligns the terminology used across prior approaches, and Table~\ref{tab:operation-comparison} compares their operation coverage with \textsc{Smile}.
 
 Four design principles guide the syntax.
 Structural operations are organized as \textbf{symmetric inverse pairs}, where each forward operation has a corresponding reverse (NEST\,/\,UNNEST, FLATTEN\,/\,UNFLATTEN, WIND\,/\,UNWIND), enabling bidirectional scripts.
 Operations also follow a \textbf{consistent naming scheme}: creation operations begin with \texttt{ADD\_*}, removal operations with \texttt{DELETE\_*}, and type conversions with \texttt{CAST\_*}.
-SMILE further provides \textbf{two grammar variants}. The Specific grammar uses one keyword per operation (e.g., \texttt{ADD\_ENTITY}), whereas the Generalized grammar combines verb and object tokens (e.g., \texttt{ADD ENTITY}). Both variants are translated into the same internal operation representation.
-Finally, SMILE uses \textbf{explicit operation sequences}, so that each transformation step remains directly visible in the script.
+\textsc{Smile} further provides \textbf{two grammar variants}. The Specific grammar uses one keyword per operation (e.g., \texttt{ADD\_ENTITY}), whereas the Generalized grammar combines verb and object tokens (e.g., \texttt{ADD ENTITY}). Both variants are translated into the same internal operation representation.
+Finally, \textsc{Smile} uses \textbf{explicit operation sequences}, so that each transformation step remains directly visible in the script. This ensures traceability, as each step can be reviewed and debugged independently.\todo{ORIGINAL: are the other operations not displayed in the script? - beim Schreiben vererbung vermeiden}\todo{REVISED: added traceability rationale, removed orphan UNNEST example (was: where does this example comes from?)}
 
-For instance, a single \texttt{UNNEST} statement can extract a deeply nested embedded structure from \texttt{orders} into a separate entity \texttt{order\_details}, including nested product, category, supplier, and address levels, while establishing a foreign-key link through a \texttt{WITH \ldots\ TO} clause.
-
-\begin{table}[h!]\todo{color code SMILE in lightblue!!!}
+\begin{table}[h!]
 \centering
-\caption{Terminology mapping of core schema concepts across existing approaches and SMILE}
+\caption{Terminology mapping of core schema concepts across existing approaches and \textsc{Smile}}
 \label{tab:terminology-comparison}
-\renewcommand{\arraystretch}{1.15}
-\setlength{\tabcolsep}{2pt}
-\scriptsize
-\begin{tabular}{ccccc
-  >{\columncolor{blue!10}}p{0.9cm}c}
+% \renewcommand{\arraystretch}{1.15}
+% \setlength{\tabcolsep}{2pt}
+% \scriptsize
+\resizebox{\textwidth}{!}{
+\begin{tabular}{lllll
+  >{\columncolor{blue!10}}l}
 \toprule
 \rowcolor{gray!15}
 \textbf{Concept} &
@@ -292,7 +282,7 @@ For instance, a single \texttt{UNNEST} statement can extract a deeply nested emb
 \textbf{Darwin \cite{storl2022darwin}} &
 \textbf{Orion \cite{chillon2022taxonomy}} &
 \textbf{GEO \cite{hausler2023language}} &
-\textbf{SMILE} \\
+\textbf{\textsc{Smile}} \\
 \rowcolor{gray!15}
 & \textbf{CoDEL \cite{herrmann2015codel}} & & & &\\
 \rowcolor{gray!15}
@@ -304,15 +294,15 @@ Embed. & --- &--- &Aggregate &--- &Embedded \\
 Ref. &Foreign Key &--- &Reference &Relationship &Reference \\
 \bottomrule
 \end{tabular}
+}
 \end{table}
 
-\todo[inline]{all evolution languages??, what is prior work?}
 % ============================================================
 % Full-width Operation Comparison Table
 % ============================================================
 % \begin{table*}[htbp]
 % \centering
-% \caption{Comparison of schema evolution and migration operations across existing approaches and SMILE}
+% \caption{Comparison of schema evolution and migration operations across existing approaches and \textsc{Smile}}
 % \label{tab:operation-comparison}
 % \renewcommand{\arraystretch}{1.05}
 % \setlength{\tabcolsep}{2pt}
@@ -336,8 +326,8 @@ Ref. &Foreign Key &--- &Reference &Relationship &Reference \\
 %   \rotatebox{70}{\textbf{Orion}} &
 %   \rotatebox{70}{\textbf{GEO}} &
 %   \rotatebox{70}{\textbf{Prior Work}} &
-%   \multicolumn{1}{c|}{\raisebox{1.2em}{\textbf{SMILE Specific}}} &
-%   \multicolumn{1}{c|}{\raisebox{1.2em}{\textbf{SMILE General.}}} \\
+%   \multicolumn{1}{c|}{\raisebox{1.2em}{\textbf{\textsc{Smile} Specific}}} &
+%   \multicolumn{1}{c|}{\raisebox{1.2em}{\textbf{\textsc{Smile} General.}}} \\
 
 % \hline
 % \multirow{8}{1.2cm}{Entity\newline Type\newline Ops}
@@ -445,148 +435,160 @@ Ref. &Foreign Key &--- &Reference &Relationship &Reference \\
 % \multicolumn{12}{|l|}{\parbox{0.95\linewidth}{\vspace{2pt}\scriptsize
 % $^{a}$ CoDEL: via \texttt{Split\textsubscript{row}}; BiDEL: via \texttt{DECOMPOSE}.\quad
 % $^{b}$ PRISM: via \texttt{ADD COLUMN \ldots\ AS func()}.\\
-% Variation operations (Orion) are out of scope for SMILE.
+% Variation operations (Orion) are out of scope for \textsc{Smile}.
 % CoDEL additionally defines row/column-level operations outside this comparison.\vspace{2pt}}} \\
 % \hline
 % \end{tabular}
 % \end{table*}
 
-\begin{table*}[h!]
-\centering
-\caption{Comparison of schema evolution and migration operations across existing approaches and SMILE}
-\label{tab:operation-comparison}
-% \renewcommand{\arraystretch}{1.05}
-% \setlength{\tabcolsep}{2pt}
-% \tiny
-\resizebox{\textwidth}{!}{
-\begin{tabular}{|l|l|l|c|c|c|c|c|c|>{\columncolor{blue!10}}l|}
-\hline
-  \multicolumn{1}{|c|}{\textbf{Category}}&
-  \multicolumn{1}{c|}{\textbf{Operation}}&
-  \multicolumn{1}{c|}{\textbf{Description}}&
-  \rotatebox{70}{\textbf{PRISM}} &
-  \rotatebox{70}{\textbf{CoDEL}} &
-  \rotatebox{70}{\textbf{BiDEL}} &
-  \rotatebox{70}{\textbf{Darwin}} &
-  \rotatebox{70}{\textbf{Orion}} &
-  \rotatebox{70}{\textbf{GEO}} &
-  \multicolumn{1}{c|}{\textbf{SMILE}}\\
 
-\hline
-\multirow{8}{*}{Entity Type Ops}
-  & Add Entity Type        & Create a new entity type           & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark & \texttt{ADD\_ENTITY}\\
-\cline{2-10}
-  & Delete Entity Type     & Remove an entity type and its data & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark & \texttt{DELETE\_ENTITY} \\
-\cline{2-10}
-  & Rename Entity Type     & Change entity type name            & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark & \texttt{RENAME\_ENTITY}  \\
-\cline{2-10}
-  & Copy Entity Type       & Duplicate entity type structure    & \checkmark & \checkmark$^{a}$ & \checkmark$^{a}$ & --- & --- & \checkmark & \texttt{COPY\_ENTITY}\\
-\cline{2-10}
-  & Merge Entity Types    & Combine two entity types into one & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark & \texttt{MERGE}  \\
-\cline{2-10}
-  & Split Entity Type      & Partition by attr.\ subsets   & \checkmark & \checkmark & via dec. & \checkmark & \checkmark & \checkmark & \texttt{SPLIT} \\
-\cline{2-10}
-  & Extract Entity Type    & Derive from selected features & --- & --- & --- & --- & \checkmark & --- &  via \texttt{SPLIT} \\
-\cline{2-10}
-  & Cast Entity Type       & Change entity type kind       & --- & --- & --- & --- & --- & --- & \texttt{CAST\_ENTITY} \\
-\hline
-\multirow{8}{*}{Property\newline Ops}
-  & Add Property      & Add a new attribute           & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark & \texttt{ADD\_ATTRIBUTE}\\
-\cline{2-10}
-  & Delete Property   & Remove an attribute           & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark &  \texttt{DELETE\_ATTRIBUTE} \\
-\cline{2-10}
-  & Rename Property   & Change attribute name         & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark &  \texttt{RENAME\_ATTRIBUTE} \\
-\cline{2-10}
-  & Copy Property     & Duplicate an attribute        & --- & --- & --- & \checkmark & \checkmark & \checkmark &  \texttt{COPY\_ATTRIBUTE}  \\
-\cline{2-10}
-  & Move Property     & Move attr.\ to other entity   & --- & --- & --- & \checkmark & \checkmark & \checkmark &  \texttt{MOVE\_ATTRIBUTE} \\
-\cline{2-10}
-  & Cast / Type Change & Change data type             & ---$^{b}$ & --- & --- & --- & \checkmark & --- &  \texttt{CAST\_ATTRIBUTE} \\
-\cline{2-10}
-  & Promote           & Mark as key attribute         & --- & --- & --- & --- & \checkmark & --- &  via \texttt{ADD\_PRIMARY\_KEY}  \\
-\cline{2-10}
-  & Demote            & Unmark as key attribute       & --- & --- & --- & --- & \checkmark & --- & via \texttt{DEL\_PRIMARY\_KEY}\\
-\hline
-\multirow{7}{*}{Structural\newline Transform.}
-  & Flatten           & Nested $\rightarrow$ parent fields        & --- & --- & --- & --- & via unnest & --- & \texttt{FLATTEN}\\
-\cline{2-10}
-  & Unflatten         & Flat $\rightarrow$ nested object          & --- & --- & --- & --- & via nest   & --- & \texttt{UNFLATTEN} \\
-\cline{2-10}
-  & Unnest            & Embedded $\rightarrow$ separate entity    & --- & --- & --- & --- & morph aggr$\rightarrow$ref & --- &  \texttt{UNNEST}\\
-\cline{2-10}
-  & Nest              & Entity $\rightarrow$ embedded struct.     & --- & --- & --- & --- & morph ref$\rightarrow$aggr & --- &  \texttt{NEST}\\
-\cline{2-10}
-  & Unwind            & Array $\rightarrow$ individual entities   & --- & --- & --- & --- & ---        & --- &  \texttt{UNWIND} \\
-\cline{2-10}
-  & Wind              & Rows $\rightarrow$ array                  & --- & --- & --- & --- & ---        & --- &  \texttt{WIND} \\
-\cline{2-10}
-  & Linking           & Create ref.\ by join cond.               & --- & --- & --- & --- & ---        & --- &  via \texttt{WIND}\\
-\hline
-\multirow{3}{*}{Aggr./\newline Emb.\ Ops}
-  & Add Embedded       & Add embedded struct.          & --- & --- & --- & --- & \checkmark & --- &  \texttt{ADD\_EMBEDDED} \\
-\cline{2-10}
-  & Delete Embedded    & Remove embedded struct.       & --- & --- & --- & --- & \checkmark & --- &  \texttt{DELETE\_EMBEDDED} \\
-\cline{2-10}
-  & Morph (Aggr$\rightarrow$Ref) & Embedded $\rightarrow$ reference & --- & --- & --- & --- & \checkmark & --- &  via \texttt{UNNEST}  \\
-\hline
-\multirow{6}{*}{Graph-\newline specific\newline Ops}
-  & Add RelType         & Add relationship type       & --- & --- & --- & --- & \checkmark & \checkmark &  via \texttt{ADD\_ENTITY} \\
-\cline{2-10}
-  & Delete RelType      & Delete relationship type    & --- & --- & --- & --- & \checkmark & \checkmark &  via \texttt{DEL.\_ENTITY} \\
-\cline{2-10}
-  & Rename RelType      & Rename relationship type    & --- & --- & --- & --- & \checkmark & \checkmark &  via \texttt{REN.\_ENTITY} \\
-\cline{2-10}
-  & Add Label           & Add a node label            & --- & --- & --- & --- & --- & \checkmark & \texttt{ADD\_LABEL} \\
-\cline{2-10}
-  & Delete Label        & Remove a node label         & --- & --- & --- & --- & --- & \checkmark & \texttt{DELETE\_LABEL} \\
-\cline{2-10}
-  & Transform           & Node $\leftrightarrow$ Relationship     & --- & --- & --- & --- & --- & \checkmark & \texttt{TRANSFORM}  \\
-\hline
-\multirow{5}{*}{Reference Ops}
-  & Add Reference       & Add a reference             & --- & --- & --- & --- & \checkmark & --- & \texttt{ADD\_CONSTRAINT} \\
-\cline{2-10}
-  & Delete Reference    & Remove a reference          & --- & --- & --- & --- & \checkmark & --- &  \texttt{DELETE\_CONSTRAINT} \\
-\cline{2-10}
-  & Cast Reference      & Change constraint type      & --- & --- & --- & --- & \checkmark & --- &  \texttt{CAST\_CONSTRAINT} \\
-\cline{2-10}
-  & Multiplicity Change & Change cardinality          & --- & --- & --- & --- & \checkmark & --- &  \texttt{RECARD} \\
-\cline{2-10}
-  & Morph (Ref$\rightarrow$Aggr) & Ref.\ $\rightarrow$ embedded aggr. & --- & --- & --- & --- & \checkmark & --- &  via \texttt{NEST}\\
-\hline
-\multirow{7}{*}{Key/\newline Constr.\newline Ops}
-  & Add Primary Key     & Define primary key          & --- & --- & --- & --- & --- & --- & \texttt{ADD\_PRIMARY\_KEY}  \\
-\cline{2-10}
-  & Add Foreign Key     & Define foreign key          & --- & --- & --- & --- & --- & --- &  \texttt{ADD\_FOREIGN\_KEY}  \\
-\cline{2-10}
-  & Add Unique Key      & Define unique constraint    & --- & --- & --- & --- & --- & --- &  \texttt{ADD\_UNIQUE\_KEY} \\
-\cline{2-10}
-  & Add Partition Key   & Define partition key        & --- & --- & --- & --- & --- & --- &  \texttt{ADD\_PARTITION\_KEY} \\
-\cline{2-10}
-  & Add Clustering Key  & Define clustering key       & --- & --- & --- & --- & --- & --- & \texttt{ADD\_CLUSTERING\_KEY} \\
-\cline{2-10}
-  & Delete Prim./For./Uniq. & Remove key constraint   & --- & --- & --- & --- & --- & --- &  \texttt{DELETE\_*\_KEY}  \\
-\cline{2-10}
-  & Delete Part./Clust. & Remove partition/clust.\ key & --- & --- & --- & --- & --- & --- &  \texttt{DELETE\_*\_KEY} \\
-\hline
-\multicolumn{3}{|l|}{\cellcolor{gray!10}\textbf{Scope}} &
-\multicolumn{3}{c|}{\cellcolor{gray!10}Intra (Rel.)} &
-\multicolumn{3}{c|}{\cellcolor{gray!10}Intra (NoSQL)} &
-\cellcolor{gray!10}\textbf{Intra \& Inter} \\
-% \hline
-% \multicolumn{10}{|l|}{\parbox{0.95\linewidth}{\vspace{2pt}\scriptsize
-% $^{a}$ CoDEL: via \texttt{Split\textsubscript{row}}; BiDEL: via \texttt{DECOMPOSE}.\quad
-% $^{b}$ PRISM: via \texttt{ADD COLUMN \ldots\ AS func()}.\\
-% Variation operations (Orion) are out of scope for SMILE.
-% CoDEL additionally defines row/column-level operations outside this comparison.\vspace{2pt}}} \\
-\hline
-\end{tabular}
-}
+\begin{table*}[t!]
+  \centering
+  \caption{Comparison of schema evolution and migration operations across existing approaches and SMEL.$^\ast$}
+  \label{tab:operation-comparison}
+  \resizebox{\textwidth}{!}{
+  \begin{tabular}{|l|l|l|c|c|c|c|c|c|c|>{\columncolor{blue!10}}l|}
+  \hline                                                                                                                                                \multicolumn{1}{|c|}{\textbf{Category}}&
+    \multicolumn{1}{c|}{\textbf{Operation}}&
+    \multicolumn{1}{c|}{\textbf{Description}}&
+    \rotatebox{70}{\textbf{PRISM}} &
+    \rotatebox{70}{\textbf{CoDEL}} &
+    \rotatebox{70}{\textbf{BiDEL}} &
+    \rotatebox{70}{\textbf{Darwin}} &
+    \rotatebox{70}{\textbf{Orion}} &
+    \rotatebox{70}{\textbf{GEO}} &
+    \rotatebox{70}{\textbf{Meier}} &
+    \multicolumn{1}{c|}{\textbf{SMEL}}\\
+
+  \hline
+  \multirow{8}{*}{Entity Type Ops}
+    & Add Entity Type        & Create a new entity type           & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark &
+  --- & \texttt{ADD\_ENTITY}\\
+  \cline{2-11}
+    & Delete Entity Type     & Remove an entity type and its data & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark &
+  --- & \texttt{DELETE\_ENTITY} \\
+  \cline{2-11}
+    & Rename Entity Type     & Change entity type name            & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark &
+  --- & \texttt{RENAME\_ENTITY}  \\
+  \cline{2-11}
+    & Copy Entity Type       & Duplicate entity type structure    & \checkmark & \checkmark$^{a}$ & \checkmark$^{a}$ & --- & --- & \checkmark & ---
+  & \texttt{COPY\_ENTITY}\\
+  \cline{2-11}
+    & Merge Entity Types     & Combine two entity types into one  & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark &
+  \checkmark & \texttt{MERGE}  \\
+  \cline{2-11}
+    & Split Entity Type      & Partition by attr.\ subsets        & \checkmark & \checkmark & dec. & \checkmark & \checkmark & \checkmark &
+  \checkmark & \texttt{SPLIT} \\
+  \cline{2-11}
+    & Extract Entity Type    & Derive from selected features      & --- & --- & --- & --- & \checkmark & --- & --- & \texttt{SPLIT} \\
+  \cline{2-11}
+    & Cast Entity Type       & Change entity type kind            & --- & --- & --- & --- & --- & --- & --- & \texttt{CAST\_ENTITY} \\
+  \hline
+  \multirow{8}{*}{Property Ops}
+    & Add Property      & Add a new property            & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark &
+   \texttt{ADD\_PROPERTY}\\
+  \cline{2-11}
+    & Delete Property   & Remove a property              & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark
+  & \texttt{DELETE\_PROPERTY} \\
+  \cline{2-11}
+    & Rename Property   & Change property name           & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark
+  & \texttt{RENAME\_PROPERTY} \\
+  \cline{2-11}
+    & Copy Property     & Duplicate a property           & --- & --- & --- & \checkmark & \checkmark & \checkmark & \checkmark &
+  \texttt{COPY\_PROPERTY}  \\
+  \cline{2-11}
+    & Move Property     & Move property to other entity  & --- & --- & --- & \checkmark & \checkmark & \checkmark & \checkmark &
+  \texttt{MOVE\_PROPERTY} \\
+  \cline{2-11}
+    & Cast / Type Change & Change data type              & ---$^{b}$ & --- & --- & --- & \checkmark & --- & --- & \texttt{CAST\_PROPERTY} \\
+  \cline{2-11}
+    & Promote           & Mark as key property           & --- & --- & --- & --- & \checkmark & --- & --- & \texttt{ADD\_PRIMARY\_KEY}  \\
+  \cline{2-11}
+    & Demote            & Unmark as key property         & --- & --- & --- & --- & \checkmark & --- & --- & \texttt{DELETE\_PRIMARY\_KEY}\\
+  \hline
+  \multirow{7}{*}{Structural\newline Transform.}
+    & Flatten           & Nested $\rightarrow$ parent fields        & --- & --- & --- & --- & unnest & --- & \checkmark & \texttt{FLATTEN}\\
+  \cline{2-11}
+    & Unflatten         & Flat $\rightarrow$ nested object          & --- & --- & --- & --- & nest   & --- & --- & \texttt{UNFLATTEN} \\
+  \cline{2-11}
+    & Unnest            & Embedded $\rightarrow$ separate entity    & --- & --- & --- & --- & morph aggr$\rightarrow$ref & --- & --- &
+  \texttt{UNNEST}\\
+  \cline{2-11}
+    & Nest              & Entity $\rightarrow$ embedded struct.     & --- & --- & --- & --- & morph ref$\rightarrow$aggr & --- & \checkmark &
+  \texttt{NEST}\\
+  \cline{2-11}
+    & Unwind            & Array $\rightarrow$ individual entities   & --- & --- & --- & --- & ---        & --- & \checkmark & \texttt{UNWIND} \\
+  \cline{2-11}
+    & Wind              & Rows $\rightarrow$ array                  & --- & --- & --- & --- & ---        & --- & --- & \texttt{WIND} \\
+  \cline{2-11}
+    & Linking           & Create ref.\ by join cond.               & --- & --- & --- & --- & ---        & --- & \checkmark & \texttt{WIND}\\
+  \hline
+  \multirow{3}{*}{Aggr./\newline Emb.\ Ops}
+    & Add Embedded       & Add embedded struct.          & --- & --- & --- & --- & \checkmark & --- & --- & \texttt{ADD\_EMBEDDED} \\
+  \cline{2-11}
+    & Delete Embedded    & Remove embedded struct.       & --- & --- & --- & --- & \checkmark & --- & --- & \texttt{DELETE\_EMBEDDED} \\
+  \cline{2-11}
+    & Morph (Aggr$\rightarrow$Ref) & Embedded $\rightarrow$ reference & --- & --- & --- & --- & \checkmark & --- & --- & \texttt{UNNEST}  \\
+  \hline
+  \multirow{6}{*}{Graph-\newline specific\newline Ops}
+    & Add RelType         & Add relationship type       & --- & --- & --- & --- & \checkmark & \checkmark & --- & \texttt{ADD\_ENTITY} \\
+  \cline{2-11}
+    & Delete RelType      & Delete relationship type    & --- & --- & --- & --- & \checkmark & \checkmark & --- & \texttt{DELETE\_ENTITY} \\
+  \cline{2-11}
+    & Rename RelType      & Rename relationship type    & --- & --- & --- & --- & \checkmark & \checkmark & --- & \texttt{RENAME\_ENTITY} \\
+  \cline{2-11}
+    & Add Label           & Add a node label            & --- & --- & --- & --- & --- & \checkmark & --- & \texttt{ADD\_LABEL} \\
+  \cline{2-11}
+    & Delete Label        & Remove a node label         & --- & --- & --- & --- & --- & \checkmark & --- & \texttt{DELETE\_LABEL} \\
+  \cline{2-11}
+    & Transform           & Node $\leftrightarrow$ Relationship     & --- & --- & --- & --- & --- & \checkmark & --- & \texttt{TRANSFORM}  \\
+  \hline
+  \multirow{5}{*}{Reference Ops}
+    & Add Reference       & Add a reference             & --- & --- & --- & --- & \checkmark & --- & --- & \texttt{ADD\_CONSTRAINT} \\
+  \cline{2-11}
+    & Delete Reference    & Remove a reference          & --- & --- & --- & --- & \checkmark & --- & --- & \texttt{DELETE\_CONSTRAINT} \\
+  \cline{2-11}
+    & Cast Reference      & Change constraint type      & --- & --- & --- & --- & \checkmark & --- & --- & \texttt{CAST\_CONSTRAINT} \\
+  \cline{2-11}
+    & Multiplicity Change & Change cardinality          & --- & --- & --- & --- & \checkmark & --- & --- & \texttt{RECARD} \\
+  \cline{2-11}
+    & Morph (Ref$\rightarrow$Aggr) & Ref.\ $\rightarrow$ embedded aggr. & --- & --- & --- & --- & \checkmark & --- & --- & \texttt{NEST}\\
+  \hline
+  \multirow{7}{*}{Key/\newline Constr.\newline Ops}
+    & Add Primary Key     & Define primary key          & --- & --- & --- & --- & --- & --- & --- & \texttt{ADD\_PRIMARY\_KEY}  \\
+  \cline{2-11}
+    & Add Foreign Key     & Define foreign key          & --- & --- & --- & --- & --- & --- & --- & \texttt{ADD\_FOREIGN\_KEY}  \\
+  \cline{2-11}
+    & Add Unique Key      & Define unique constraint    & --- & --- & --- & --- & --- & --- & --- & \texttt{ADD\_UNIQUE\_KEY} \\
+  \cline{2-11}
+    & Add Partition Key   & Define partition key        & --- & --- & --- & --- & --- & --- & --- & \texttt{ADD\_PARTITION\_KEY} \\
+  \cline{2-11}
+    & Add Clustering Key  & Define clustering key       & --- & --- & --- & --- & --- & --- & --- & \texttt{ADD\_CLUSTERING\_KEY} \\
+  \cline{2-11}
+    & Delete Prim./For./Uniq. & Remove key constraint   & --- & --- & --- & --- & --- & --- & --- & \texttt{DELETE\_*\_KEY}  \\
+  \cline{2-11}
+    & Delete Part./Clust. & Remove partition/clust.\ key & --- & --- & --- & --- & --- & --- & --- & \texttt{DELETE\_*\_KEY} \\
+  \hline
+  \multicolumn{3}{|l|}{\cellcolor{gray!10}\textbf{Scope}} &
+  \multicolumn{3}{c|}{\cellcolor{gray!10}Intra (Rel.)} &
+  \multicolumn{4}{c|}{\cellcolor{gray!10}Intra (NoSQL)} &
+  \cellcolor{gray!10}\textbf{Intra \& Inter} \\
+  \hline
+  \end{tabular}
+  }
+
+  \vspace{0.15cm}
+  \begin{flushleft}
+  \footnotesize
+  $^\ast$ SMEL supports two syntax variants: \emph{specific} (e.g., \texttt{ADD\_PROPERTY}) and \emph{general} (e.g., \texttt{ADD PROPERTY}).\\
+  $^{a}$ In CoDEL achievable via \texttt{Split\textsubscript{row}}; in BiDEL achievable via \texttt{DECOMPOSE}.\\
+  $^{b}$ In PRISM achievable via \texttt{ADD COLUMN \ldots\ AS func()}.\\
+  CoDEL additionally defines row-level operations (\texttt{Add\textsubscript{row}}, \texttt{Del\textsubscript{row}},
+  \texttt{Split\textsubscript{row}}, \texttt{Unite\textsubscript{row}}) and column-level operations
+  (\texttt{Split\textsubscript{column}}, \texttt{Unite\textsubscript{column}}) which are outside the scope of this comparison.
+  \end{flushleft}
+
 \end{table*}
-
-
-\todo{Please first use the introduction sentence and later put the content like the table. To guide the reader, he wants to know what to expect next, then the content.}
-
-
 
 
 \paragraph{Entity Type Operations.}
@@ -596,29 +598,27 @@ Two design decisions are central in this category.
 By contrast, \texttt{TRANSFORM} converts between \texttt{VERTEX} and \texttt{EDGE} and therefore changes the graph topology.
 Combining both concerns in a single operation would blur the distinction between paradigm conversion and topological restructuring.
 
-\texttt{MERGE} and \texttt{SPLIT} are restricted to non-edge entities.
-Applying these operations to \texttt{EDGE} entities would raise ambiguous questions about how source and target endpoints should be preserved or reassigned.
-SMILE therefore excludes such cases at the grammar level.
-For edge entities, \texttt{ADD\_ENTITY} and \texttt{COPY\_ENTITY} require an explicit \texttt{FROM \ldots\ TO} clause so that the graph topology remains explicit in the script.
-Orion~\cite{chillon2022taxonomy} defines a separate \texttt{EXTRACT} operation for deriving a new entity from selected features; in SMILE, this case is subsumed by \texttt{SPLIT}.
+As a default design decision, \texttt{MERGE} and \texttt{SPLIT} are currently not applied to \texttt{EDGE} entities, as the semantics of preserving or reassigning source and target endpoints remain ambiguous.\todo{ORIGINAL: rephrase?? - maybe describe as default decision}\todo{REVISED: rephrased as default design decision}
+For edge entities, \texttt{ADD\_ENTITY} and \texttt{COPY\_ENTITY} require an explicit \texttt{FROM \ldots\ TO} clause so that the graph topology remains explicit in the script. Similarly, \texttt{MOVE\_PROPERTY} and \texttt{COPY\_PROPERTY} use \texttt{FROM \ldots\ TO} syntax to specify the source and target entities.\todo{ORIGINAL: What about move? - How about join conditions for complex operations?}\todo{REVISED: added MOVE\_PROPERTY/COPY\_PROPERTY FROM...TO explanation}
+Orion~\cite{chillon2022taxonomy} defines a separate \texttt{EXTRACT} operation for deriving a new entity from selected features; in \textsc{Smile}, this case is subsumed by \texttt{SPLIT}.
 
 
 \paragraph{Property Operations.}
 This symmetry is intentional so that users who understand entity-level changes can transfer the same logic to properties, including add, delete, rename, copy, and cast operations.
-In addition, \texttt{MOVE\_ATTRIBUTE} and \texttt{CAST\_ATTRIBUTE} support restructuring and type adaptation at the attribute level, both of which are frequently required in cross-paradigm migration.
+In addition, \texttt{MOVE\_PROPERTY} and \texttt{CAST\_PROPERTY} support restructuring and type adaptations at the property level, both of which are frequently required in cross-paradigm transformation and the aligning data migration.\todo{REVISED: MOVE\_ATTRIBUTE changed to MOVE\_PROPERTY, CAST\_ATTRIBUTE changed to CAST\_PROPERTY}
 
 A separate design decision concerns key promotion and demotion.
-Orion~\cite{chillon2022taxonomy} introduces \texttt{PROMOTE} and \texttt{DEMOTE} as dedicated operations for marking or unmarking an attribute as a key.
-SMILE absorbs this functionality into typed key operations such as \texttt{ADD\_PRIMARY\_KEY} and \texttt{DELETE\_PRIMARY\_KEY}.
-This keeps key semantics in a single part of the language and avoids a second mechanism for the same purpose.
+Orion~\cite{chillon2022taxonomy} introduces \texttt{PROMOTE} and \texttt{DEMOTE} as dedicated operations for marking or unmarking a property as a key.
+\textsc{Smile} integrates this functionality into typed key operations such as \texttt{ADD\_PRIMARY\_KEY} and \texttt{DELETE\_PRIMARY\_KEY}.
+This keeps key semantics in a separate part of the language, consequently, avoiding a second mechanism for the same purpose.
 
-\paragraph{Structural Transformations.}
-Structural transformations are central to cross-paradigm migration because database paradigms differ substantially in how they represent relationships and nested structures.
-SMILE defines six structural operations organized as three \emph{inverse pairs} (Table~\ref{tab:structural-ops}).
-Of these, \texttt{NEST}, \texttt{FLATTEN}, and \texttt{UNWIND} originate from prior work within our research group, while SMILE adds \texttt{UNNEST}, \texttt{UNFLATTEN}, and \texttt{WIND} as the corresponding inverse operations.
-The prior \texttt{LINKING} operation is subsumed by \texttt{WIND}.
+\paragraph{Structural Transformations.}\todo{structural transformations vs. operations? Are these document specific operations?}
+Structural transformations are central to cross-paradigm transformation because database paradigms differ substantially in how they represent relationships and nested structures.\todo{refer to example here}
+\textsc{Smile} defines six structural transformations organized as three \emph{inverse pairs} (Table~\ref{tab:structural-ops}).
+Of these, \texttt{NEST}, \texttt{FLATTEN}, and \texttt{UNWIND} originate from prior work, while \textsc{Smile} extends these by the corresponding inverse operations \texttt{UNNEST}, \texttt{UNFLATTEN}, and \texttt{WIND}.
+The prior \texttt{LINKING} operation, which originally created reference relationships between entities by copying key fields (1:m), is subsumed by \texttt{WIND} combined with \texttt{MERGE}.\todo{ORIGINAL: what does linking do? - 1 to m (copy keys)}\todo{REVISED: added LINKING explanation}
 
-\begin{table}[htbp]
+\begin{table}[H]
 \centering
 \caption{Structural transformation operations as inverse pairs.}
 \label{tab:structural-ops}
@@ -637,54 +637,35 @@ The prior \texttt{LINKING} operation is subsumed by \texttt{WIND}.
 The inverse-pair design is not merely syntactic.
 It supports explicitly reversible script design, which is useful for bidirectional migration specifications and for systematic transformation design.
 Without explicit inverse operations, reversing a structural change would require users to reconstruct the original schema shape manually.
+
+
+\todo[inline]{ORIGINAL: We should say in intro that we use the LPG model and RDF is not considered! / does that mean entity kinds are both vertices and edges? / before we were writing about vertex and edge now we write about node and relationships / is smile capable of expressing multi-labeled edges like in GQL?}
+\todo[inline]{REVISED: added LPG scope, EntityKind VERTEX+EDGE clarification, unified terminology to VERTEX/EDGE with Neo4j terms in parentheses, confirmed multi-label EDGE support}
 \paragraph{Graph-specific Operations.}
-When migrating into or evolving within the labeled property graph model, additional operations are required for graph-specific constructs such as relationship types, multi-label nodes, and node-to-relationship conversions.
+\textsc{Smile} targets the labeled property graph (LPG) model as implemented by Neo4j. RDF-based graph models are not considered.
+When migrating into or evolving within the LPG model, additional operations are required for graph-specific constructs such as relationship types, multi-label vertices (Neo4j: nodes), and vertex-to-edge conversions (Neo4j: node-to-relationship).
 
-The central design decision in this category is that graph relationship types are modeled as entity types with \texttt{entity\_kind = EDGE}, not as a separate first-class construct.
-Since relationship types can carry properties and participate in structural operations just like node types, a separate set of relationship-type operations would duplicate the semantics of existing entity operations without adding expressive power.
-Instead, edge entities are handled through the same entity operations together with an explicit \texttt{FROM \ldots\ TO} clause.
-This follows the principle of \emph{language economy}~\cite{hoare1973hints}.
-
-\texttt{ADD\_LABEL} and \texttt{DELETE\_LABEL} address Neo4j's multi-label capability.
-\texttt{TRANSFORM}, adopted from the \texttt{nodeToRel}/\texttt{relToNode} operations of Hausler et al.~\cite{hausler2023language}, converts between \texttt{VERTEX} and \texttt{EDGE}.
-It remains separate from \texttt{CAST\_ENTITY}, because altering graph topology is conceptually different from converting an entity between database paradigms.
+The central design decision in this category is that graph relationship types are modeled as entity types with \texttt{entity\_kind = EDGE}, not as a separate first-class construct. The \texttt{EntityKind} enum includes both \texttt{VERTEX} and \texttt{EDGE}, meaning that graph relationship types are represented as entity types rather than as a separate schema concept.
+Since \texttt{EDGE} entities can carry properties and participate in structural operations just like \texttt{VERTEX} entities, a separate set of relationship-type operations would duplicate the semantics of existing entity operations without adding expressive power. Instead, edge entities are handled through the same entity operations together with an explicit \texttt{FROM \ldots\ TO} clause.
+This follows the principle of \emph{language economy}~\cite{hoare1973hints} and is required for a distinct identification of the defined pattern. \texttt{ADD\_LABEL} and \texttt{DELETE\_LABEL} address Neo4j's multi-label capability. Since \textsc{Smile} does not distinguish between \texttt{VERTEX} and \texttt{EDGE} for label operations, multi-labeled edges are supported in the same way as multi-labeled vertices. \texttt{TRANSFORM}, adopted from the \texttt{nodeToRel}/\texttt{relToNode} operations of Hausler et al.~\cite{hausler2023language}, converts between \texttt{VERTEX} and \texttt{EDGE}. It remains separate from \texttt{CAST\_ENTITY}, because altering graph topology is conceptually different from converting an entity between database paradigms.
 
 
 \paragraph{Reference and Embedded Operations.}
 These operations manage inter-entity relationships at the schema level.
-The M-Model\textsuperscript{+} distinguishes two structurally different forms of relationship representation. \emph{References} connect separate entities, while \emph{embedded} structures nest one entity inside another.
-This distinction is necessary because different paradigms represent the same logical relationship through different structural mechanisms.
-
-\texttt{ADD\_CONSTRAINT} and \texttt{ADD\_FOREIGN\_KEY} are therefore kept separate.
-\texttt{ADD\_CONSTRAINT} creates a reference relationship and may introduce the foreign-key attribute if it is not already present.
+The M-Model\textsuperscript{+} distinguishes two structurally different forms of relationship representation. \emph{References} connect separate entities, while \emph{embedded} structures nest one entity inside another. This distinction is necessary because different paradigms represent the same logical relationship through different structural mechanisms. \texttt{ADD\_CONSTRAINT} and \texttt{ADD\_FOREIGN\_KEY} are therefore kept separate. \texttt{ADD\_CONSTRAINT} creates a reference relationship and may introduce the foreign-key attribute if it is not already present.
 \texttt{ADD\_FOREIGN\_KEY}, by contrast, adds a key constraint to an attribute that already exists, so one operation creates a relationship while the other constrains an existing attribute.
 
 For document-oriented schemas, \texttt{ADD\_EMBEDDED} and \texttt{DELETE\_\allowbreak{}EMBEDDED} manage embedded sub-object structures. Orion's morphing operations map to \texttt{NEST} and \texttt{UNNEST}.
 
 
 \paragraph{Key and Constraint Operations.}
-Existing evolution languages generally assume that key structures are already present and therefore do not model typed key creation explicitly (Table~\ref{tab:operation-comparison}).
-In cross-paradigm migration, this assumption is too strong.
-The source paradigm may leave key information implicit, while the target paradigm may require a different key structure altogether, as in Cassandra with partition and clustering keys.
-
-SMILE therefore makes key creation an explicit part of the transformation script.
-The taxonomy distinguishes typed key categories whose semantics differ across paradigms, including relational key constraints and the partition/clustering structure required by wide-column systems.
-Key semantics are therefore always stated explicitly in the script.
+Existing evolution languages generally assume that key structures are already present and therefore do not model typed key creation explicitly (Table~\ref{tab:operation-comparison}). In cross-paradigm migration, this assumption is too strong. The source paradigm may leave key information implicit, while the target paradigm may require a different key structure altogether, as in Cassandra with partition and clustering keys. \textsc{Smile} therefore makes key creation an explicit part of the transformation script. The taxonomy distinguishes typed key categories whose semantics differ across paradigms, including relational key constraints and the partition/clustering structure required by wide-column systems. Key semantics are therefore always stated explicitly in the script.
 
 \paragraph{Dual Grammar Variants.}
-A central design decision in SMILE is the provision of two concrete syntax variants that share the same abstract syntax.
-Both variants map to the same semantic operations over the M-Model\textsuperscript{+}, following the established distinction between concrete and abstract syntax in DSL engineering~\cite{mernik2005and, fowler2010addison}.
-
-The \emph{Specific} grammar follows a one-keyword-per-operation design, where each operation is represented by a dedicated lexer token such as \texttt{ADD\_ENTITY} or \texttt{ADD\_PRIMARY\_KEY}.
-This yields an enumeration-style command set in which the operation intent is immediately visible.
-
-The \emph{Generalized} grammar follows a verb--object pattern, combining a verb token with an object-type token, for example \texttt{ADD ENTITY}.
-Sebesta~\cite{sebesta2016concepts} describes this property as \emph{orthogonality}, in which verb and object dimensions remain independent and new object types can be integrated without redefining the existing verb structure.
-The Specific grammar defines 38~dedicated operation keywords.
-The Generalized grammar covers the same operations with 26~composable tokens, reducing the token count by about 32\,\%.
-
-The structural transformation operations (\texttt{NEST}, \texttt{UNNEST}, \texttt{FLATTEN}, \texttt{UNFLATTEN}, \texttt{WIND}, \texttt{UNWIND}) and \texttt{TRANSFORM} are syntactically identical in both variants because they do not admit a natural verb--object decomposition.
-Both grammars are implemented in ANTLR~4 and converge to the same internal operation representation, which the SMILE Engine processes uniformly through its listener-based architecture.
+A central design decision in \textsc{Smile} is the provision of two concrete syntax variants that share the same abstract syntax.
+Both variants map to the same semantic operations over the M-Model\textsuperscript{+}, following the established distinction between concrete and abstract syntax in DSL engineering~\cite{mernik2005and,fowler2010addison}. The \emph{Specific} grammar follows a one-keyword-per-operation design, where each operation is represented by a dedicated lexer token such as \texttt{ADD\_ENTITY} or \texttt{ADD\_PRIMARY\_KEY}.
+This yields an enumeration-style command set in which the operation intent is immediately visible. The \emph{Generalized} grammar follows a verb--object pattern, combining a verb token with an object-type token, for example \texttt{ADD ENTITY}. Sebesta~\cite{sebesta2016concepts} describes this property as \emph{orthogonality}, in which verb and object dimensions remain independent and new object types can be integrated without redefining the existing verb structure. The Specific grammar defines 38~dedicated operation keywords.
+The Generalized grammar covers the same operations with 26~composable tokens, reducing the token count by about 32\,\%. The structural transformation operations (\texttt{NEST}, \texttt{UNNEST}, \texttt{FLATTEN}, \texttt{UNFLATTEN}, \texttt{WIND}, \texttt{UNWIND}) and \texttt{TRANSFORM} are syntactically identical in both variants because they do not admit a natural verb--object decomposition. Both grammars are implemented in ANTLR~4 and converge to the same internal operation representation, which the \textsc{Smile} Engine processes uniformly through its listener-based architecture.
 
 
 
@@ -694,20 +675,22 @@ Both grammars are implemented in ANTLR~4 and converge to the same internal opera
 
 Supporting these scenarios across four database paradigms is not only a language-design problem, but also an architectural one. For the paradigms considered in this work, this results in a $4 \times 4$ scenario matrix with 4~intra-system evolution cases and 12~inter-system migration cases (Table~\ref{tab:migration-matrix}).
 
+\todo{extendable by addional data model}
+
 \begin{table}[htbp]
   \centering
   \caption{Scenario matrix for schema evolution and migration across four database paradigms}
   \label{tab:migration-matrix}
   \begin{tabular}{l c c c c}
   \toprule
-  \textbf{Source $\rightarrow$} & \multirow{2}{*}{\textbf{REL.}} & \multirow{2}{*}{\textbf{DOC.}} & \multirow{2}{*}{\textbf{GRAPH}} &
-  \multirow{2}{*}{\textbf{COL.}} \\
+  \textbf{Source $\rightarrow$} & \multirow{2}{*}{\textbf{Relational}} & \multirow{2}{*}{\textbf{Document}} & \multirow{2}{*}{\textbf{Graph}} &
+  \multirow{2}{*}{\textbf{Wide-Column}} \\
   \textbf{$\downarrow$ Target} & & & & \\
   \midrule
-  \textbf{RELATIONAL} & \cellcolor{evocolor}$\text{Evo}_{rr}$ & \cellcolor{migcolor}$\text{Trans}_{dr}$ & \cellcolor{migcolor}$\text{Trans}_{gr}$ & \cellcolor{migcolor}$\text{Trans}_{cr}$ \\
-  \textbf{DOCUMENT}   & \cellcolor{migcolor}$\text{Trans}_{rd}$ & \cellcolor{evocolor}$\text{Evo}_{dd}$ & \cellcolor{migcolor}$\text{Trans}_{gd}$ & \cellcolor{migcolor}$\text{Trans}_{cd}$ \\
-  \textbf{GRAPH}      & \cellcolor{migcolor}$\text{Trans}_{rg}$ & \cellcolor{migcolor}$\text{Trans}_{dg}$ & \cellcolor{evocolor}$\text{Evo}_{gg}$ & \cellcolor{migcolor}$\text{Trans}_{cg}$ \\
-  \textbf{COLUMNAR}   & \cellcolor{migcolor}$\text{Trans}_{rc}$ & \cellcolor{migcolor}$\text{Trans}_{dc}$ & \cellcolor{migcolor}$\text{Trans}_{gc}$ & \cellcolor{evocolor}$\text{Evo}_{cc}$ \\
+  \textbf{Relational} & \cellcolor{evocolor}$\text{Evo}_{rr}$ & \cellcolor{migcolor}$\text{Trans}_{dr}$ & \cellcolor{migcolor}$\text{Trans}_{gr}$ & \cellcolor{migcolor}$\text{Trans}_{cr}$ \\
+  \textbf{Document}   & \cellcolor{migcolor}$\text{Trans}_{rd}$ & \cellcolor{evocolor}$\text{Evo}_{dd}$ & \cellcolor{migcolor}$\text{Trans}_{gd}$ & \cellcolor{migcolor}$\text{Trans}_{cd}$ \\
+  \textbf{Graph}      & \cellcolor{migcolor}$\text{Trans}_{rg}$ & \cellcolor{migcolor}$\text{Trans}_{dg}$ & \cellcolor{evocolor}$\text{Evo}_{gg}$ & \cellcolor{migcolor}$\text{Trans}_{cg}$ \\
+  \textbf{Wide-Column}   & \cellcolor{migcolor}$\text{Trans}_{rc}$ & \cellcolor{migcolor}$\text{Trans}_{dc}$ & \cellcolor{migcolor}$\text{Trans}_{gc}$ & \cellcolor{evocolor}$\text{Evo}_{cc}$ \\
   \bottomrule
   % \multicolumn{5}{l}{\footnotesize \textit{Note:} Evo = Evolution (intra-system); Trans = Schema Transformation (inter-system); the first index depicts the source and the second the target database.}
   \end{tabular}
@@ -719,9 +702,9 @@ Supporting these scenarios across four database paradigms is not only a language
 
 
 
-A direct point-to-point implementation of these scenarios would require pair-specific mappings and therefore grow quadratically with the number of supported paradigms. To avoid this, the SMILE Engine adopts a Hub-and-Spoke architecture together with a canonical intermediate representation~\cite{hohpe2004enterprise}. Source schemas are reverse-engineered into M-Model\textsuperscript{+}, transformed there by SMILE scripts, and then forward-engineered into target schemas. This replaces pairwise translation logic with a linear number of adapters and makes a single language-based transformation workflow feasible across heterogeneous systems.
+A direct point-to-point implementation of these scenarios would require pair-specific mappings and therefore grow quadratically with the number of supported paradigms. To avoid this, the \textsc{Smile} Engine adopts a Hub-and-Spoke architecture together with a canonical intermediate representation~\cite{hohpe2004enterprise}. Source schemas are reverse-engineered into M-Model\textsuperscript{+}, transformed there by \textsc{Smile} scripts, and then forward-engineered into target schemas. This replaces pairwise translation logic with a linear number of adapters and makes a single language-based transformation workflow feasible across heterogeneous systems.
 
-Figure~\ref{fig:integration-patterns} contrasts direct point-to-point integration with a Hub-and-Spoke design based on a canonical data model. The latter provides the architectural basis for applying SMILE across supported paradigms without introducing a separate transformation mechanism for each source--target pair.
+Figure~\ref{fig:integration-patterns} contrasts direct point-to-point integration with a Hub-and-Spoke design based on a canonical data model. The latter provides the architectural basis for applying \textsc{Smile} across supported paradigms without introducing a separate transformation mechanism for each source--target pair.
 
 \begin{figure}[htbp]
   \centering
@@ -781,206 +764,209 @@ Figure~\ref{fig:integration-patterns} contrasts direct point-to-point integratio
 \section{M-Model\textsuperscript{+}}
 \label{sec:unified-meta-schema}
 
-SMILE requires a canonical schema representation that can serve both as the semantic basis of the language and as the intermediate representation of the migration pipeline. Although the M-Model~\cite{conrad2022metamodels} already provides a suitable foundation for cross-paradigm migration, it does not yet capture all constructs required by the operation taxonomy introduced in Section~\ref{sec:operation-taxonomy}. In particular, SMILE must represent graph-specific labels, paradigm-dependent key semantics, attribute-level schema properties, and structurally different relationship forms within one common representation. M-Model\textsuperscript{+} therefore extends the original M-Model in three directions.
+\textsc{Smile} requires a canonical schema representation that can serve both as the semantic basis of the language and as the intermediate representation of the migration pipeline. Although the M-Model~\cite{conrad2022metamodels} already provides a suitable foundation for cross-paradigm migration, it does not yet capture all constructs required by the operation taxonomy introduced in Section~\ref{sec:operation-taxonomy}. In particular, \textsc{Smile} must represent graph-specific labels, paradigm-dependent key semantics, attribute-level schema properties, and structurally different relationship forms within one common representation. M-Model\textsuperscript{+} therefore extends the original M-Model in three directions.
 At the attribute level, it adds \texttt{is\_key}, \texttt{is\_optional}, and extended key types such as \texttt{NODE\_KEY} and \texttt{DOCUMENT\_ID} so that labels, key participation, and nullability become explicit schema properties.
 At the type level, it introduces \texttt{TupleDataType} for Cassandra's \texttt{tuple<>} and adds \texttt{labels} on \texttt{EntityType} for graph and document identifiers.
 At the relationship level, it distinguishes three subtypes of \texttt{Relationship}, namely \texttt{Reference}, \texttt{Embedded}, and \texttt{Edge}, so that relational foreign keys, embedded document structures, and graph edges fit within one shared model.
-Figure~\ref{fig:meta-schema} shows these additions, where black elements originate from the M-Model and blue elements denote SMILE-specific extensions.
+Figure~\ref{fig:meta-schema} shows these additions, where black elements originate from the M-Model and blue elements denote \textsc{Smile}-specific extensions.
 
 \begin{figure}[t]
-  \centering
-  \resizebox{\columnwidth}{!}{%
-  \begin{tikzpicture}[
-    >={Stealth[length=2.2mm]},
-    cls/.style={draw, rounded corners=2pt, align=left,
-                inner sep=3pt, font=\scriptsize},
-    enu/.style={draw, dashed, rounded corners=2pt,
-                align=left, inner sep=3pt, font=\scriptsize},
-    sub/.style={draw, rounded corners=2pt, align=left,
-                inner sep=3pt, font=\scriptsize},
-    lbl/.style={font=\scriptsize},
-  ]
+    \centering
+    \resizebox{\columnwidth}{!}{%
+    \begin{tikzpicture}[
+      >={Stealth[length=2.2mm]},
+      cls/.style={draw, rounded corners=2pt, align=left,
+                  inner sep=3pt, font=\scriptsize},
+      enu/.style={draw, dashed, rounded corners=2pt,
+                  align=left, inner sep=3pt, font=\scriptsize},
+      sub/.style={draw, rounded corners=2pt, align=left,
+                  inner sep=3pt, font=\scriptsize},
+      lbl/.style={font=\scriptsize},
+    ]
 
-  % ============ Row 0: Database ============
-  \node[cls] (db) at (0,0) {
-    \textbf{Database}\\[-1pt]
-    {\rule{1.6cm}{0.2pt}}\\[-1pt]
-    db\_name, db\_type\\
-    version
-  };
+    % ============ Row 0: Database ============
+    \node[cls] (db) at (0,0) {
+      \textbf{Database}\\[-1pt]
+      {\rule{1.6cm}{0.2pt}}\\[-1pt]
+      db\_name, db\_type\\
+      \textcolor{blue}{version}
+    };
 
-  % ============ Row 1: EntityType ============
-  \node[cls] (et) at (0,-2.8) {
-    \textbf{EntityType}\\[-1pt]
-    {\rule{2.0cm}{0.2pt}}\\[-1pt]
-    object\_name: String[]\\
-    entity\_kind: EntityKind\\
-    \textcolor{blue}{labels: String[]}
-  };
+    % ============ Row 1: EntityType ============
+    \node[cls] (et) at (0,-3.0) {
+      \textbf{EntityType}\\[-1pt]
+      {\rule{2.0cm}{0.2pt}}\\[-1pt]
+      object\_name: String[]\\
+      entity\_kind: EntityKind\\
+      \textcolor{blue}{labels: String[]}
+    };
 
-  % ============ EntityKind ============
-  \node[enu] (ek) at (3.6,-2.8) {
-    \textbf{EntityKind}\\
-    TABLE, DOCUMENT\\
-    EMBEDDED, VERTEX\\
-    EDGE, WIDE\_COL.
-  };
+    % ============ EntityKind ============
+    \node[enu] (ek) at (4.2,-3.0) {
+      \textbf{EntityKind}\\
+      TABLE, DOCUMENT\\
+      EMBEDDED, VERTEX\\
+      EDGE, WIDE\_COL.
+    };
 
-  % ============ Row 2 ============
-  \node[cls] (attr) at (-3.4,-5.8) {
-    \textbf{Attribute}\\[-1pt]
-    {\rule{1.6cm}{0.2pt}}\\[-1pt]
-    attr\_name\\
-    data\_type: DataType\\
-    meta\_id\\
-    \textcolor{blue}{is\_key}\\
-    \textcolor{blue}{is\_optional}
-  };
+    % ============ Row 2 ============
+    \node[cls] (attr) at (-4.2,-6.4) {
+      \textbf{Attribute}\\[-1pt]
+      {\rule{1.6cm}{0.2pt}}\\[-1pt]
+      attr\_name\\
+      data\_type: DataType\\
+      meta\_id\\
+      \textcolor{blue}{is\_key}\\
+      \textcolor{blue}{is\_optional}
+    };
 
-  \node[cls] (con) at (0,-5.8) {
-    \textbf{Constraint}\\[-1pt]
-    {\rule{1.4cm}{0.2pt}}\\[-1pt]
-    UniqueConstr.\\
-    ForeignKeyConstr.
-  };
+    \node[cls] (con) at (0.2,-6.4) {
+      \textbf{Constraint}\\[-1pt]
+      {\rule{1.4cm}{0.2pt}}\\[-1pt]
+      UniqueConstr.\\
+      ForeignKeyConstr.
+    };
 
-  \node[cls] (rel) at (3.6,-5.8) {
-    \textcolor{blue}{\textbf{Relationship}}\\[-1pt]
-    {\rule{1.6cm}{0.2pt}}\\[-1pt]
-    \textcolor{blue}{cardinality}\\
-    \textcolor{blue}{is\_optional}
-  };
+    \node[cls] (rel) at (4.6,-6.4) {
+      \textcolor{blue}{\textbf{Relationship}}\\[-1pt]
+      {\rule{1.6cm}{0.2pt}}\\[-1pt]
+      \textcolor{blue}{cardinality}\\
+      \textcolor{blue}{is\_optional}
+    };
 
-  % ============ Row 3 ============
-  \node[enu] (dt) at (-3.4,-9.2) {
-    \textbf{DataType}\\
-    PrimitiveDT\\
-    ListDT, SetDT\\
-    MapDT\\
-    \textcolor{blue}{TupleDT}
-  };
+    % ============ Row 3 ============
+    \node[enu] (dt) at (-4.2,-10.0) {
+      \textbf{DataType}\\
+      PrimitiveDT\\
+      ListDT, SetDT\\
+      MapDT\\
+      \textcolor{blue}{TupleDT}
+    };
 
-  \node[enu] (pk) at (0,-9.2) {
-    \textbf{PKTypeEnum}\\
-    SIMPLE\\
-    PARTITION\\
-    CLUSTERING\\
-    \textcolor{blue}{NODE\_KEY}\\
-    \textcolor{blue}{DOCUMENT\_ID}
-  };
+    \node[enu] (pk) at (0.2,-10.0) {
+      \textbf{PKTypeEnum}\\
+      SIMPLE\\
+      PARTITION\\
+      CLUSTERING\\
+      \textcolor{blue}{NODE\_KEY}\\
+      \textcolor{blue}{DOCUMENT\_ID}
+    };
 
-  \node[sub] (ref) at (2.4,-9.2) {
-    \textcolor{blue}{\textbf{Reference}}\\
-    \textcolor{blue}{ref\_name}\\
-    \textcolor{blue}{refs\_to}\\
-    \textcolor{blue}{edge\_attrs: Attr[]}
-  };
-  \node[sub] (emb) at (4.2,-9.2) {
-    \textcolor{blue}{\textbf{Embedded}}\\
-    \textcolor{blue}{aggr\_name}\\
-    \textcolor{blue}{aggregates}
-  };
-  \node[sub] (edge) at (5.8,-9.2) {
-    \textcolor{blue}{\textbf{Edge}}\\
-    \textcolor{blue}{rel\_type\_name}\\
-    \textcolor{blue}{src/tgt\_entity}
-  };
+    \node[sub] (ref) at (3.2,-10.0) {
+      \textcolor{blue}{\textbf{Reference}}\\
+      \textcolor{blue}{ref\_name}\\
+      \textcolor{blue}{refs\_to}\\
+      \textcolor{blue}{edge\_attrs: Attr[]}
+    };
+    \node[sub] (emb) at (5.8,-10.0) {
+      \textcolor{blue}{\textbf{Embedded}}\\
+      \textcolor{blue}{aggr\_name}\\
+      \textcolor{blue}{aggregates}
+    };
+    \node[sub] (edge) at (8.0,-10.0) {
+      \textcolor{blue}{\textbf{Edge}}\\
+      \textcolor{blue}{rel\_type\_name}\\
+      \textcolor{blue}{src/tgt\_entity}
+    };
 
-  % ======== SOLID CONNECTIONS ========
+    % ======== BLACK CONNECTIONS ========
 
-  \draw[->] (db.south) -- node[right, lbl] {1..*} (et.north);
+    % Database -> EntityType
+    \draw[->] (db.south) -- node[right, lbl] {1..*} (et.north);
 
-  \draw[dashed, ->] (et.east) -- (ek.west);
+    % EntityType --> EntityKind
+    \draw[dashed, ->] (et.east) -- (ek.west);
 
-  \draw (et.south) -- ++(0,-0.5) coordinate (etfork);
-  \draw[->] (etfork) -| node[pos=0.85, right, lbl] {0..*} (attr.north);
-  \draw[->] (etfork) -| node[pos=0.85, right, lbl] {0..*} (con.north);
-  \draw[->, blue] (etfork) -| node[pos=0.85, right, lbl] {\textcolor{blue}{0..*}} (rel.north);
+    % EntityType fork down to Attribute, Constraint, Relationship
+    \draw (et.south) -- ++(0,-0.5) coordinate (etfork);
+    \draw[->] (etfork) -| node[pos=0.85, right, lbl] {0..*} (attr.north);
+    \draw[->] (etfork) -| node[pos=0.85, right, lbl] {0..*} (con.north);
+    \draw[->, blue] (etfork) -| node[pos=0.85, right, lbl] {\textcolor{blue}{0..*}} (rel.north);
 
-  \draw[dashed, ->] (attr.south) -- (dt.north);
-  \draw[dashed, ->] (con.south) -- (pk.north);
+    % Attribute -> DataType
+    \draw[dashed, ->] (attr.south) -- (dt.north);
 
-  \draw[dashed, ->] (con.west) -- node[above, lbl] {property\_id} (attr.east);
+    % Constraint -> PKTypeEnum
+    \draw[dashed, ->] (con.south) -- (pk.north);
 
-  \draw[dashed, ->] ([yshift=-4pt]con.east)
-    -- ++(0.55,0) -- ++(0,0.9) -- ++(-0.55,0) -- ([yshift=4pt]con.east)
-    node[right, lbl, pos=0.25] {points\_to};
+    % property_id: Constraint -> Attribute
+    \draw[dashed, ->] (con.west) -- node[below, lbl] {property\_id} (attr.east);
 
-  \draw (rel.south) -- ++(0,-0.6) coordinate (relfork);
-  \draw[-{Triangle[open]}] (relfork) -| (ref.north);
-  \draw[-{Triangle[open]}] (relfork) -| (emb.north);
-  \draw[-{Triangle[open]}] (relfork) -| (edge.north);
+    % points_to: self-loop on right side of Constraint (tight)
+    \draw[dashed, ->] ([yshift=-4pt]con.east)
+      -- ++(0.35,0) -- ++(0,0.8) -- ++(-0.35,0);
+    \node[right, lbl] at ([xshift=10pt, yshift=2pt]con.east) {points\_to};
 
-  % ======== BLUE DASHED ========
+    % Inheritance: Relationship -> Reference, Embedded, Edge
+    \draw (rel.south) -- ++(0,-0.6) coordinate (relfork);
+    \draw[-{Triangle[open]}] (relfork) -| (ref.north);
+    \draw[-{Triangle[open]}] (relfork) -| (emb.north);
+    \draw[-{Triangle[open]}] (relfork) -| (edge.north);
 
-  % 1) edge_attrs: ref.south -> down -> left PAST DataType -> up -> attr.west
-  %    Routes around DataType on the LEFT side
-  \draw[dashed, ->, blue]
-    (ref.south)
-    -- (ref.south |- 0,-11.0)
-    -- (-5.0,-11.0)
-    -- (-5.0,-6.5)
-    -- (attr.west |- 0,-6.5);
-  \node[below, lbl, blue] at (-1.3,-11.0) {edge\_attrs 0..*};
+    % ======== BLUE DASHED REFERENCES ========
 
-  % 2) refs_to: ref.west -> down below edge_attrs -> far left -> up -> et.west
-  \draw[dashed, ->, blue]
-    (ref.west)
-    -- (1.3,-9.2 |- ref.west)
-    -- (1.3,-12.0)
-    -- (-6.0,-12.0)
-    -- (-6.0,-2.8)
-    -- (et.west);
-  \node[left, lbl, blue] at (-6.0,-5.8) {refs\_to};
+    % 1) edge_attrs: ref.south -> down -> left -> up -> attr.west
+    \draw[dashed, ->, blue]
+      (ref.south) -- (3.2,-12.4)
+      -- (-6.2,-12.4)
+      -- (-6.2,-7.2) -- (attr.west);
+    \node[below, lbl, blue] at (-1.5,-12.4) {edge\_attrs 0..*};
 
-  % 3) aggregates: right channel x=5.8, top at y=-1.8
-  \draw[dashed, ->, blue]
-    (emb.east)
-    -- (5.8,-9.2 |- emb.east)
-    -- (5.8,-1.8)
-    -- (0.7,-1.8)
-    -- ([xshift=10pt]et.north);
-  \node[above, lbl, blue] at (3.3,-1.8) {aggregates};
+    % 2) refs_to: from ref area -> down -> far left -> up -> et.west
+    \draw[dashed, ->, blue]
+      (ref.west) -- (2.0,-10.0)
+      -- (2.0,-13.4)
+      -- (-7.2,-13.4)
+      -- (-7.2,-3.0) -- (et.west);
+    \node[left, lbl, blue] at (-7.2,-6.4) {refs\_to};
 
-  % 4) src/tgt_entity: far right channel x=7.5, top at y=-1.2
-  \draw[dashed, ->, blue]
-    (edge.east)
-    -- (7.5,-9.2 |- edge.east)
-    -- (7.5,-1.2)
-    -- (1.0,-1.2)
-    -- ([xshift=14pt]et.north);
-  \node[above, lbl, blue] at (4.3,-1.2) {src/tgt\_entity};
+    % 3) aggregates: emb -> right -> up to ET right side (NOT above Database)
+    \draw[dashed, ->, blue]
+      (emb.north) -- (5.8,-8.5)
+      -- (7.8,-8.5)
+      -- (7.8,-2.2)
+      -- (et.east |- 0,-2.2);
+    \node[right, lbl, blue] at (7.8,-5.0) {aggregates};
 
-  % ============ Legend ============
-  \node[lbl, anchor=north west] at (-6.0,-12.8) {
-    Black = M-Model~\cite{conrad2022metamodels}\quad
-    \textcolor{blue}{Blue} = SMILE extension
-  };
+    % 4) src/tgt_entity: edge -> right -> up to ET right side
+    \draw[dashed, ->, blue]
+      (edge.north) -- (8.0,-8.5)
+      -- (9.0,-8.5)
+      -- (9.0,-3.8)
+      -- (et.east |- 0,-3.8);
+    \node[right, lbl, blue] at (9.0,-5.8) {src/tgt\_entity};
 
-  \end{tikzpicture}
-  }% end resizebox
-  \caption{M-Model\textsuperscript{+}: M-Model (black) with SMILE extensions ({\textcolor{blue}{blue}})}
-  \label{fig:meta-schema}
-\end{figure}
+    % ============ Legend ============
+    \node[lbl, anchor=north west] at (-7.2,-14.2) {
+      Black = M-Model~\cite{conrad2022metamodels}\quad
+      \textcolor{blue}{Blue} = SMEL extension
+    };
+
+    \end{tikzpicture}
+    }% end resizebox
+    \caption{M-Model\textsuperscript{+}: M-Model (black) with SMEL extensions ({\textcolor{blue}{blue}})}
+    \label{fig:meta-schema}
+  \end{figure}
+
 
 
 \paragraph{Rationale and Relation to Prior Work.}
-The M-Model is used as the basis of M-Model\textsuperscript{+} because it aligns more directly with the transformation requirements of SMILE than alternative metamodels such as U-Schema (Table~\ref{tab:metamodel-comparison-rw}). In particular, its unified relationship hierarchy allows references, embedded structures, and graph edges to be treated within one common framework, while its explicit key typing already captures distinctions required by wide-column systems. These properties make it a suitable starting point for a canonical hub representation in a Hub-and-Spoke architecture.
+The M-Model is used as the basis of M-Model\textsuperscript{+} because it aligns more directly with the transformation requirements of \textsc{Smile} than alternative metamodels such as U-Schema (Table~\ref{tab:metamodel-comparison-rw}). In particular, its unified relationship hierarchy allows references, embedded structures, and graph edges to be treated within one common framework, while its explicit key typing already captures distinctions required by wide-column systems. These properties make it a suitable starting point for a canonical hub representation in a Hub-and-Spoke architecture.
 
-The M-Model already covers the four target paradigms and provides a unified relationship hierarchy, which gives M-Model\textsuperscript{+} a solid foundation. The extensions introduced above add the constructs that SMILE manipulates directly, such as graph-specific labels, typed key semantics, and attribute-level schema properties, so that these features are preserved throughout reverse engineering, transformation, and forward engineering. M-Model\textsuperscript{+} therefore builds on the M-Model as a targeted refinement for cross-paradigm schema change.
+The M-Model already covers the four target paradigms and provides a unified relationship hierarchy, which gives M-Model\textsuperscript{+} a solid foundation. The extensions introduced above add the constructs that \textsc{Smile} manipulates directly, such as graph-specific labels, typed key semantics, and attribute-level schema properties, so that these features are preserved throughout reverse engineering, transformation, and forward engineering. M-Model\textsuperscript{+} therefore builds on the M-Model as a targeted refinement for cross-paradigm schema change.
 
 % ============================================================
 \section{Implementation}
 \label{sec:implementation}
 % ============================================================
 
-The SMILE Engine separates paradigm-specific schema handling from paradigm-independent transformation semantics.
+The \textsc{Smile} Engine separates paradigm-specific schema handling from paradigm-independent transformation semantics.
 Schema changes are defined once over M-Model\textsuperscript{+} and reused across source--target pairs, new database systems can be added through a single adapter, and validation runs independently of execution so that script errors and adapter errors can be traced separately.
 The implementation combines a layered architecture with a pipeline that routes all transformations through the canonical metamodel.
 
 \subsection{System Architecture}
 
-\begin{figure}[t]
+\begin{figure}[htbp]
   \centering
   \begin{tikzpicture}[
     font=\scriptsize,
@@ -1062,7 +1048,7 @@ The implementation combines a layered architecture with a pipeline that routes a
   \draw[arr, dashed] (cfg.west |- L5.east) -- (L5.east);
 
   \end{tikzpicture}
-  \caption{SMILE Engine architecture: six layers with M-Model\textsuperscript{+} as central hub}
+  \caption{\textsc{Smile} Engine architecture: six layers with M-Model\textsuperscript{+} as central hub}
   \label{fig:system-architecture}
 \end{figure}
 
@@ -1079,13 +1065,13 @@ The command-line interface supports repeatable batch execution, which simplifies
 The web interface serves a different purpose and allows users to inspect migration results interactively, including generated schemas, execution logs, and validation outcomes.
 This separation reflects the dual role of the engine as both an experimental prototype and an interactive demonstration environment.
 
-The \emph{core layer} contains the \texttt{SchemaTransformer}, which implements the semantics of SMILE operations through dedicated handlers.
+The \emph{core layer} contains the \texttt{SchemaTransformer}, which implements the semantics of \textsc{Smile} operations through dedicated handlers.
 All handlers operate on M-Model\textsuperscript{+}, not on database-native schemas.
 As a result, the same transformation logic can be reused regardless of whether the source schema originates from PostgreSQL, MongoDB, Neo4j, or Cassandra.
-This paradigm-independent execution model is essential because SMILE is intended to cover both intra-system evolution and inter-system migration within one operation framework.
+This paradigm-independent execution model is essential because \textsc{Smile} is intended to cover both intra-system evolution and inter-system migration within one operation framework.
 
 The \emph{parsing layer} isolates concrete syntax from execution semantics.
-A \texttt{parser\_factory} selects the appropriate grammar variant based on the file extension, and \texttt{smel\_listeners}\footnote{The implementation retains the earlier working title \emph{SMEL} in file and module names (e.g., \texttt{.smel} extension, \texttt{smel\_listeners.py}); the language was subsequently renamed to SMILE.} translate the parse tree into an ordered list of operations.
+A \texttt{parser\_factory} selects the appropriate grammar variant based on the file extension, and \texttt{smel\_listeners}\footnote{The implementation retains the earlier working title \emph{SMEL} in file and module names (e.g., \texttt{.smel} extension, \texttt{smel\_listeners.py}); the language was subsequently renamed to \textsc{Smile}.} translate the parse tree into an ordered list of operations.
 This design allows the Specific and Generalized grammars to remain distinct at the syntax level while converging to the same internal representation.
 The engine therefore supports multiple surface notations without duplicating semantic logic.
 
@@ -1100,29 +1086,29 @@ Keeping both directions together reduces redundancy and helps maintain consisten
 Round-trip validation relies on this consistency, since export correctness depends directly on the assumptions made during parsing.
 
 The \emph{validation layer} runs independently of transformation execution.
-A failed result may stem from an incorrect SMILE script or from a bug in the target adapter; keeping validation separate lets the engine pinpoint which part is at fault.
+A failed result may stem from an incorrect \textsc{Smile} script or from a bug in the target adapter; keeping validation separate lets the engine pinpoint which part is at fault.
 
 \texttt{config.py} complements the layered architecture as a cross-cutting configuration component.
-It stores the migration and evolution definitions used to instantiate concrete runs, including source files, SMILE scripts, and source/target types.
+It stores the migration and evolution definitions used to instantiate concrete runs, including source files, \textsc{Smile} scripts, and source/target types.
 
 \subsection{Pipeline Stages}
 \label{sec:pipeline-stages}
 
-The SMILE Engine executes schema change as a five-phase pipeline that connects native source schemas, SMILE scripts, the canonical metamodel, and native target schemas.
+The \textsc{Smile} Engine executes schema change as a five-phase pipeline that connects native source schemas, \textsc{Smile} scripts, the canonical metamodel, and native target schemas.
 Figure~\ref{fig:architecture} summarizes this process.
 Conceptually, the pipeline combines two input streams.
-One stream converts the source schema into M-Model\textsuperscript{+}, while the other translates the SMILE script into an ordered transformation program.
+One stream converts the source schema into M-Model\textsuperscript{+}, while the other translates the \textsc{Smile} script into an ordered transformation program.
 Both streams meet in the transformation core and are reconciled again during export and validation.
 
-\begin{figure*}[t]
+\begin{figure}[htbp]
   \centering
-  \includegraphics[width=\textwidth]{gfx/pipeline1.drawio.pdf}
-  \caption{SMILE five-phase migration pipeline from source schema to target delivery}
+  \includegraphics[width=\linewidth]{gfx/pipeline1.drawio.pdf}
+  \caption{\textsc{Smile} five-phase migration pipeline from source schema to target delivery}
   \label{fig:architecture}
-\end{figure*}
+\end{figure}
 
 \textbf{Phase~1 (Input).}
-Execution starts from two inputs: a native source schema and a SMILE script written in either the Specific or the Generalized grammar.
+Execution starts from two inputs: a native source schema and a \textsc{Smile} script written in either the Specific or the Generalized grammar.
 
 \textbf{Phase~2 (Parsing and Reverse Engineering).}
 The two inputs are processed in parallel.
@@ -1131,7 +1117,7 @@ Top-level structures such as tables, collections, vertices, or column families a
 Native data types are translated into the shared data-type system of the metamodel.
 This step removes database-specific representational differences before any transformation logic is applied.
 
-On the script side, the parsing layer turns the SMILE program into an ordered list of \texttt{Operation} objects.
+On the script side, the parsing layer turns the \textsc{Smile} program into an ordered list of \texttt{Operation} objects.
 Although the Specific and Generalized grammars differ at the concrete-syntax level, they converge here to the same internal representation, so that syntax variation does not affect execution semantics.
 
 \textbf{Phase~3 (Execution).}
@@ -1158,7 +1144,7 @@ The generated target schema, execution log, and validation results are exposed t
 \section{Evaluation}
 \label{sec:evaluation}
 
-\begin{figure*}[t]
+\begin{figure}[htbp]
 \centering
 \resizebox{\textwidth}{!}{%
 \begin{tikzpicture}[
@@ -1179,7 +1165,7 @@ The generated target schema, execution log, and validation results are exposed t
 \node[file]  at (0,   0) (src)  {Source Schema\\(SQL/JSON/Cypher/CQL)};
 \node[box]   at (2.6, 0) (re)   {Adapter RE};
 \node[data]  at (4.6, 0) (v1)   {Meta V1};
-\node[box]   at (6.6, 0) (sml)  {SMILE\\Transform};
+\node[box]   at (6.6, 0) (sml)  {\textsc{Smile}\\Transform};
 \node[data]  at (8.6, 0) (v2)   {Meta V2};
 \node[box]   at (10.6,0) (fe)   {Adapter FE};
 \node[file]  at (12.6,0) (exp)  {Exported\\Target};
@@ -1189,12 +1175,12 @@ The generated target schema, execution log, and validation results are exposed t
 \draw[arr] (sml) -- (v2);
 \draw[arr] (v2)  -- (fe);
 \draw[arr] (fe)  -- (exp);
-\node[file] at (6.6, 1.2) (script) {SMILE Script (.smel/.smel\_gen)};
+\node[file] at (6.6, 1.2) (script) {\textsc{Smile} Script (.smel/.smel\_gen)};
 \draw[arr] (script) -- (sml);
 %% Layer 1
 \node[layer=green!25] at (0.6,-1.6) (l1) {Layer 1};
 \node[right=0.15cm of l1, font=\footnotesize, text width=1.9cm, align=left]
-  {\textbf{SMILE script}\\correctness};
+  {\textbf{\textsc{Smile} script}\\correctness};
 \node[data] at (4.6,-1.6)  (l1v2)   {Meta V2\\(raw)};
 \node       at (6.0,-1.6)           {\large$\stackrel{?}{=}$};
 \node[data] at (7.4,-1.6)  (l1exp)  {Expected\\Meta};
@@ -1225,9 +1211,9 @@ The generated target schema, execution log, and validation results are exposed t
 }%
 \caption{Two-layer validation pipeline}
 \label{fig:validation-pipeline}
-\end{figure*}
+\end{figure}
 
-We evaluate whether SMILE can express and execute schema
+We evaluate whether \textsc{Smile} can express and execute schema
 changes consistently across the full $4 \times 4$ scenario matrix and
 whether target export preserves that consistency.
 To this end, we consider all 16 directions, comprising
@@ -1252,7 +1238,7 @@ For cross-model migrations, the four original Northwind schema files form a clos
 Each native schema acts both as the source of outgoing migrations and as the expected target of incoming migrations from the other paradigms.
 Because these target schemas are independently authored, the evaluation does not rely on manually constructed expected outputs.
 
-Layer~1 validates the correctness of the schema change expressed in SMILE.
+Layer~1 validates the correctness of the schema change expressed in \textsc{Smile}.
 It compares the transformed canonical schema (Meta~V2) with the expected target schema obtained by reverse-engineering the corresponding ground-truth target file.
 This layer therefore tests whether the script semantics produce the intended structural result independently of any target export.
 
@@ -1261,7 +1247,7 @@ It reverse-engineers the schema generated by the target adapter and compares the
 
 
 %/The results are listed in Table~\ref{tab:eval-results}.
-\begin{table}[t]
+\begin{table}[htbp]
 \centering
 \caption{Validation results across 32 Northwind test scripts.}
 \label{tab:eval-results}
@@ -1279,7 +1265,7 @@ Cross-model         & 24 & 24/24 & 24/24 & 14 \\
 \end{table}
 
 All 32 configurations (8 same-model, 24 cross-model) pass both validation layers.
-Across both validation layers, the only differences recorded are 18 \texttt{is\_optional} notices (4 in same-model cases and 14 in cross-model cases), caused by paradigm-specific nullability defaults rather than incorrect transformations.
+Across both validation layers, the differences are 18 nullability notices (4 in same-model cases and 14 in cross-model cases), caused by paradigm-specific defaults.
 For example, Cassandra clustering keys are inherently \texttt{NOT NULL}, whereas the corresponding attribute may be nullable in a relational or document source.
 These notices do not invalidate the structural result but expose residual semantic gaps in cross-paradigm migration.
 % ============================================================
@@ -1287,43 +1273,43 @@ These notices do not invalidate the structural result but expose residual semant
 \label{sec:conclusion}
 % ============================================================
 
-This paper introduced SMILE, a domain-specific language for schema evolution and schema migration across relational, document, graph, and wide-column databases.
+This paper introduced \textsc{Smile}, a domain-specific language for schema evolution and schema migration across relational, document, graph, and wide-column databases.
 
-At its core, SMILE provides a common operation model for schema change across paradigms.
+At its core, \textsc{Smile} provides a common operation model for schema change across paradigms.
 This model is realized through a taxonomy of atomic schema change primitives and two grammar variants that share the same semantics while supporting different concrete syntactic styles.
 In this way, the approach connects intra-system evolution and inter-system migration within one language framework and covers all 16 directions of the $4 \times 4$ scenario matrix.
 
 The approach further relies on M-Model\textsuperscript{+} as a canonical hub representation for cross-paradigm schema migration.
 Schema changes are expressed and executed over this shared abstraction, replacing pairwise mappings between individual systems.
-The SMILE Engine implements this workflow through adapters for
+The \textsc{Smile} Engine implements this workflow through adapters for
 PostgreSQL, MongoDB, Neo4j, and Cassandra, with integrated validation
 and a web-based interface for inspecting migration results.
 
 The evaluation across 32 Northwind configurations indicates that the approach can be applied consistently across all four paradigms and all migration and evolution directions considered in this work.
 The two-layer validation design further demonstrates that transformation correctness and adapter correctness can be assessed separately, which is an important property for a language-centered migration framework.
 
-The 32/32 pass rate across both grammar variants and all 16 directions suggests that SMILE provides a workable basis for cross-paradigm schema change.
+The 32/32 pass rate across both grammar variants and all 16 directions suggests that \textsc{Smile} provides a workable basis for cross-paradigm schema change.
 
 \textbf{Limitations.}
-SMILE is limited to schema-level change and therefore does not address the data-migration logic that often accompanies practical migration scenarios.
+\textsc{Smile} is limited to schema-level change and therefore does not address the data-migration logic that often accompanies practical migration scenarios.
 Its current modeling scope is also narrower for document stores, since the MongoDB adapter assumes one root structure per collection and does not represent structural variation within the same collection.
 In addition, the framework currently supports one-shot schema change rather than version-aware evolution, and the nullability notices observed in the evaluation show that some cross-paradigm semantic mismatches still require manual review.
 
 \textbf{Future work.}
-Future work includes extending SMILE beyond schema-level migration toward combined schema and data migration, for example by generating executable ETL specifications alongside schema scripts.
+Future work includes extending \textsc{Smile} beyond schema-level migration toward combined schema and data migration, for example by generating executable ETL specifications alongside schema scripts.
 Another direction is to support version-aware evolution, including schema histories and incremental transformations.
-We also plan to improve authoring and automation support, ranging from IDE integration through Language Server Protocol features to the use of large language models for generating SMILE scripts from natural-language migration requirements.
+We also plan to improve authoring and automation support, ranging from IDE integration through Language Server Protocol features to the use of large language models for generating \textsc{Smile} scripts from natural-language migration requirements.
 
 
 
-\begin{acks}
+\subsubsection{\ackname}
 The work of Dominique Hausler has been funded by Deutsche Forschungsgemeinschaft (German Research Foundation) -- 552691270.
-\end{acks}
+
 
 \section*{Declaration on Generative AI}
 The logo was generated with DALL-E 3. ChatGPT and AI Studio were used for rephrasing and to find synonyms.
 
-\bibliographystyle{ACM-Reference-Format}
+\bibliographystyle{splncs04}
 \bibliography{bibliography}
 
 \end{document}

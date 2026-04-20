@@ -50,10 +50,10 @@ version: VERSION_NUMBER | INTEGER_LITERAL;                          // 1 | 1.0 |
 // ============================================================================
 // OPERATIONS - Each operation is a separate, specific keyword
 // ============================================================================
-// Structure:  NEST, UNNEST, FLATTEN, UNWIND, EXTRACT
+// Structure:  NEST, UNNEST, FLATTEN, UNFLATTEN, WIND, UNWIND
 // Movement:   COPY, MOVE, MERGE, SPLIT
 // Type:       CAST
-// CRUD:       ADD_*, DELETE_*, REMOVE_*, RENAME_*
+// CRUD:       ADD_*, DELETE_*, RENAME_*
 
 operation: add_property | add_constraint | add_embedded | add_entity
          | add_primary_key | add_foreign_key | add_unique_key
@@ -180,13 +180,6 @@ delete_clustering_key: DELETE_CLUSTERING_KEY keyColumns (FROM identifier)?;
 // DELETE_LABEL: Delete label from node
 // Example: DELETE_LABEL Employee FROM Person
 delete_label: DELETE_LABEL identifier FROM identifier;
-
-// ============================================================================
-// REMOVE OPERATIONS - Non-destructive constraint removal
-// ============================================================================
-// These operations remove constraints/metadata while preserving structure
-// Useful for schema evolution: constraint relaxation, etc.
-
 
 // ============================================================================
 // RENAME OPERATIONS - Specific keywords for each type
