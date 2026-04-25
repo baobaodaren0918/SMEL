@@ -1,15 +1,15 @@
 """
-SMEL Full Flow Verification - Two-Layer Validation
+SMILE Full Flow Verification - Two-Layer Validation
 
 Tests all 40 migration configurations (8 Person + 8 Northwind Same-Model + 24 Northwind Cross-Model)
 with a unified validation framework.
 
 Pipeline:
-  Source Schema -> [RE] -> Meta V1 -> [SMEL] -> Meta V2 -> [FE] -> Target Schema
+  Source Schema -> [RE] -> Meta V1 -> [SMILE] -> Meta V2 -> [FE] -> Target Schema
 
 Validation Layers:
   Layer 0: Execution check (no errors, no skipped ops)
-  Layer 1: Meta V2 vs Expected Meta (SMEL script correctness)
+  Layer 1: Meta V2 vs Expected Meta (SMILE script correctness)
   Layer 2: Exported Target -> RE -> Round-trip Meta vs Expected Meta (Adapter correctness)
 """
 import sys
@@ -371,13 +371,13 @@ def test_northwind_cross_model(direction):
 # =============================================================================
 def main():
     import argparse
-    parser = argparse.ArgumentParser(description="SMEL Full Flow Verification")
+    parser = argparse.ArgumentParser(description="SMILE Full Flow Verification")
     parser.add_argument("-v", "--verbose", action="store_true", help="Print detailed schema info")
     parser.add_argument("--only", type=str, help="Run only tests matching this prefix (e.g. 'northwind_r2d')")
     args = parser.parse_args()
 
     print("=" * 70)
-    print("SMEL FULL FLOW VERIFICATION")
+    print("SMILE FULL FLOW VERIFICATION")
     print("=" * 70)
 
     same_keys = list(_northwind_same_keys)

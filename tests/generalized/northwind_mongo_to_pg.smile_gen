@@ -1,0 +1,203 @@
+-- SMILE Northwind: MongoDB -> PostgreSQL (Generalized Operations Version)
+-- Orders Document (multi-level nested objects + arrays) -> Normalized Tables (3NF)
+-- Direction: Denormalized (Embedded) -> Normalized (3NF)
+--
+-- Operation Semantics:
+--   UNNEST:  Extract nested object to separate table (normalization)
+--   FLATTEN: Flatten nested object fields into same table (reduce depth by 1)
+
+MIGRATION northwind_mongo_to_pg:1.0
+FROM DOCUMENT TO RELATIONAL
+USING adapted_northwind_schema VERSION 1
+
+-- ============================================
+-- Source: MongoDB Orders Document
+-- ============================================
+-- {
+--   _id: "ORD001",
+--   order_date, required_date, shipped_date, freight, ship_name,
+--   ship_destination: { ship_address, ship_city, ship_region, ship_postal_code, ship_country },
+--   customer: { company_name, contact_name, contact_title, phone, fax,
+--               address: { street, city, region, postal_code, country } },
+--   employee: { last_name, first_name, title, birth_date, hire_date, phone, notes, reports_to,
+--               address: { street, city, region, postal_code, country } },
+--   shipper: { company_name, phone },
+--   details: [
+--     { unit_price, quantity, discount,
+--       product: { product_name, unit_price, units_in_stock, discontinued, quantity_per_unit,
+--                  category: { category_name, description },
+--                  supplier: { company_name, contact_name, contact_title, phone, fax,
+--                              address: { street, city, region, postal_code, country } } } }
+--   ]
+-- }
+
+-- ============================================
+-- Target: PostgreSQL 3NF Tables (8 tables)
+-- ============================================
+-- categories (category_id [PK], category_name, description)
+-- suppliers (supplier_id [PK], company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country)
+-- shippers (shipper_id [PK], company_name, phone)
+-- employees (employee_id [PK], last_name, first_name, title, birth_date, hire_date, phone, notes, street, city, region, postal_code, country, reports_to [FK->employees])
+-- customers (customer_id [PK], company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country)
+-- products (product_id [PK], product_name, unit_price, units_in_stock, discontinued, quantity_per_unit, supplier_id [FK->suppliers], category_id [FK->categories])
+-- orders (order_id [PK], order_date, required_date, shipped_date, freight, ship_name, ship_address, ship_city, ship_region, ship_postal_code, ship_country, customer_id [FK->customers], employee_id [FK->employees], shipper_id [FK->shippers])
+-- order_details (order_id [PK,FK->orders], product_id [PK,FK->products], unit_price, quantity, discount)
+
+-- ============================================
+-- Step 1: Rename PK from MongoDB convention
+-- ============================================
+RENAME PROPERTY _id TO order_id IN orders
+CAST CONSTRAINT orders.order_id TO PRIMARY KEY
+-- Result:
+-- orders: { order_id, order_date, required_date, shipped_date, freight, ship_name,
+--   ship_destination: { ship_address, ship_city, ship_region, ship_postal_code, ship_country },
+--           customer{...}, employee{...}, shipper{...}, details[{...}] }
+
+-- ============================================
+-- Step 2: UNNEST details[] -> order_details (array extraction)
+-- ============================================
+UNNEST orders.details:unit_price, quantity, discount, product{product_name, unit_price, units_in_stock, discontinued, quantity_per_unit, category{category_name, description}, supplier{company_name, contact_name, contact_title, phone, fax, address{street, city, region, postal_code, country}}} AS order_details WITH orders.order_id TO order_details.order_id
+-- Result:
+-- orders: { order_id, ..., ship_destination{...}, customer{...}, employee{...}, shipper{...} }
+-- order_details: { order_id, unit_price, quantity, discount, product{..., category{...}, supplier{...}} }
+
+-- ============================================
+-- Step 3: UNNEST customer -> customers + FLATTEN address
+-- ============================================
+UNNEST orders.customer:company_name, contact_name, contact_title, phone, fax, address{street, city, region, postal_code, country} AS customers WITH orders.order_id TO customers.order_id
+ADD KEY customers.customer_id AS String
+DELETE PROPERTY customers.order_id
+ADD PROPERTY customer_id TO orders WITH TYPE String
+ADD FOREIGN KEY orders.customer_id REFERENCES customers(customer_id) WITH CARDINALITY ONE_TO_MANY
+-- FLATTEN address into customers
+FLATTEN customers.address
+RENAME PROPERTY address_street TO street IN customers
+RENAME PROPERTY address_city TO city IN customers
+RENAME PROPERTY address_region TO region IN customers
+RENAME PROPERTY address_postal_code TO postal_code IN customers
+RENAME PROPERTY address_country TO country IN customers
+-- Result:
+-- orders: { order_id, ..., customer_id [FK->customers], employee{...}, shipper{...} }
+-- customers: { customer_id, company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country }
+
+-- ============================================
+-- Step 4: UNNEST employee -> employees + FLATTEN address + self-ref
+-- ============================================
+UNNEST orders.employee:last_name, first_name, title, birth_date, hire_date, phone, notes, reports_to, address{street, city, region, postal_code, country} AS employees WITH orders.order_id TO employees.order_id
+ADD KEY employees.employee_id AS String
+DELETE PROPERTY employees.order_id
+ADD PROPERTY employee_id TO orders WITH TYPE String
+ADD FOREIGN KEY orders.employee_id REFERENCES employees(employee_id) WITH CARDINALITY ONE_TO_MANY
+ADD FOREIGN KEY employees.reports_to REFERENCES employees(employee_id) WITH CARDINALITY ZERO_TO_MANY
+-- FLATTEN address into employees
+FLATTEN employees.address
+RENAME PROPERTY address_street TO street IN employees
+RENAME PROPERTY address_city TO city IN employees
+RENAME PROPERTY address_region TO region IN employees
+RENAME PROPERTY address_postal_code TO postal_code IN employees
+RENAME PROPERTY address_country TO country IN employees
+-- Result:
+-- orders: { order_id, ..., customer_id [FK], employee_id [FK], shipper{...} }
+-- employees: { employee_id, last_name, first_name, title, birth_date, hire_date, phone, notes, street, city, region, postal_code, country, reports_to [FK->self] }
+
+-- ============================================
+-- Step 5: UNNEST shipper -> shippers
+-- ============================================
+UNNEST orders.shipper:company_name, phone AS shippers WITH orders.order_id TO shippers.order_id
+ADD KEY shippers.shipper_id AS String
+DELETE PROPERTY shippers.order_id
+ADD PROPERTY shipper_id TO orders WITH TYPE String
+ADD FOREIGN KEY orders.shipper_id REFERENCES shippers(shipper_id) WITH CARDINALITY ONE_TO_MANY
+-- Result:
+-- orders: { order_id, order_date, required_date, shipped_date, freight, ship_name,
+--   ship_destination{...}, customer_id [FK], employee_id [FK], shipper_id [FK] }
+-- shippers: { shipper_id, company_name, phone }
+
+-- ============================================
+-- Step 6: UNNEST product -> products (from order_details, Level 2)
+-- ============================================
+UNNEST order_details.product:product_name, unit_price, units_in_stock, discontinued, quantity_per_unit, category{category_name, description}, supplier{company_name, contact_name, contact_title, phone, fax, address{street, city, region, postal_code, country}} AS products WITH order_details.order_id TO products.order_id
+ADD KEY products.product_id AS String
+DELETE PROPERTY products.order_id
+ADD PROPERTY product_id TO order_details WITH TYPE String
+ADD FOREIGN KEY order_details.product_id REFERENCES products(product_id) WITH CARDINALITY ONE_TO_MANY
+-- Result:
+-- order_details: { order_id, product_id [FK], unit_price, quantity, discount }
+-- products: { product_id, product_name, unit_price, units_in_stock, discontinued, quantity_per_unit,
+--             category{category_name, description}, supplier{..., address{...}} }
+
+-- ============================================
+-- Step 7: UNNEST supplier -> suppliers + FLATTEN address (from products, Level 3)
+-- ============================================
+UNNEST products.supplier:company_name, contact_name, contact_title, phone, fax, address{street, city, region, postal_code, country} AS suppliers WITH products.product_id TO suppliers.product_id
+ADD KEY suppliers.supplier_id AS String
+DELETE PROPERTY suppliers.product_id
+ADD PROPERTY supplier_id TO products WITH TYPE String
+ADD FOREIGN KEY products.supplier_id REFERENCES suppliers(supplier_id) WITH CARDINALITY ONE_TO_MANY
+-- FLATTEN address into suppliers
+FLATTEN suppliers.address
+RENAME PROPERTY address_street TO street IN suppliers
+RENAME PROPERTY address_city TO city IN suppliers
+RENAME PROPERTY address_region TO region IN suppliers
+RENAME PROPERTY address_postal_code TO postal_code IN suppliers
+RENAME PROPERTY address_country TO country IN suppliers
+-- Result:
+-- products: { product_id, ..., supplier_id [FK->suppliers], category{...} }
+-- suppliers: { supplier_id, company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country }
+
+-- ============================================
+-- Step 8: UNNEST category -> categories (from products, Level 3)
+-- ============================================
+UNNEST products.category:category_name, description AS categories WITH products.product_id TO categories.product_id
+ADD KEY categories.category_id AS String
+DELETE PROPERTY categories.product_id
+ADD PROPERTY category_id TO products WITH TYPE String
+ADD FOREIGN KEY products.category_id REFERENCES categories(category_id) WITH CARDINALITY ONE_TO_MANY
+-- Result:
+-- products: { product_id, product_name, unit_price, units_in_stock, discontinued, quantity_per_unit,
+--             supplier_id [FK->suppliers], category_id [FK->categories] }
+-- categories: { category_id, category_name, description }
+
+-- ============================================
+-- Step 9: FLATTEN orders.ship_destination
+-- ============================================
+FLATTEN orders.ship_destination
+RENAME PROPERTY ship_destination_ship_address TO ship_address IN orders
+RENAME PROPERTY ship_destination_ship_city TO ship_city IN orders
+RENAME PROPERTY ship_destination_ship_region TO ship_region IN orders
+RENAME PROPERTY ship_destination_ship_postal_code TO ship_postal_code IN orders
+RENAME PROPERTY ship_destination_ship_country TO ship_country IN orders
+-- Result:
+-- orders: { order_id, order_date, required_date, shipped_date, freight, ship_name,
+--   ship_address, ship_city, ship_region, ship_postal_code, ship_country,
+--   customer_id [FK], employee_id [FK], shipper_id [FK] }
+
+-- ============================================
+-- Step 10: Add composite PK for order_details + FK to orders
+-- ============================================
+ADD FOREIGN KEY order_details.order_id REFERENCES orders(order_id) WITH CARDINALITY ONE_TO_MANY
+ADD KEY (order_id, product_id) TO order_details
+
+-- ============================================
+-- Final Result (8 tables):
+-- categories:    { category_id [PK], category_name, description }
+-- suppliers:     { supplier_id [PK], company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country }
+-- shippers:      { shipper_id [PK], company_name, phone }
+-- employees:     { employee_id [PK], last_name, first_name, title, birth_date, hire_date, phone, notes, street, city, region, postal_code, country, reports_to [FK->employees] }
+-- customers:     { customer_id [PK], company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country }
+-- products:      { product_id [PK], product_name, unit_price, units_in_stock, discontinued, quantity_per_unit, supplier_id [FK->suppliers], category_id [FK->categories] }
+-- orders:        { order_id [PK], order_date, required_date, shipped_date, freight, ship_name, ship_address, ship_city, ship_region, ship_postal_code, ship_country, customer_id [FK->customers], employee_id [FK->employees], shipper_id [FK->shippers] }
+-- order_details: { order_id [PK,FK->orders], product_id [PK,FK->products], unit_price, quantity, discount }
+-- ============================================
+
+-- ============================================
+-- Operation Summary (43 steps):
+--   RENAME_PROPERTY: 13  (1 PK rename + 12 FLATTEN renames)
+--   CAST_CONSTRAINT: 1    (orders.order_id -> PRIMARY KEY)
+--   UNNEST: 7             (details, customer, employee, shipper, product, supplier, category)
+--   FLATTEN: 4            (customers.address, employees.address, suppliers.address, orders.ship_destination)
+--   ADD_PRIMARY_KEY: 7    (customers, employees, shippers, products, suppliers, categories, order_details composite)
+--   DELETE_PROPERTY: 6   (carry-field cleanup for customers, employees, shippers, products, suppliers, categories)
+--   ADD_PROPERTY: 6      (FK fields: customer_id, employee_id, shipper_id, product_id, supplier_id, category_id)
+--   ADD_FOREIGN_KEY: 9     (7 FK constraints + 1 self-ref + 1 order_details->orders)
+-- ============================================

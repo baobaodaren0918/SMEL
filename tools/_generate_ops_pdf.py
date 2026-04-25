@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Generate PDF: SMEL 6 Core Structural Operations Reference (EN + ZH)"""
+"""Generate PDF: SMILE 6 Core Structural Operations Reference (EN + ZH)"""
 from fpdf import FPDF
 
 # ═══════════════════════════════════════════════════
@@ -38,14 +38,14 @@ UNFLATTEN_CODE = [
 
 NEST_OBJ_CODE = [
     'NEST_PS customers:company_name, phone IN orders.customer',
-    '  WHERE orders.customer_id = customers.customer_id WITH DELETION',
+    '  WHERE orders.customer_id = customers.customer_id',
     '',
     'Before:                              After:',
     '  orders {                             orders {',
     '    order_id,                            order_id,',
     '    customer_id FK --> customers         customer: {      <-- OBJECT',
     '  }                                       company_name,',
-    '  customers {             deleted ->       phone',
+    '  customers {                              phone',
     '    customer_id PK,                      }',
     '    company_name,                       }',
     '    phone',
@@ -54,13 +54,13 @@ NEST_OBJ_CODE = [
 
 NEST_ARR_CODE = [
     'NEST_PS order_details:unit_price, quantity IN orders.details',
-    '  WHERE order_details.order_id = orders.order_id WITH DELETION',
+    '  WHERE order_details.order_id = orders.order_id',
     '',
     'Before:                              After:',
     '  orders {                             orders {',
     '    order_id PK                         order_id,',
     '  }                                     details: [       <-- ARRAY',
-    '  order_details {     deleted ->           { unit_price,',
+    '  order_details {                          { unit_price,',
     '    order_id FK --> orders                   quantity }',
     '    unit_price,                           ]',
     '    quantity                             }',
@@ -215,7 +215,7 @@ def generate_en(path):
 
     # Title
     pdf.set_font('Helvetica', 'B', 20)
-    pdf.cell(0, 12, 'SMEL - 6 Core Structural Operations', new_x="LMARGIN", new_y="NEXT", align='C')
+    pdf.cell(0, 12, 'SMILE - 6 Core Structural Operations', new_x="LMARGIN", new_y="NEXT", align='C')
     pdf.set_font('Helvetica', '', 10)
     pdf.set_text_color(100, 100, 100)
     pdf.cell(0, 6, 'Schema Migration & Evolution Language', new_x="LMARGIN", new_y="NEXT", align='C')
@@ -290,7 +290,7 @@ def generate_en(path):
     pdf.label_value('Operates On', 'Independent Entity (merges into parent)')
     pdf.label_value('Output', 'Object (1:1 FK) or Array (1:N FK) -- auto-determined')
     pdf.label_value('Direction', 'Normalized (multi-table) -> Denormalized (single document)')
-    pdf.label_value('Syntax', 'NEST_PS source:fields IN target.alias WHERE condition [WITH DELETION]')
+    pdf.label_value('Syntax', 'NEST_PS source:fields IN target.alias WHERE condition')
     pdf.label_value('Reverse', 'UNNEST')
     pdf.ln(1)
     pdf._font('B', 9); pdf.cell(0, 5, 'Example A: Embed as Object (target holds FK)', new_x="LMARGIN", new_y="NEXT")
@@ -367,7 +367,7 @@ def generate_zh(path):
 
     # Title
     pdf._font('B', 20)
-    pdf.cell(0, 14, 'SMEL - 6\u5927\u6838\u5fc3\u7ed3\u6784\u64cd\u4f5c', new_x="LMARGIN", new_y="NEXT", align='C')
+    pdf.cell(0, 14, 'SMILE - 6\u5927\u6838\u5fc3\u7ed3\u6784\u64cd\u4f5c', new_x="LMARGIN", new_y="NEXT", align='C')
     pdf._font('', 10)
     pdf.set_text_color(100, 100, 100)
     pdf.cell(0, 6, 'Schema Migration & Evolution Language', new_x="LMARGIN", new_y="NEXT", align='C')
@@ -442,7 +442,7 @@ def generate_zh(path):
     pdf.label_value('\u4f5c\u7528\u5bf9\u8c61', '\u72ec\u7acb\u5b9e\u4f53\uff08\u5408\u5e76\u5230\u7236\u5b9e\u4f53\uff09')
     pdf.label_value('\u8f93\u51fa', 'Object\uff081:1 FK\uff09\u6216 Array\uff081:N FK\uff09-- \u81ea\u52a8\u5224\u5b9a')
     pdf.label_value('\u65b9\u5411', '\u89c4\u8303\u5316\uff08\u591a\u8868\uff09-> \u53cd\u89c4\u8303\u5316\uff08\u5355\u6587\u6863\uff09')
-    pdf.label_value('\u8bed\u6cd5', 'NEST_PS source:fields IN target.alias WHERE cond [WITH DELETION]')
+    pdf.label_value('\u8bed\u6cd5', 'NEST_PS source:fields IN target.alias WHERE cond')
     pdf.label_value('\u9006\u64cd\u4f5c', 'UNNEST')
     pdf.ln(1)
     pdf._font('B', 9); pdf.cell(0, 5, '\u793a\u4f8b A\uff1a\u5d4c\u5165\u4e3a Object\uff08target \u6301\u6709 FK\uff09', new_x="LMARGIN", new_y="NEXT")
@@ -514,5 +514,5 @@ def generate_zh(path):
 
 if __name__ == '__main__':
     base = r"C:\Users\baoba\PycharmProjects\MA_Hagen_Lu\schema_evolution_language"
-    generate_en(f"{base}\\SMEL_Operations_Reference_EN.pdf")
-    generate_zh(f"{base}\\SMEL_Operations_Reference_ZH.pdf")
+    generate_en(f"{base}\\SMILE_Operations_Reference_EN.pdf")
+    generate_zh(f"{base}\\SMILE_Operations_Reference_ZH.pdf")

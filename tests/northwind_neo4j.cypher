@@ -1,5 +1,5 @@
 // Neo4j Graph Schema: Northwind
-// 7 nodes, 7 relationships, 61 properties for SMEL Graph migration testing
+// 7 nodes, 7 relationships, 61 properties for SMILE Graph migration testing
 // order_details modeled as CONTAINS relationship with properties (unit_price, quantity, discount)
 // Tests: relationship-with-properties, self-reference, multi-hop paths
 

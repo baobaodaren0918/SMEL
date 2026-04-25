@@ -1,0 +1,120 @@
+-- SMILE Northwind: Cassandra V1 -> Cassandra V2 (Generalized Operations Version)
+-- Same-model Schema Evolution: Columnar -> Columnar
+-- V2 Business Scenario: E-commerce platform modernization
+--
+-- Structural changes:
+--   MERGE:               Denormalize categories into products table
+--   SPLIT:               Separate customer identity from contact info
+--   Repartition orders:  Change partition key from customer_id to order_date
+--   ADD_ENTITY:          Create region, territories, employee_territories (with composite partition key)
+
+EVOLUTION northwind_cass1_to_cass2:1.0
+FROM COLUMNAR TO COLUMNAR
+USING adapted_northwind_schema VERSION 1 TO 2
+
+-- ============================================
+-- Meta V1 (after Reverse Engineering of northwind_cassandra.cql)
+-- ============================================
+-- categories (category_id [PARTITION], category_name, description)
+-- suppliers (supplier_id [PARTITION], company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country)
+-- shippers (shipper_id [PARTITION], company_name, phone)
+-- employees (employee_id [PARTITION], last_name, first_name, title, birth_date, hire_date, phone, notes, street, city, region, postal_code, country, reports_to)
+-- customers (customer_id [PARTITION], company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country)
+-- products (category_id [PARTITION], supplier_id [PARTITION], product_id [CLUSTERING], product_name, unit_price, units_in_stock, discontinued, quantity_per_unit)
+-- orders (customer_id [PARTITION], order_date [CLUSTERING], order_id [CLUSTERING], required_date, shipped_date, freight, ship_name, ship_address, ship_city, ship_region, ship_postal_code, ship_country, employee_id, shipper_id)
+-- order_details (order_id [PARTITION], product_id [PARTITION], unit_price, quantity, discount)
+
+-- ============================================
+-- Phase 1: MERGE categories INTO products (structural + repartition)
+-- Cassandra: categories partition key consumed, products repartitioned
+-- ============================================
+DELETE PARTITION KEY (category_id, supplier_id) FROM products
+DELETE CLUSTERING KEY product_id FROM products
+DELETE PROPERTY products.category_id
+DELETE PARTITION KEY category_id FROM categories
+DELETE PROPERTY categories.category_id
+MERGE categories, products INTO products
+ADD PARTITION KEY product_id TO products
+
+-- ============================================
+-- Phase 2: SPLIT customers -> customers + customer_contacts (structural)
+-- ============================================
+SPLIT customers INTO customers:customer_id, company_name, street, city, region, postal_code, country; customer_contacts:customer_id, contact_name, contact_title, phone, fax
+ADD PARTITION KEY customer_id TO customers
+ADD PARTITION KEY customer_id TO customer_contacts
+ADD CLUSTERING KEY contact_id TO customer_contacts
+
+-- ============================================
+-- Phase 3: Repartition orders (query optimization)
+-- Change from customer-based to date-based partitioning
+-- ============================================
+DELETE PARTITION KEY customer_id FROM orders
+DELETE CLUSTERING KEY order_date FROM orders
+DELETE CLUSTERING KEY order_id FROM orders
+ADD PARTITION KEY order_date TO orders
+ADD CLUSTERING KEY customer_id TO orders
+ADD CLUSTERING KEY order_id TO orders
+
+-- ============================================
+-- Phase 4: ADD region (new entity)
+-- Business: Sales territory management -- geographic regions
+-- ============================================
+ADD ENTITY region WITH PROPERTIES (region_id String, region_description String)
+ADD PARTITION KEY region_id TO region
+
+-- ============================================
+-- Phase 5: ADD territories (new entity)
+-- Business: Sales territories within regions
+-- ============================================
+ADD ENTITY territories WITH PROPERTIES (territory_id String, territory_description String, region_id String)
+ADD PARTITION KEY territory_id TO territories
+
+-- ============================================
+-- Phase 6: ADD employee_territories (composite partition key)
+-- Business: Assign employees to sales territories
+-- Cassandra: composite partition key (employee_id, region_id) + clustering key territory_id
+-- ============================================
+ADD ENTITY employee_territories
+ADD PROPERTY employee_id TO employee_territories WITH TYPE String
+ADD PROPERTY region_id TO employee_territories WITH TYPE String
+ADD PROPERTY territory_id TO employee_territories WITH TYPE String
+ADD PARTITION KEY (employee_id, region_id) TO employee_territories
+ADD CLUSTERING KEY territory_id TO employee_territories
+
+-- ============================================
+-- Phase 7: employees -- simplify
+-- ============================================
+DELETE PROPERTY employees.birth_date
+DELETE PROPERTY employees.notes
+ADD PROPERTY email TO employees WITH TYPE String
+
+-- ============================================
+-- Phase 8: products + orders -- RENAME + ADD
+-- ============================================
+RENAME PROPERTY product_name TO name IN products
+RENAME PROPERTY freight TO shipping_cost IN orders
+ADD PROPERTY status TO orders WITH TYPE String
+
+-- ============================================
+-- Final Meta V2 (10 entities):
+-- products:              { product_id [PARTITION], name, unit_price, units_in_stock, discontinued, quantity_per_unit, supplier_id, category_name, description }
+-- suppliers:             { supplier_id [PARTITION], company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country }
+-- shippers:              { shipper_id [PARTITION], company_name, phone }
+-- employees:             { employee_id [PARTITION], last_name, first_name, title, hire_date, email, phone, street, city, region, postal_code, country, reports_to }
+-- customers:             { customer_id [PARTITION], company_name, street, city, region, postal_code, country }
+-- customer_contacts:     { customer_id [PARTITION], contact_id [CLUSTERING], contact_name, contact_title, phone, fax }
+-- orders:                { order_date [PARTITION], customer_id [CLUSTERING], order_id [CLUSTERING], required_date, shipped_date, shipping_cost, ship_name, ship_address, ship_city, ship_region, ship_postal_code, ship_country, employee_id, shipper_id, status }
+-- order_details:         { order_id [PARTITION], product_id [PARTITION], unit_price, quantity, discount }
+-- region:                { region_id [PARTITION], region_description }
+-- territories:           { territory_id [PARTITION], territory_description, region_id }
+-- employee_territories:  { employee_id [PARTITION], region_id [PARTITION], territory_id [CLUSTERING] }
+-- ============================================
+
+-- ============================================
+-- Operation Summary (33 steps, 10 operation types):
+--   MERGE: 1              SPLIT: 1
+--   ADD ENTITY: 3         ADD PROPERTY: 5
+--   ADD PARTITION KEY: 7  ADD CLUSTERING KEY: 4
+--   DELETE PARTITION KEY: 3  DELETE CLUSTERING KEY: 3
+--   DELETE PROPERTY: 4   RENAME PROPERTY: 2
+-- ============================================

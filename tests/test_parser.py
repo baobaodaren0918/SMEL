@@ -1,7 +1,7 @@
 """
-SMEL Parser Test Script
-Tests parsing of SMEL migration scripts using the parser factory.
-Supports both SMEL_Specific (.smel) and SMEL_Generalized (.smel_gen) grammars.
+SMILE Parser Test Script
+Tests parsing of SMILE migration scripts using the parser factory.
+Supports both SMILE_Specific (.smile) and SMILE_Generalized (.smile_gen) grammars.
 """
 import sys
 import os
@@ -10,15 +10,15 @@ from pathlib import Path
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from parser_factory import parse_smel_auto, get_grammar_info
+from parser_factory import parse_smile_auto, get_grammar_info
 
 
-def parse_smel_file(filepath: str, verbose: bool = True) -> tuple:
+def parse_smile_file(filepath: str, verbose: bool = True) -> tuple:
     """
-    Parse a SMEL file and return success status and any errors.
+    Parse a SMILE file and return success status and any errors.
 
     Args:
-        filepath: Path to the .smel or .smel_gen file
+        filepath: Path to the .smile or .smile_gen file
         verbose: Whether to print detailed information
 
     Returns:
@@ -42,7 +42,7 @@ def parse_smel_file(filepath: str, verbose: bool = True) -> tuple:
 
     # Parse file
     try:
-        context, operations, errors = parse_smel_auto(filepath)
+        context, operations, errors = parse_smile_auto(filepath)
 
         # Check for errors
         if errors:
@@ -101,22 +101,22 @@ def count_operations(operations: list) -> dict:
 import pytest
 
 _tests_dir = Path(__file__).parent
-_smel_files = sorted(_tests_dir.glob("**/*.smel"))
-_smel_gen_files = sorted(_tests_dir.glob("**/*.smel_gen"))
+_smile_files = sorted(_tests_dir.glob("**/*.smile"))
+_smile_gen_files = sorted(_tests_dir.glob("**/*.smile_gen"))
 
 
-@pytest.mark.parametrize("filepath", _smel_files, ids=[f.name for f in _smel_files])
+@pytest.mark.parametrize("filepath", _smile_files, ids=[f.name for f in _smile_files])
 def test_parse_specific(filepath):
-    """Test parsing of Specific grammar (.smel) files."""
-    success, context, operations, errors = parse_smel_file(str(filepath), verbose=False)
+    """Test parsing of Specific grammar (.smile) files."""
+    success, context, operations, errors = parse_smile_file(str(filepath), verbose=False)
     assert success, f"Parse failed for {filepath.name}: {errors}"
     assert len(operations) > 0, f"No operations parsed from {filepath.name}"
 
 
-@pytest.mark.parametrize("filepath", _smel_gen_files, ids=[f.name for f in _smel_gen_files])
+@pytest.mark.parametrize("filepath", _smile_gen_files, ids=[f.name for f in _smile_gen_files])
 def test_parse_generalized(filepath):
-    """Test parsing of Generalized grammar (.smel_gen) files."""
-    success, context, operations, errors = parse_smel_file(str(filepath), verbose=False)
+    """Test parsing of Generalized grammar (.smile_gen) files."""
+    success, context, operations, errors = parse_smile_file(str(filepath), verbose=False)
     assert success, f"Parse failed for {filepath.name}: {errors}"
     assert len(operations) > 0, f"No operations parsed from {filepath.name}"
 
@@ -128,7 +128,7 @@ def main():
     """Main test function."""
     tests_dir = _tests_dir
 
-    test_files = sorted(list(_smel_files) + list(_smel_gen_files))
+    test_files = sorted(list(_smile_files) + list(_smile_gen_files))
 
     if not test_files:
         print("No test files found in tests directory")
@@ -138,7 +138,7 @@ def main():
     results = []
 
     for filepath in test_files:
-        success, context, operations, errors = parse_smel_file(str(filepath), verbose=True)
+        success, context, operations, errors = parse_smile_file(str(filepath), verbose=True)
         results.append((filepath.name, success, errors))
 
         if success and operations:

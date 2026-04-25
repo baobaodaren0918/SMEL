@@ -1,4 +1,4 @@
-# SMEL - Schema Migration & Evolution Language
+# SMILE - Schema Migration & Evolution Language
 # Requirements
 
 # Parser generator

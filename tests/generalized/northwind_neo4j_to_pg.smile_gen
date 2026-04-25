@@ -1,0 +1,163 @@
+-- SMILE: Neo4j -> PostgreSQL (Generalized Operations Version)
+-- Cross-model Schema Migration: Graph -> Relational
+-- Direction: northwind_neo4j.cypher -> northwind_postgresql.sql
+--
+-- Pipeline: Source Neo4j -> Reverse Engineering -> Meta V1
+--           -> SMILE Operations (this script) -> Meta V2
+--           -> Forward Engineering -> Target PG
+--
+-- Operation Semantics:
+--   TRANSFORM:       Convert relationship (graph edge) to entity (table)
+--   RENAME_ENTITY:   Rename entity after TRANSFORM (relationship name -> table name)
+--   ADD_PROPERTY:   Add FK attribute to entity (graph edge replaced by FK column)
+--   ADD_FOREIGN_KEY:  Add FK constraint (re-establish relational references)
+--   ADD_PRIMARY_KEY: Add composite PK to junction table
+--   DELETE_ENTITY:   Remove relationship type (graph edge no longer needed)
+-- Note: Neo4j source already uses lowercase entity names (categories, suppliers, etc.)
+
+MIGRATION northwind_neo4j_to_pg:1.0
+FROM GRAPH TO RELATIONAL
+USING adapted_northwind_schema VERSION 1
+
+-- ============================================
+-- Source: Neo4j Graph (7 nodes, 7 relationships)
+-- ============================================
+-- Nodes:
+--   categories:  { category_id [PK], category_name, description }
+--   suppliers:   { supplier_id [PK], company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country }
+--   shippers:    { shipper_id [PK], company_name, phone }
+--   employees:   { employee_id [PK], last_name, first_name, title, birth_date, hire_date, phone, notes, street, city, region, postal_code, country }
+--   customers:   { customer_id [PK], company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country }
+--   products:    { product_id [PK], product_name, unit_price, units_in_stock, discontinued, quantity_per_unit }
+--   orders:      { order_id [PK], order_date, required_date, shipped_date, freight, ship_name, ship_address, ship_city, ship_region, ship_postal_code, ship_country }
+-- Relationships:
+--   REPORTS_TO  (employees -> employees)
+--   SUPPLIES    (suppliers -> products)
+--   PART_OF     (products -> categories)
+--   PURCHASED   (customers -> orders)
+--   SOLD        (employees -> orders)
+--   SHIPPED_VIA (orders -> shippers)
+--   CONTAINS    (orders -> products) with properties { unit_price, quantity, discount }
+
+-- ============================================
+-- Target: PostgreSQL 3NF Tables (8 tables, 8 FKs)
+-- ============================================
+-- categories (category_id [PK], category_name, description)
+-- suppliers (supplier_id [PK], company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country)
+-- shippers (shipper_id [PK], company_name, phone)
+-- employees (employee_id [PK], last_name, first_name, title, birth_date, hire_date, phone, notes, street, city, region, postal_code, country, reports_to [FK->employees])
+-- customers (customer_id [PK], company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country)
+-- products (product_id [PK], product_name, unit_price, units_in_stock, discontinued, quantity_per_unit, supplier_id [FK->suppliers], category_id [FK->categories])
+-- orders (order_id [PK], order_date, required_date, shipped_date, freight, ship_name, ship_address, ship_city, ship_region, ship_postal_code, ship_country, customer_id [FK->customers], employee_id [FK->employees], shipper_id [FK->shippers])
+-- order_details (order_id [PK,FK->orders], product_id [PK,FK->products], unit_price, quantity, discount)
+
+-- ============================================
+-- Step 1: CONTAINS relationship -> order_details table
+-- ============================================
+-- The CONTAINS relationship carries properties (unit_price, quantity, discount).
+-- TRANSFORM converts it to an entity, preserving those properties.
+-- Then rename from relationship name to table name, add FK columns and composite PK.
+TRANSFORM CONTAINS INTO ENTITY
+RENAME ENTITY CONTAINS TO order_details
+ADD PROPERTY order_id TO order_details WITH TYPE String
+ADD PROPERTY product_id TO order_details WITH TYPE String
+ADD FOREIGN KEY order_details.order_id REFERENCES orders(order_id) WITH CARDINALITY ONE_TO_MANY
+ADD FOREIGN KEY order_details.product_id REFERENCES products(product_id) WITH CARDINALITY ONE_TO_MANY
+ADD KEY (order_id, product_id) TO order_details
+-- Result:
+-- order_details: { order_id [PK,FK], product_id [PK,FK], unit_price, quantity, discount }
+
+-- ============================================
+-- Step 2: orders -- PURCHASED relationship -> customer_id FK
+-- ============================================
+-- PURCHASED (customers -> orders) becomes a customer_id FK column in orders.
+DELETE ENTITY PURCHASED
+ADD PROPERTY customer_id TO orders WITH TYPE String
+ADD FOREIGN KEY orders.customer_id REFERENCES customers(customer_id) WITH CARDINALITY ONE_TO_MANY
+-- Result:
+-- orders: { order_id [PK], order_date, required_date, shipped_date, freight, ship_name, ship_address, ship_city, ship_region, ship_postal_code, ship_country, customer_id [FK] }
+
+-- ============================================
+-- Step 3: orders -- SOLD relationship -> employee_id FK
+-- ============================================
+-- SOLD (employees -> orders) becomes an employee_id FK column in orders.
+DELETE ENTITY SOLD
+ADD PROPERTY employee_id TO orders WITH TYPE String
+ADD FOREIGN KEY orders.employee_id REFERENCES employees(employee_id) WITH CARDINALITY ONE_TO_MANY
+-- Result:
+-- orders: { ..., employee_id [FK] }
+
+-- ============================================
+-- Step 4: orders -- SHIPPED_VIA relationship -> shipper_id FK
+-- ============================================
+-- SHIPPED_VIA (orders -> shippers) becomes a shipper_id FK column in orders.
+DELETE ENTITY SHIPPED_VIA
+ADD PROPERTY shipper_id TO orders WITH TYPE String
+ADD FOREIGN KEY orders.shipper_id REFERENCES shippers(shipper_id) WITH CARDINALITY ONE_TO_MANY
+-- Result:
+-- orders: { order_id [PK], order_date, required_date, shipped_date, freight, ship_name, ship_address, ship_city, ship_region, ship_postal_code, ship_country, customer_id [FK], employee_id [FK], shipper_id [FK] }
+
+-- ============================================
+-- Step 5: products -- SUPPLIES relationship -> supplier_id FK
+-- ============================================
+-- SUPPLIES (suppliers -> products) becomes a supplier_id FK column in products.
+DELETE ENTITY SUPPLIES
+ADD PROPERTY supplier_id TO products WITH TYPE String
+ADD FOREIGN KEY products.supplier_id REFERENCES suppliers(supplier_id) WITH CARDINALITY ONE_TO_MANY
+-- Result:
+-- products: { product_id [PK], product_name, unit_price, units_in_stock, discontinued, quantity_per_unit, supplier_id [FK] }
+
+-- ============================================
+-- Step 6: products -- PART_OF relationship -> category_id FK
+-- ============================================
+-- PART_OF (products -> categories) becomes a category_id FK column in products.
+DELETE ENTITY PART_OF
+ADD PROPERTY category_id TO products WITH TYPE String
+ADD FOREIGN KEY products.category_id REFERENCES categories(category_id) WITH CARDINALITY ONE_TO_MANY
+-- Result:
+-- products: { ..., supplier_id [FK], category_id [FK] }
+
+-- ============================================
+-- Step 7: employees -- REPORTS_TO relationship -> reports_to FK (self-reference)
+-- ============================================
+-- REPORTS_TO (employees -> employees) becomes a reports_to FK column
+-- referencing the same employees table (self-reference with ZERO_TO_MANY
+-- cardinality since not every employee has a manager).
+DELETE ENTITY REPORTS_TO
+ADD PROPERTY reports_to TO employees WITH TYPE String
+ADD FOREIGN KEY employees.reports_to REFERENCES employees(employee_id) WITH CARDINALITY ZERO_TO_MANY
+-- Result:
+-- employees: { employee_id [PK], last_name, first_name, title, birth_date, hire_date, phone, notes, street, city, region, postal_code, country, reports_to [FK->employees] }
+
+-- ============================================
+-- Step 8: CAST Node Keys to relational Primary Keys
+-- ============================================
+CAST CONSTRAINT categories.category_id TO PRIMARY KEY
+CAST CONSTRAINT suppliers.supplier_id TO PRIMARY KEY
+CAST CONSTRAINT shippers.shipper_id TO PRIMARY KEY
+CAST CONSTRAINT employees.employee_id TO PRIMARY KEY
+CAST CONSTRAINT customers.customer_id TO PRIMARY KEY
+CAST CONSTRAINT products.product_id TO PRIMARY KEY
+CAST CONSTRAINT orders.order_id TO PRIMARY KEY
+
+-- ============================================
+-- Final Meta V2 (8 tables, 8 FK constraints):
+-- ============================================
+-- categories:     { category_id [PK], category_name, description }
+-- suppliers:      { supplier_id [PK], company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country }
+-- shippers:       { shipper_id [PK], company_name, phone }
+-- employees:      { employee_id [PK], last_name, first_name, title, birth_date, hire_date, phone, notes, street, city, region, postal_code, country, reports_to [FK->employees] }
+-- customers:      { customer_id [PK], company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country }
+-- products:       { product_id [PK], product_name, unit_price, units_in_stock, discontinued, quantity_per_unit, supplier_id [FK->suppliers], category_id [FK->categories] }
+-- orders:         { order_id [PK], order_date, required_date, shipped_date, freight, ship_name, ship_address, ship_city, ship_region, ship_postal_code, ship_country, customer_id [FK->customers], employee_id [FK->employees], shipper_id [FK->shippers] }
+-- order_details:  { order_id [PK,FK->orders], product_id [PK,FK->products], unit_price, quantity, discount }
+-- [CONTAINS TRANSFORMED to order_details entity]
+-- ============================================
+
+-- ============================================
+-- Operation Summary (32 steps, 7 operation types):
+--   RENAME_ENTITY:    1    ADD_PROPERTY:     8
+--   ADD_FOREIGN_KEY:   8    DELETE_ENTITY:     6
+--   ADD_PRIMARY_KEY:  1    TRANSFORM:         1
+--   CAST_CONSTRAINT:  7
+-- ============================================

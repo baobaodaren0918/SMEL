@@ -1,4 +1,4 @@
--- Cassandra Schema: Northwind (Wide-column model for SMEL testing)
+-- Cassandra Schema: Northwind (Wide-column model for SMILE testing)
 -- 8 tables with partition and clustering keys
 -- Query-driven denormalized design with address fields flattened
 -- Tests: partition/clustering keys, denormalized query tables

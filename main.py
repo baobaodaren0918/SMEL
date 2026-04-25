@@ -1,4 +1,4 @@
-"""SMEL CLI - Command Line Interface for Schema Migration & Evolution Language"""
+"""SMILE CLI - Command Line Interface for Schema Migration & Evolution Language"""
 import sys
 from pathlib import Path
 
@@ -148,7 +148,7 @@ def print_validation(result):
     print(" VALIDATION")
     print(f"{'=' * 50}{RESET}")
 
-    for label, v in [("Layer 1 (SMEL Script)", v_meta), ("Layer 2 (Adapter Export)", v_export)]:
+    for label, v in [("Layer 1 (SMILE Script)", v_meta), ("Layer 2 (Adapter Export)", v_export)]:
         passed = v.get("passed")
         summary = v.get("summary", "N/A")
         if passed is True:
@@ -199,7 +199,7 @@ def print_validation(result):
 
 def main():
     print(f"\n{BOLD}{'=' * 60}")
-    print(" SMEL - Schema Migration & Evolution Language")
+    print(" SMILE - Schema Migration & Evolution Language")
     print(f"{'=' * 60}{RESET}")
     # Auto-generate menu from MIGRATION_CONFIGS, grouped by direction
     current_direction = None
@@ -229,17 +229,17 @@ def main():
     config = MIGRATION_CONFIGS[direction]
     source_type = config["source_type"]
     target_type = config["target_type"]
-    smel_file = config["smel_file"]
+    smile_file = config["smile_file"]
 
     # Check files exist
-    for f in [config["source_file"], config["smel_file"]]:
+    for f in [config["source_file"], config["smile_file"]]:
         if not f.exists():
             print(f"{RED}[ERROR] File not found: {f}{RESET}")
             return 1
 
     # Run migration via core.run_migration()
     print(f"\n{CYAN}[Step 1] Reverse Engineering -> Meta V1{RESET}")
-    print(f"\n{CYAN}[Step 2] Transformation: Meta V1 + {smel_file.name} -> Meta V2{RESET}")
+    print(f"\n{CYAN}[Step 2] Transformation: Meta V1 + {smile_file.name} -> Meta V2{RESET}")
 
     result = run_migration(direction)
 

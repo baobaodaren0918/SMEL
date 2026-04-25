@@ -28,11 +28,11 @@ ENV/
 # grammar/*.interp
 
 # Prevent ANTLR files accidentally generated in root directory
-/SMEL.interp
-/SMEL.tokens
-/SMELLexer.interp
-/SMELLexer.py
-/SMELLexer.tokens
-/SMELListener.py
-/SMELParser.py
-/SMELVisitor.py
+/SMILE.interp
+/SMILE.tokens
+/SMILELexer.interp
+/SMILELexer.py
+/SMILELexer.tokens
+/SMILEListener.py
+/SMILEParser.py
+/SMILEVisitor.py

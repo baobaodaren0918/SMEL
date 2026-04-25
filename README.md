@@ -1,8 +1,6 @@
-# SMEL - Schema Migration & Evolution Language
+# SMILE - Schema Migration & Evolution Language
 
 A formally defined DSL for schema migration and evolution between heterogeneous database systems, supporting 4 data models with a full 4×4 migration matrix and two-layer automated validation.
-
-> **Note:** The language is referred to as **SMILE** (Schema Migration and Evolution Language) in the accompanying thesis. The codebase retains the earlier working title **SMEL** in file and module names.
 
 ## Supported Database Models
 
@@ -21,8 +19,8 @@ A formally defined DSL for schema migration and evolution between heterogeneous 
 
 ### Setup
 ```bash
-git clone https://github.com/baobaodaren0918/SMEL-3.0.git
-cd SMEL-3.0
+git clone https://github.com/baobaodaren0918/SMILE-3.0.git
+cd SMILE-3.0
 
 python -m venv .venv
 .venv\Scripts\activate  # Windows
@@ -36,13 +34,15 @@ pip install -r requirements.txt
 ### Web Interface
 ```bash
 python web_server.py
-# Opens at http://localhost:5594
+# Opens at http://localhost:5601
 ```
 
-The web interface provides:
-- **Source Schemas** tab: View all 4 native schemas (SQL, JSON, Cypher, CQL)
-- **Migration** tab: Run any migration, view SMEL script with syntax highlighting, step-by-step operation results, source/target schema comparison, and validation results
-- **Meta Schema** tab: Interactive card-based visualization of Meta V1/V2
+The web interface provides five tabs:
+- **Source Schemas** — inspect any of the 4 native schemas (SQL, JSON, Cypher, CQL) and the resulting Meta V1
+- **User Transformation** — point at a source DDL, pick a target DB, generate a SMILE header, edit the script in the in-browser Ace editor (autocomplete + syntax highlighting), validate, then run; the resulting Meta V2 and Target Schema panels are rendered read-only
+- **Schema Comparison** — side-by-side card view of Meta V1 vs Meta V2 with structural diff highlighting
+- **SMILE Script** — script rendering and syntax-highlighted preview for any registered migration config
+- **Migration / Evolution Process** — full pipeline run (parse → transform → export → validate) with step-by-step operation log and Layer 1 / Layer 2 validation results
 
 ### CLI
 ```bash
@@ -70,7 +70,8 @@ print(result['validation_export'])   # Layer 2 validation result
 ### Run Tests
 ```bash
 python -m pytest tests/ -q
-# 72 tests: 32 full-flow (Northwind) + 40 parser tests
+# 73 tests: 32 full-flow (Northwind 4×4 × 2 grammars) + 41 parser tests
+#           (20 specific + 20 generalized + 1 grammar-completeness script)
 
 python -m pytest tests/test_full_flow.py -k r2d -q
 # Run only tests matching a keyword
@@ -89,7 +90,9 @@ python -m pytest tests/test_full_flow.py -k r2d -q
 
 - Diagonal (R2R, D2D, G2G, C2C) = **same-model evolution**
 - Off-diagonal = **cross-model migration**
-- Each direction has both **Specific** (`.smel`) and **Generalized** (`.smel_gen`) grammar variants = **32 Northwind configs**
+- Each direction has both **Specific** (`.smile`) and **Generalized** (`.smile_gen`) grammar variants = **32 Northwind configs**
+
+In addition to the 32 Northwind configs, the registry includes 8 **Person** mini-dataset configs (used as a smaller smoke-test surface) and 1 **grammar-completeness** script that exercises the operations not naturally hit by the Northwind matrix — **41 configs in total**.
 
 ### Test Dataset: Northwind
 
@@ -105,14 +108,16 @@ The Northwind dataset (8 entities: orders, products, customers, employees, categ
 ## Project Structure
 
 ```
-SMEL/
+SMILE/
 ├── grammar/
-│   ├── specific/                      # Specific grammar (38 keywords)
-│   │   ├── SMEL_Specific.g4
+│   ├── specific/                      # Specific grammar (dedicated underscore-form keywords)
+│   │   ├── SMILE_Specific.g4
 │   │   └── generate_parser.bat
-│   ├── generalized/                   # Generalized grammar (27 composable tokens)
-│   │   ├── SMEL_Generalized.g4
+│   ├── generalized/                   # Generalized grammar (verb + object composition)
+│   │   ├── SMILE_Generalized.g4
 │   │   └── generate_parser.bat
+│   ├── smile_operations.json          # Single source of truth for all 36 ops (used by
+│   │                                  #   schema_diff, script_renderer, and editor autocomplete)
 │   └── antlr-4.13.2-complete.jar
 ├── Schema/
 │   ├── unified_meta_schema.py         # M-Model+ Meta Schema
@@ -122,21 +127,31 @@ SMEL/
 │       ├── mongodb_adapter.py         # MongoDB RE/FE
 │       ├── neo4j_adapter.py           # Neo4j RE/FE
 │       └── cassandra_adapter.py       # Cassandra RE/FE
+├── static/
+│   └── smile-app.js                   # Web UI app code (extracted from web_server.py)
 ├── tests/
-│   ├── northwind_*.sql/json/cypher/cql  # 4 source schemas
-│   ├── northwind_*_target.*             # 4 evolution targets (V2)
-│   ├── specific/                        # 20 Specific scripts (.smel)
-│   ├── generalized/                     # 20 Generalized scripts (.smel_gen)
+│   ├── northwind_*.sql/json/cypher/cql  # 4 source schemas (Northwind, all 4 paradigms)
+│   ├── northwind_*_target.*             # Same-model evolution targets (V2)
+│   ├── person_*                         # Person mini-dataset (8 configs)
+│   ├── specific/                        # 20 Specific scripts (.smile)   — 16 Northwind + 4 Person
+│   ├── generalized/                     # 20 Generalized scripts (.smile_gen)
+│   ├── grammar_completeness/            # source.sql + test_all_unused.smile
+│   │                                    #   (exercises the 9 ops not hit by the matrix)
 │   ├── test_full_flow.py                # 32 Northwind migration tests
-│   └── test_parser.py                   # 40 parser tests
-├── core.py                            # SchemaTransformer (30 operation handlers)
-├── smel_listeners.py                  # ANTLR listeners (Specific + Generalized)
+│   └── test_parser.py                   # 41 parser tests
+├── core.py                            # SchemaTransformer (30 handler methods covering 36 surface ops)
+│                                      #   plus run_load / run_apply / run_export pipeline helpers
+├── smile_listeners.py                  # ANTLR listeners (Specific + Generalized)
 ├── parser_factory.py                  # Grammar auto-detection by file extension
-├── config.py                          # Migration registry (40 configs)
+├── operation_params.py                # Per-op param dataclasses (NestParams, UnnestParams, ...)
+├── schema_inspector.py                # Reverse-engineer any source DDL → Meta V1 (web UI only)
+├── schema_diff.py                     # Meta V1 vs Meta V2 → OpRecord list (used by script_renderer)
+├── script_renderer.py                 # OpRecord list → Specific or Generalized SMILE script
+├── config.py                          # Migration registry (41 configs: 32 Northwind + 8 Person + 1 grammar-completeness)
 ├── validate_meta.py                   # Layer 1: Meta V2 vs expected schema
 ├── validate_export.py                 # Layer 2: Export round-trip verification
 ├── main.py                            # CLI entry point
-└── web_server.py                      # Web interface (http.server)
+└── web_server.py                      # Web interface (http.server, port 5601)
 ```
 
 ## Architecture
@@ -144,13 +159,13 @@ SMEL/
 ### Five-Phase Pipeline
 
 ```
- Source Schema        SMEL Script (.smel/.smel_gen)         Target Schema
+ Source Schema        SMILE Script (.smile/.smile_gen)         Target Schema
  (SQL/JSON/                      │                          (SQL/JSON/
   Cypher/CQL)                    │                           Cypher/CQL)
       │                          ▼                                ▲
       │                   ┌──────────────┐                        │
       │                   │   Phase 2    │                        │
-      │                   │ SMEL Parsing │                        │
+      │                   │ SMILE Parsing │                        │
       │                   │  (ANTLR 4)   │                        │
       │                   └──────┬───────┘                        │
       ▼                     Operations                            │
@@ -172,17 +187,19 @@ SMEL/
 
 | Phase | Component | Input → Output |
 |-------|-----------|---------------|
-| 1. Reverse Engineering | `ADAPTER_REGISTRY[source_type]` | Native DDL → Meta V1 (M-Model+) |
-| 2. SMEL Parsing | `parser_factory.parse_smel_auto()` | `.smel`/`.smel_gen` → `Operation` list |
-| 3. Transformation | `SchemaTransformer` (30 handlers) | Meta V1 + Operations → Meta V2 |
-| 4. Forward Engineering | `ADAPTER_REGISTRY[target_type]` | Meta V2 → Target DDL |
+| 1. Reverse Engineering | `ADAPTER_REGISTRY[source_type]` (driven by `core.run_load`) | Native DDL → Meta V1 (M-Model+) |
+| 2. SMILE Parsing | `parser_factory.parse_smile_auto()` | `.smile` / `.smile_gen` → `Operation` list |
+| 3. Transformation | `SchemaTransformer` (30 handlers, called via `core.run_apply`) | Meta V1 + Operations → Meta V2 |
+| 4. Forward Engineering | `ADAPTER_REGISTRY[target_type]` (driven by `core.run_export`) | Meta V2 → Target DDL |
 | 5. Validation | `validate_meta` + `validate_export` | Two-layer correctness check |
+
+`core.run_migration()` is a thin orchestrator on top of the three pipeline helpers (`run_load`, `run_apply`, `run_export`) so each phase can also be invoked independently from the web UI's User Transformation flow.
 
 ### Two-Layer Validation
 
 | Layer | File | What it proves | How |
 |-------|------|---------------|-----|
-| **Layer 1** | `validate_meta.py` | SMEL script correctness | Meta V2 vs expected target schema |
+| **Layer 1** | `validate_meta.py` | SMILE script correctness | Meta V2 vs expected target schema |
 | **Layer 2** | `validate_export.py` | Adapter FE correctness | Exported target → RE round-trip vs expected |
 
 For **cross-model** migrations, the 4 original Northwind files form a closed validation loop — each file is both source (outgoing) and expected target (incoming). No manually written ground truth needed.
@@ -206,7 +223,9 @@ Database
               └── Edge (graph relationship)
 ```
 
-## SMEL Operations (30 total)
+## SMILE Operations (36 surface ops)
+
+The grammar exposes 36 named operations grouped as **9 structural + 6 property + 4 entity + 11 key/constraint + 2 type/cardinality + 4 embedded/label**. Many of them collapse at the IR level — e.g. `ADD_PRIMARY_KEY` / `ADD_UNIQUE_KEY` / `ADD_PARTITION_KEY` / `ADD_CLUSTERING_KEY` all dispatch through a single `_handle_add_key` — so `core.py` ships 30 unique handler methods. The single source of truth for the surface op set is `grammar/smile_operations.json` (also consumed by the web-UI Ace autocomplete).
 
 ### Structural Operations (9)
 
@@ -242,17 +261,16 @@ Database
 | `RENAME_ENTITY` | Rename entity (updates all references) |
 | `COPY_ENTITY` | Deep-copy entity structure |
 
-### Key & Constraint Operations (7)
+### Key & Constraint Operations (11)
 
 | Operation | Description |
 |-----------|-------------|
-| `ADD_PRIMARY_KEY` / `ADD_UNIQUE_KEY` / `ADD_FOREIGN_KEY` | Add key constraint |
-| `DELETE_PRIMARY_KEY` / `DELETE_UNIQUE_KEY` / `DELETE_FOREIGN_KEY` | Remove key constraint |
-| `ADD_PARTITION_KEY` / `ADD_CLUSTERING_KEY` | Add Cassandra-specific key |
-| `DELETE_PARTITION_KEY` / `DELETE_CLUSTERING_KEY` | Remove Cassandra-specific key |
-| `ADD_CONSTRAINT` | Add FK reference with cardinality |
-| `DELETE_CONSTRAINT` | Remove FK reference by field |
-| `CAST_CONSTRAINT` | Change constraint type (e.g., UNIQUE → PARTITION) |
+| `ADD_PRIMARY_KEY` / `DELETE_PRIMARY_KEY` | Add or remove a primary key |
+| `ADD_UNIQUE_KEY` / `DELETE_UNIQUE_KEY` | Add or remove a unique constraint |
+| `ADD_FOREIGN_KEY` / `DELETE_FOREIGN_KEY` | Add (with `REFERENCES` + cardinality) or remove an FK |
+| `ADD_PARTITION_KEY` / `DELETE_PARTITION_KEY` | Cassandra-specific partition key |
+| `ADD_CLUSTERING_KEY` / `DELETE_CLUSTERING_KEY` | Cassandra-specific clustering key |
+| `CAST_CONSTRAINT` | Change constraint type (e.g., `UNIQUE` → `PARTITION`) |
 
 ### Type & Cardinality Operations (2)
 
@@ -274,25 +292,25 @@ Two functionally equivalent grammars — same abstract syntax, different concret
 
 | Grammar | Extension | Keywords | Example |
 |---------|-----------|----------|---------|
-| **Specific** | `.smel` | 38 dedicated | `ADD_PROPERTY name TO person WITH TYPE String` |
-| **Generalized** | `.smel_gen` | 27 composable | `ADD PROPERTY name TO person WITH TYPE String` |
+| **Specific** | `.smile` | 38 dedicated | `ADD_PROPERTY name TO person WITH TYPE String` |
+| **Generalized** | `.smile_gen` | 27 composable | `ADD PROPERTY name TO person WITH TYPE String` |
 
 The Generalized grammar reduces keyword count by ~29% through verb+object composition (6 verbs × 5 object types + modifiers). Structural operations (`NEST`, `UNNEST`, `FLATTEN`, `UNFLATTEN`, `WIND`, `UNWIND`, `MERGE`, `SPLIT`, `TRANSFORM`) are identical in both variants.
 
-## SMEL Script Examples
+## SMILE Script Examples
 
 ### Cross-Model: Relational → Document (R2D)
 
-```smel
+```smile
 MIGRATION northwind_pg_to_mongo:1.0
 FROM RELATIONAL TO DOCUMENT
 USING adapted_northwind_schema VERSION 1
 
 -- Embed tables as nested objects (deepest first)
 NEST categories:category_name, description IN products.category
-  WHERE products.category_id = categories.category_id WITH DELETION
+  WHERE products.category_id = categories.category_id
 NEST suppliers:company_name, contact_name, ... IN products.supplier
-  WHERE products.supplier_id = suppliers.supplier_id WITH DELETION
+  WHERE products.supplier_id = suppliers.supplier_id
 
 -- Group flat shipping fields into nested object
 UNFLATTEN orders:ship_address, ship_city, ship_region, ship_postal_code, ship_country
@@ -304,13 +322,13 @@ RENAME_PROPERTY order_id TO _id IN orders
 
 ### Same-Model Evolution: Relational V1 → V2 (R2R)
 
-```smel
+```smile
 EVOLUTION northwind_r2r:1.0
 FROM RELATIONAL TO RELATIONAL
 USING adapted_northwind_schema VERSION 1 TO 2
 
 -- Denormalize: merge categories into products
-DELETE_CONSTRAINT products.category_id
+DELETE_FOREIGN_KEY products.category_id
 DELETE_PROPERTY products.category_id
 DELETE_PRIMARY_KEY category_id FROM categories
 DELETE_PROPERTY categories.category_id
@@ -332,10 +350,10 @@ After modifying `.g4` grammar files:
 
 ```bash
 cd grammar/specific
-java -jar ..\antlr-4.13.2-complete.jar -Dlanguage=Python3 -visitor SMEL_Specific.g4
+java -jar ..\antlr-4.13.2-complete.jar -Dlanguage=Python3 -visitor SMILE_Specific.g4
 
 cd grammar/generalized
-java -jar ..\antlr-4.13.2-complete.jar -Dlanguage=Python3 -visitor SMEL_Generalized.g4
+java -jar ..\antlr-4.13.2-complete.jar -Dlanguage=Python3 -visitor SMILE_Generalized.g4
 ```
 
 ## License

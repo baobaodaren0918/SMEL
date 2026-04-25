@@ -1,0 +1,39 @@
+-- Grammar completeness test: exercise the 9 SMILE operations that no other
+-- test in tests/specific or tests/generalized invokes.
+--
+-- Goal: prove every operation declared in the grammar reaches its handler
+--       and returns success (handler doesn't raise / doesn't return False).
+-- Each op below is annotated with [#N → opname] for cross-reference.
+
+EVOLUTION grammar_completeness:1.0
+FROM RELATIONAL TO RELATIONAL
+USING grammar_completeness_schema VERSION 1.0 TO 2.0
+
+-- [1 → ADD_UNIQUE_KEY] customers.email becomes a unique key
+ADD_UNIQUE_KEY customers.email
+
+-- [2 → DELETE_UNIQUE_KEY] undo the previous unique
+DELETE_UNIQUE_KEY email FROM customers
+
+-- [3 → COPY_PROPERTY] duplicate customers.email onto orders (orders gains an "email" column)
+COPY_PROPERTY email FROM customers TO orders
+
+-- [4 → MOVE_PROPERTY] take products.sku and re-home it on customers
+MOVE_PROPERTY sku FROM products TO customers
+
+-- [5 → COPY_ENTITY] duplicate customers as customers_archive (full schema copy)
+COPY_ENTITY customers AS customers_archive
+
+-- [6 → RECARD] change orders.customer_id reference from default to ZERO_TO_MANY
+RECARD orders.customer_id TO ZERO_TO_MANY
+
+-- [7 → CAST_ENTITY] flip products from RELATIONAL to DOCUMENT — kind_locked = True
+CAST_ENTITY products TO DOCUMENT
+
+-- [8 → DELETE_EMBEDDED] requires an embedded to exist first → ADD then DELETE
+ADD_EMBEDDED address TO customers
+DELETE_EMBEDDED customers.address
+
+-- [9 → DELETE_LABEL] requires a label to exist first → ADD then DELETE
+ADD_LABEL Premium TO customers
+DELETE_LABEL Premium FROM customers

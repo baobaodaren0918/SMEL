@@ -1,0 +1,142 @@
+-- SMILE Northwind: Cassandra -> PostgreSQL (Cross-model Migration)
+-- Columnar (query-driven partition/clustering keys) -> Relational (3NF with FKs)
+-- Direction: northwind_cassandra.cql -> northwind_postgresql.sql
+--
+-- Pipeline: Source Cassandra -> Reverse Engineering -> Meta V1 (Columnar)
+--           -> SMILE Operations (this script) -> Meta V2 (Relational)
+--           -> Forward Engineering -> Target PostgreSQL
+--
+-- Operation Semantics:
+--   DELETE_PARTITION_KEY:   Remove Cassandra partition key before adding relational PK
+--   DELETE_CLUSTERING_KEY:  Remove Cassandra clustering key
+--   ADD_PRIMARY_KEY:        Add relational primary key (simple or composite)
+--   ADD_FOREIGN_KEY:         Add FK references (relational referential integrity)
+--   CAST_CONSTRAINT:        Cast partition key to relational primary key
+
+MIGRATION northwind_cass_to_pg:1.0
+FROM COLUMNAR TO RELATIONAL
+USING adapted_northwind_schema VERSION 1
+
+-- ============================================
+-- Source: Cassandra Wide-column Tables (8 tables)
+-- ============================================
+-- categories     (category_id [PARTITION], category_name, description)
+-- suppliers      (supplier_id [PARTITION], company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country)
+-- shippers       (shipper_id [PARTITION], company_name, phone)
+-- employees      (employee_id [PARTITION], last_name, first_name, title, birth_date, hire_date, phone, notes, street, city, region, postal_code, country, reports_to)
+-- customers      (customer_id [PARTITION], company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country)
+-- products       (category_id [PARTITION], supplier_id [PARTITION], product_id [CLUSTERING], product_name, unit_price, units_in_stock, discontinued, quantity_per_unit, supplier_id)
+-- orders         (customer_id [PARTITION], order_date [CLUSTERING], order_id [CLUSTERING], required_date, shipped_date, freight, ship_name, ship_address, ship_city, ship_region, ship_postal_code, ship_country, employee_id, shipper_id)
+-- order_details  (order_id [PARTITION], product_id [PARTITION], unit_price, quantity, discount)
+
+-- ============================================
+-- Target: PostgreSQL 3NF Tables (8 tables)
+-- ============================================
+-- categories     (category_id [PK])
+-- suppliers      (supplier_id [PK])
+-- shippers       (shipper_id [PK])
+-- employees      (employee_id [PK], reports_to [FK->employees])
+-- customers      (customer_id [PK])
+-- products       (product_id [PK], supplier_id [FK->suppliers], category_id [FK->categories])
+-- orders         (order_id [PK], customer_id [FK->customers], employee_id [FK->employees], shipper_id [FK->shippers])
+-- order_details  (order_id [PK, FK->orders], product_id [PK, FK->products])
+
+-- ============================================
+-- Step 1: Restructure products keys (partition + clustering -> PK)
+-- ============================================
+-- Cassandra: category_id [PARTITION], supplier_id [PARTITION], product_id [CLUSTERING]
+-- Relational: product_id [PK]
+DELETE PARTITION KEY (category_id, supplier_id) FROM products
+DELETE CLUSTERING KEY product_id FROM products
+ADD KEY product_id TO products
+-- Result:
+-- products (product_id [PK], product_name, unit_price, units_in_stock, discontinued, quantity_per_unit, supplier_id, category_id)
+
+-- ============================================
+-- Step 2: Add FK constraints to products
+-- ============================================
+-- Restore referential integrity: supplier_id -> suppliers, category_id -> categories
+ADD FOREIGN KEY products.supplier_id REFERENCES suppliers(supplier_id) WITH CARDINALITY ONE_TO_MANY
+ADD FOREIGN KEY products.category_id REFERENCES categories(category_id) WITH CARDINALITY ONE_TO_MANY
+-- Result:
+-- products (product_id [PK], ..., supplier_id [FK->suppliers], category_id [FK->categories])
+
+-- ============================================
+-- Step 3: Restructure orders keys (partition + clustering -> PK)
+-- ============================================
+-- Cassandra: customer_id [PARTITION], order_date [CLUSTERING], order_id [CLUSTERING]
+-- Relational: order_id [PK]
+DELETE PARTITION KEY customer_id FROM orders
+DELETE CLUSTERING KEY order_date FROM orders
+DELETE CLUSTERING KEY order_id FROM orders
+ADD KEY order_id TO orders
+-- Result:
+-- orders (order_id [PK], order_date, required_date, shipped_date, freight, ship_name, ship_address, ship_city, ship_region, ship_postal_code, ship_country, customer_id, employee_id, shipper_id)
+
+-- ============================================
+-- Step 4: Add FK constraints to orders
+-- ============================================
+-- Restore referential integrity: customer_id, employee_id, shipper_id
+ADD FOREIGN KEY orders.customer_id REFERENCES customers(customer_id) WITH CARDINALITY ONE_TO_MANY
+ADD FOREIGN KEY orders.employee_id REFERENCES employees(employee_id) WITH CARDINALITY ONE_TO_MANY
+ADD FOREIGN KEY orders.shipper_id REFERENCES shippers(shipper_id) WITH CARDINALITY ONE_TO_MANY
+-- Result:
+-- orders (order_id [PK], ..., customer_id [FK->customers], employee_id [FK->employees], shipper_id [FK->shippers])
+
+-- ============================================
+-- Step 5: Restructure order_details keys (partition + clustering -> composite PK)
+-- ============================================
+-- Cassandra: order_id [PARTITION], product_id [PARTITION]
+-- Relational: composite PK (order_id, product_id)
+DELETE PARTITION KEY (order_id, product_id) FROM order_details
+ADD KEY (order_id, product_id) TO order_details
+-- Result:
+-- order_details (order_id [PK], product_id [PK], unit_price, quantity, discount)
+
+-- ============================================
+-- Step 6: Add FK constraints to order_details
+-- ============================================
+-- Restore referential integrity: order_id -> orders, product_id -> products
+ADD FOREIGN KEY order_details.order_id REFERENCES orders(order_id) WITH CARDINALITY ONE_TO_MANY
+ADD FOREIGN KEY order_details.product_id REFERENCES products(product_id) WITH CARDINALITY ONE_TO_MANY
+-- Result:
+-- order_details (order_id [PK, FK->orders], product_id [PK, FK->products], unit_price, quantity, discount)
+
+-- ============================================
+-- Step 7: Add self-reference FK to employees
+-- ============================================
+-- employees.reports_to references employees(employee_id)
+-- ZERO_TO_MANY: an employee may or may not have a manager
+ADD FOREIGN KEY employees.reports_to REFERENCES employees(employee_id) WITH CARDINALITY ZERO_TO_MANY
+-- Result:
+-- employees (employee_id [PK], ..., reports_to [FK->employees])
+
+-- ============================================
+-- Step 8: CAST Partition Keys to relational Primary Keys
+-- ============================================
+-- Simple tables: PARTITION KEY -> PRIMARY KEY
+CAST CONSTRAINT categories.category_id TO PRIMARY KEY
+CAST CONSTRAINT suppliers.supplier_id TO PRIMARY KEY
+CAST CONSTRAINT shippers.shipper_id TO PRIMARY KEY
+CAST CONSTRAINT employees.employee_id TO PRIMARY KEY
+CAST CONSTRAINT customers.customer_id TO PRIMARY KEY
+
+-- ============================================
+-- Final Target (8 relational tables):
+-- categories:     { category_id [PK], category_name, description }
+-- suppliers:      { supplier_id [PK], company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country }
+-- shippers:       { shipper_id [PK], company_name, phone }
+-- employees:      { employee_id [PK], last_name, first_name, title, birth_date, hire_date, phone, notes, street, city, region, postal_code, country, reports_to [FK->employees] }
+-- customers:      { customer_id [PK], company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country }
+-- products:       { product_id [PK], product_name, unit_price, units_in_stock, discontinued, quantity_per_unit, supplier_id [FK->suppliers], category_id [FK->categories] }
+-- orders:         { order_id [PK], order_date, required_date, shipped_date, freight, ship_name, ship_address, ship_city, ship_region, ship_postal_code, ship_country, customer_id [FK->customers], employee_id [FK->employees], shipper_id [FK->shippers] }
+-- order_details:  { order_id [PK, FK->orders], product_id [PK, FK->products], unit_price, quantity, discount }
+-- ============================================
+
+-- ============================================
+-- Operation Summary (21 steps):
+--   DELETE_PARTITION_KEY:  3    DELETE_CLUSTERING_KEY: 3
+--   ADD_PRIMARY_KEY:       3    ADD_FOREIGN_KEY:        8
+--   CAST CONSTRAINT:    5
+--   EntityKind auto-convert: WIDE_COLUMN_TABLE -> TABLE (all 8 tables)
+-- ============================================

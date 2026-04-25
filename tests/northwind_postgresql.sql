@@ -1,6 +1,6 @@
 -- PostgreSQL Schema: Northwind (Relational Model)
 -- 8 tables, 69 fields, 8 FK relationships (including 1 self-reference)
--- Adapted from the classic Northwind database for SMEL migration testing
+-- Adapted from the classic Northwind database for SMILE migration testing
 -- Tests: multi-table FK chains, self-reference, composite PK, various data types
 
 -- Table 1: categories (product categories)
@@ -33,7 +33,7 @@ CREATE TABLE shippers (
 );
 
 -- Table 4: employees (with self-reference reports_to)
--- SMEL tests: TRANSFORM self-reference, SPLIT employee fields
+-- SMILE tests: TRANSFORM self-reference, SPLIT employee fields
 CREATE TABLE employees (
     employee_id VARCHAR(255) PRIMARY KEY,
     last_name VARCHAR(255),
@@ -67,7 +67,7 @@ CREATE TABLE customers (
 );
 
 -- Table 6: products (FK to suppliers and categories)
--- SMEL tests: NEST product+supplier, NEST product+category
+-- SMILE tests: NEST product+supplier, NEST product+category
 CREATE TABLE products (
     product_id VARCHAR(255) PRIMARY KEY,
     product_name VARCHAR(255),
@@ -80,7 +80,7 @@ CREATE TABLE products (
 );
 
 -- Table 7: orders (FK to customers, employees, shippers)
--- SMEL tests: NEST order+customer, NEST order+employee, NEST order+shipper
+-- SMILE tests: NEST order+customer, NEST order+employee, NEST order+shipper
 CREATE TABLE orders (
     order_id VARCHAR(255) PRIMARY KEY,
     order_date DATE,
@@ -100,7 +100,7 @@ CREATE TABLE orders (
 
 -- Table 8: order_details (composite PK, FK to orders and products)
 -- Each row links an order to a product with quantity and pricing
--- SMEL tests: NEST order_details into orders, composite PK handling
+-- SMILE tests: NEST order_details into orders, composite PK handling
 CREATE TABLE order_details (
     order_id VARCHAR(255) NOT NULL REFERENCES orders(order_id),
     product_id VARCHAR(255) NOT NULL REFERENCES products(product_id),

@@ -1,0 +1,157 @@
+-- SMILE Mini-Example: PostgreSQL -> MongoDB (Reverse Migration)
+-- Normalized Tables (3NF) -> Person Document (multi-level nested objects + arrays)
+-- Direction: Normalized (3NF) -> Denormalized (Embedded)
+--
+-- Operation Semantics:
+--   NEST:      Embed separate table into parent as nested object (reverse of UNNEST)
+--   UNFLATTEN: Combine flat fields into nested object (reverse of FLATTEN)
+--   WIND:      Collect multiple rows into array (reverse of UNWIND)
+--   MERGE:     Combine two entities into one (reverse of SPLIT)
+
+MIGRATION person_pg_to_mongo:1.0
+FROM RELATIONAL TO DOCUMENT
+USING person_schema VERSION 1
+
+-- ============================================
+-- Source: PostgreSQL 3NF Tables (7 tables)
+-- ============================================
+-- person (person_id, vorname, nachname, age)
+-- address (address_id, person_id, street, city)
+-- employment (employment_id, person_id, position)
+-- company (company_id, employment_id, name)
+-- company_address (company_address_id, company_id, street, city)
+-- person_tag (person_tag_id, person_id, tag_value)
+-- person_knows (person_id, knows_person_id)
+
+-- ============================================
+-- Target: MongoDB Person Document
+-- ============================================
+-- {
+--   _id: "p001",
+--   name: { vorname: "Lu", nachname: "Li" },
+--   age: "28",
+--   address: { street: "Hauptstrasse 10", city: "Berlin" },
+--   employment: {
+--     position: "Software Engineer",
+--     company: {
+--       name: "Tech Corp",
+--       address: { street: "Business Str 5", city: "Munich" }
+--     }
+--   },
+--   tags: ["student", "developer"],
+--   knows: ["p002", "p003"]
+-- }
+
+-- ============================================
+-- Step 1: Nest company_address into company (Level 3 -> 2)
+-- ============================================
+-- Reverse of: UNNEST company.address:street,city AS company_address
+NEST company_address:street,city IN company.address WHERE company_address.company_id = company.company_id
+DELETE ENTITY company_address
+-- Result:
+-- company: { company_id, employment_id, name, address{street, city} }
+
+-- ============================================
+-- Step 2: Nest company into employment (Level 2 -> 1)
+-- ============================================
+-- Reverse of: UNNEST employment.company:name, address{street, city} AS company
+NEST company:name, address{street, city} IN employment.company WHERE company.employment_id = employment.employment_id
+-- Result:
+-- employment: { employment_id, person_id, position, company{name, address{street,city}} }
+
+-- ============================================
+-- Step 3: Nest employment into person (Level 1 -> 0)
+-- ============================================
+-- Reverse of: UNNEST person.employment:position, company{...} AS employment
+NEST employment:position, company{name, address{street, city}} IN person.employment WHERE employment.person_id = person.person_id
+-- Result:
+-- person: { person_id, vorname, nachname, age, employment{position, company{...}} }
+
+-- ============================================
+-- Step 4: Nest address into person (Level 1 -> 0)
+-- ============================================
+-- Reverse of: UNNEST person.address:street,city AS address
+NEST address:street,city IN person.address WHERE address.person_id = person.person_id
+-- Result:
+-- person: { person_id, vorname, nachname, age, address{street,city}, employment{...} }
+
+-- ============================================
+-- Step 5: Collect person_tag rows back into person.tags array (1:N -> Array)
+-- ============================================
+-- Reverse of (forward Step 5):
+--   SPLIT person INTO person(person_id, name, age, knows), person_tag(person_id, tags)
+--   UNWIND person_tag.tags
+--   RENAME PROPERTY tags TO tag_value IN person_tag
+--   ADD KEY person_tag.person_tag_id AS String
+--   ADD FOREIGN KEY person_tag.person_id REFERENCES person(person_id) WITH CARDINALITY ONE_TO_MANY
+-- Reverse (reordered: data transformation first, then constraint cleanup):
+RENAME PROPERTY tag_value TO tags IN person_tag
+WIND person_tag.tags
+DELETE FOREIGN KEY person_tag.person_id
+DELETE PRIMARY KEY person_tag_id FROM person_tag
+DELETE PROPERTY person_tag.person_tag_id
+MERGE person, person_tag INTO person
+-- Result:
+-- person: { person_id, vorname, nachname, age, address{...}, employment{...}, tags[] }
+
+-- ============================================
+-- Step 6: Collect person_knows rows back into person.knows array (M:N -> Array)
+-- ============================================
+-- Reverse of (forward Step 6):
+--   SPLIT person INTO person(person_id, name, age), person_knows(person_id, knows)
+--   UNWIND person_knows.knows
+--   RENAME PROPERTY knows TO knows_person_id IN person_knows
+--   ADD FOREIGN KEY person_knows.person_id REFERENCES person(person_id) WITH CARDINALITY ONE_TO_MANY
+--   ADD FOREIGN KEY person_knows.knows_person_id REFERENCES person(person_id) WITH CARDINALITY ONE_TO_MANY
+--   ADD KEY (person_id, knows_person_id) TO person_knows
+-- Reverse (reordered: cleanup constraints that reference old names first, then transform):
+DELETE PRIMARY KEY (person_id, knows_person_id) FROM person_knows
+DELETE FOREIGN KEY person_knows.knows_person_id
+DELETE FOREIGN KEY person_knows.person_id
+RENAME PROPERTY knows_person_id TO knows IN person_knows
+WIND person_knows.knows
+MERGE person, person_knows INTO person
+-- Result:
+-- person: { person_id, vorname, nachname, age, address{...}, employment{...}, tags[], knows[] }
+
+-- ============================================
+-- Step 7: Combine vorname, nachname into name object
+-- ============================================
+-- Reverse of: FLATTEN person.name
+--             RENAME name_vorname TO vorname
+--             RENAME name_nachname TO nachname
+UNFLATTEN person:vorname, nachname AS name
+-- Result:
+-- person: { person_id, name{vorname, nachname}, age, address{...}, employment{...}, tags[], knows[] }
+
+-- ============================================
+-- Step 8: Finalize person document
+-- ============================================
+-- Reverse of: RENAME _id TO person_id
+--             CAST age TO Integer
+RENAME PROPERTY person_id TO _id IN person
+CAST PROPERTY person.age TO String
+-- Final Result:
+-- person: {
+--   _id,
+--   name: { vorname, nachname },
+--   age: "28",
+--   address: { street, city },
+--   employment: {
+--     position,
+--     company: {
+--       name,
+--       address: { street, city }
+--     }
+--   },
+--   tags: [],
+--   knows: []
+-- }
+
+-- ============================================
+-- Operation Mapping (Forward <-> Reverse)
+-- ============================================
+-- UNNEST  <-> NEST
+-- FLATTEN <-> UNFLATTEN
+-- UNWIND  <-> WIND
+-- SPLIT   <-> MERGE

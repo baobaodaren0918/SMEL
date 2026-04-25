@@ -32,7 +32,7 @@ class PostgreSQLAdapter:
     Adapter to parse PostgreSQL DDL and create Unified Meta Schema.
 
     This class acts as a translator between PostgreSQL's DDL format
-    and the internal Unified Meta Schema used by SMEL.
+    and the internal Unified Meta Schema used by SMILE.
 
     Example:
         adapter = PostgreSQLAdapter()
@@ -402,7 +402,7 @@ class PostgreSQLAdapter:
                 if attr:
                     # Check if FK column has a standalone UNIQUE constraint
                     for c in entity.constraints:
-                        if (isinstance(c, UniqueConstraint) and not c.is_primary_key
+                        if (c.kind == "unique" and not c.is_primary_key
                                 and len(c.unique_properties) == 1
                                 and c.unique_properties[0].property_id == attr.meta_id):
                             is_unique = True
@@ -427,7 +427,7 @@ class PostgreSQLAdapter:
                 )
                 entity.add_relationship(reference)
 
-                # Also create ForeignKeyConstraint for consistency with SMEL ADD_CONSTRAINT
+                # Also create ForeignKeyConstraint for consistency with SMILE ADD_FOREIGN_KEY
                 if attr:
                     target_pk = target.get_primary_key()
                     if target_pk and target_pk.unique_properties:
@@ -525,7 +525,7 @@ class PostgreSQLAdapter:
         for entity in entities:
             deps = set()
             for rel in entity.relationships:
-                if isinstance(rel, Reference):
+                if rel.kind == "reference":
                     target = rel.get_target_entity_name()
                     if target != entity.name:  # Avoid self-reference
                         deps.add(target)
@@ -576,7 +576,7 @@ class PostgreSQLAdapter:
         # Build FK lookup: column_name -> Reference relationship
         fk_refs = {}
         for rel in entity.relationships:
-            if isinstance(rel, Reference):
+            if rel.kind == "reference":
                 fk_refs[rel.ref_name] = rel
 
         # Check for composite primary key (e.g., M:N join tables)

@@ -1,8 +1,8 @@
 """
-Schema Inspector — Reverse Engineering interface for SMEL.
+Schema Inspector — Reverse Engineering interface for SMILE.
 
 Allows users to upload/paste a source schema file and get back the
-Meta Schema V1 (M-Model) as JSON, along with a summary and SMEL template.
+Meta Schema V1 (M-Model) as JSON, along with a summary and SMILE template.
 
 Usage:
     # File mode
@@ -117,8 +117,8 @@ def _build_summary(db) -> dict:
     }
 
 
-def _build_smel_template(db_type: str) -> str:
-    """Generate a SMEL script template header."""
+def _build_smile_template(db_type: str) -> str:
+    """Generate a SMILE script template header."""
     db_label = db_type.upper()
     lines = [
         f"MIGRATION my_migration:1.0",
@@ -148,7 +148,7 @@ def inspect_schema(source: str, db_type: str, input_mode: str = "file",
         db_name: Name for the database in Meta Schema
 
     Returns:
-        dict with keys: db_type, meta_schema, summary, smel_template
+        dict with keys: db_type, meta_schema, summary, smile_template
     """
     # Resolve db_type
     resolved_type = _resolve_db_type(db_type)
@@ -185,7 +185,7 @@ def inspect_schema(source: str, db_type: str, input_mode: str = "file",
         "db_type_display": DB_TYPE_DISPLAY_NAME.get(resolved_type, resolved_type),
         "meta_schema": db.to_dict(),
         "summary": _build_summary(db),
-        "smel_template": _build_smel_template(resolved_type),
+        "smile_template": _build_smile_template(resolved_type),
     }
 
 
@@ -250,8 +250,8 @@ def main():
             print(f"  {e['name']} ({e['entity_kind']}): "
                   f"{e['properties']} attrs, {e['keys']} keys, "
                   f"{e['constraints']} constraints, {e['relationships']} rels")
-        print(f"\n--- SMEL Template ---")
-        print(result["smel_template"])
+        print(f"\n--- SMILE Template ---")
+        print(result["smile_template"])
     else:
         # Full JSON output
         print(json.dumps(result, indent=2, ensure_ascii=False))

@@ -30,7 +30,7 @@ class MongoDBAdapter:
     Adapter to parse MongoDB JSON Schema and create Unified Meta Schema.
 
     This class acts as a translator between MongoDB's JSON Schema format
-    and the internal Unified Meta Schema used by SMEL.
+    and the internal Unified Meta Schema used by SMILE.
 
     Example:
         adapter = MongoDBAdapter()
@@ -273,18 +273,18 @@ class MongoDBAdapter:
         embedded_entities = set()
         for entity in database.entity_types.values():
             for rel in entity.relationships:
-                if isinstance(rel, Embedded):
+                if rel.kind == "embedded":
                     embedded_entities.add(rel.get_target_entity_name())
 
         # Root = entity that has Embedded relationships but is not embedded by anyone
         for name, entity in database.entity_types.items():
-            has_embedded = any(isinstance(r, Embedded) for r in entity.relationships)
+            has_embedded = any(r.kind == "embedded" for r in entity.relationships)
             if has_embedded and name not in embedded_entities:
                 return name
 
         # Fallback: first entity with embedded relationships
         for name, entity in database.entity_types.items():
-            if any(isinstance(r, Embedded) for r in entity.relationships):
+            if any(r.kind == "embedded" for r in entity.relationships):
                 return name
 
         # Last fallback: first entity (or None if empty)
@@ -321,7 +321,7 @@ class MongoDBAdapter:
 
         # Process embedded relationships
         for rel in entity.relationships:
-            if isinstance(rel, Embedded):
+            if rel.kind == "embedded":
                 embedded_entity = database.get_entity_type(rel.get_target_entity_name())
                 if not embedded_entity:
                     continue

@@ -1,10 +1,10 @@
 """
 Parser Factory - Auto-select parser based on file extension
 
-This module provides a unified entry point for parsing SMEL files.
+This module provides a unified entry point for parsing SMILE files.
 It automatically selects the appropriate parser based on file extension:
-- .smel     -> SMEL_Specific parser
-- .smel_gen -> SMEL_Generalized parser
+- .smile     -> SMILE_Specific parser
+- .smile_gen -> SMILE_Generalized parser
 """
 import sys
 from pathlib import Path
@@ -16,16 +16,16 @@ from antlr4 import FileStream, CommonTokenStream, ParseTreeWalker
 from antlr4.error.ErrorListener import ErrorListener
 
 # Import both grammars
-from grammar.specific.SMEL_SpecificLexer import SMEL_SpecificLexer
-from grammar.specific.SMEL_SpecificParser import SMEL_SpecificParser
-from grammar.specific.SMEL_SpecificListener import SMEL_SpecificListener
+from grammar.specific.SMILE_SpecificLexer import SMILE_SpecificLexer
+from grammar.specific.SMILE_SpecificParser import SMILE_SpecificParser
+from grammar.specific.SMILE_SpecificListener import SMILE_SpecificListener
 
-from grammar.generalized.SMEL_GeneralizedLexer import SMEL_GeneralizedLexer
-from grammar.generalized.SMEL_GeneralizedParser import SMEL_GeneralizedParser
-from grammar.generalized.SMEL_GeneralizedListener import SMEL_GeneralizedListener
+from grammar.generalized.SMILE_GeneralizedLexer import SMILE_GeneralizedLexer
+from grammar.generalized.SMILE_GeneralizedParser import SMILE_GeneralizedParser
+from grammar.generalized.SMILE_GeneralizedListener import SMILE_GeneralizedListener
 
 # Import custom listeners
-from smel_listeners import SMELSpecificListener, SMELGeneralizedListener
+from smile_listeners import SMILESpecificListener, SMILEGeneralizedListener
 
 
 class SyntaxErrorListener(ErrorListener):
@@ -45,7 +45,7 @@ def detect_grammar_type(file_path: str) -> str:
     Detect which grammar to use based on file extension.
 
     Args:
-        file_path: Path to SMEL file
+        file_path: Path to SMILE file
 
     Returns:
         Grammar type: 'specific' or 'generalized'
@@ -53,13 +53,13 @@ def detect_grammar_type(file_path: str) -> str:
     path = Path(file_path)
     suffix = path.suffix.lower()
 
-    if suffix == '.smel_gen':
+    if suffix == '.smile_gen':
         return 'generalized'
-    elif suffix == '.smel':
-        # .smel files use the specific grammar
+    elif suffix == '.smile':
+        # .smile files use the specific grammar
         return 'specific'
     else:
-        raise ValueError(f"Unknown file extension: {suffix}. Expected .smel or .smel_gen")
+        raise ValueError(f"Unknown file extension: {suffix}. Expected .smile or .smile_gen")
 
 
 def get_parser_components(grammar_type: str):
@@ -73,19 +73,19 @@ def get_parser_components(grammar_type: str):
         Tuple of (Lexer class, Parser class, Listener base class)
     """
     if grammar_type == 'specific':
-        return SMEL_SpecificLexer, SMEL_SpecificParser, SMEL_SpecificListener
+        return SMILE_SpecificLexer, SMILE_SpecificParser, SMILE_SpecificListener
     elif grammar_type == 'generalized':
-        return SMEL_GeneralizedLexer, SMEL_GeneralizedParser, SMEL_GeneralizedListener
+        return SMILE_GeneralizedLexer, SMILE_GeneralizedParser, SMILE_GeneralizedListener
     else:
         raise ValueError(f"Unknown grammar type: {grammar_type}. Expected 'specific' or 'generalized'")
 
 
-def parse_smel_file(file_path: str, listener_class):
+def parse_smile_file(file_path: str, listener_class):
     """
-    Parse a SMEL file using the appropriate grammar.
+    Parse a SMILE file using the appropriate grammar.
 
     Args:
-        file_path: Path to SMEL file
+        file_path: Path to SMILE file
         listener_class: Custom listener class (must inherit from appropriate base)
 
     Returns:
@@ -138,7 +138,7 @@ def get_grammar_info(file_path: str) -> dict:
     Get information about which grammar will be used for a file.
 
     Args:
-        file_path: Path to SMEL file
+        file_path: Path to SMILE file
 
     Returns:
         Dict with grammar information
@@ -155,17 +155,17 @@ def get_grammar_info(file_path: str) -> dict:
     }
 
 
-def parse_smel_auto(file_path: str):
+def parse_smile_auto(file_path: str):
     """
-    Automatically parse a SMEL file using the appropriate grammar.
+    Automatically parse a SMILE file using the appropriate grammar.
 
-    This is the main entry point for parsing SMEL files. It:
+    This is the main entry point for parsing SMILE files. It:
     1. Detects the grammar type from file extension
     2. Selects the appropriate lexer, parser, and listener
     3. Parses the file and returns operations
 
     Args:
-        file_path: Path to SMEL file (.smel or .smel_gen)
+        file_path: Path to SMILE file (.smile or .smile_gen)
 
     Returns:
         Tuple of (context, operations, errors)
@@ -181,9 +181,9 @@ def parse_smel_auto(file_path: str):
 
     # Select appropriate custom listener
     if grammar_type == 'specific':
-        ListenerClass = SMELSpecificListener
+        ListenerClass = SMILESpecificListener
     elif grammar_type == 'generalized':
-        ListenerClass = SMELGeneralizedListener
+        ListenerClass = SMILEGeneralizedListener
     else:
         raise ValueError(f"Unknown grammar type: {grammar_type}. Expected 'specific' or 'generalized'")
 

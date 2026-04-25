@@ -1,17 +1,17 @@
-"""Convert Northwind Specific SMEL scripts to Generalized versions.
+"""Convert Northwind Specific SMILE scripts to Generalized versions.
 
 Keyword mapping: Specific -> Generalized
   ADD_PROPERTY     -> ADD PROPERTY
   ADD_PRIMARY_KEY  -> ADD KEY
   ADD_PARTITION_KEY -> ADD PARTITION KEY
   ADD_CLUSTERING_KEY -> ADD CLUSTERING KEY
-  ADD_CONSTRAINT   -> ADD CONSTRAINT
+  ADD_FOREIGN_KEY  -> ADD FOREIGN KEY
   ADD_LABEL        -> ADD LABEL
   DELETE_PROPERTY  -> DELETE PROPERTY
   DELETE_PRIMARY_KEY -> DELETE PRIMARY KEY
   DELETE_PARTITION_KEY -> DELETE PARTITION KEY
   DELETE_CLUSTERING_KEY -> DELETE CLUSTERING KEY
-  DELETE_CONSTRAINT -> DELETE CONSTRAINT
+  DELETE_FOREIGN_KEY -> DELETE FOREIGN KEY
   DELETE_ENTITY    -> DELETE ENTITY
   RENAME_PROPERTY  -> RENAME PROPERTY
   RENAME_ENTITY    -> RENAME ENTITY
@@ -36,7 +36,7 @@ REPLACEMENTS = [
     ('ADD_CLUSTERING_KEY', 'ADD CLUSTERING KEY'),
     ('ADD_PRIMARY_KEY', 'ADD KEY'),
     ('ADD_PROPERTY', 'ADD PROPERTY'),
-    ('ADD_CONSTRAINT', 'ADD CONSTRAINT'),
+    ('ADD_FOREIGN_KEY', 'ADD FOREIGN KEY'),
     ('ADD_LABEL', 'ADD LABEL'),
     ('ADD_EMBEDDED', 'ADD EMBEDDED'),
     ('ADD_ENTITY', 'ADD ENTITY'),
@@ -44,7 +44,7 @@ REPLACEMENTS = [
     ('DELETE_CLUSTERING_KEY', 'DELETE CLUSTERING KEY'),
     ('DELETE_PRIMARY_KEY', 'DELETE PRIMARY KEY'),
     ('DELETE_PROPERTY', 'DELETE PROPERTY'),
-    ('DELETE_CONSTRAINT', 'DELETE CONSTRAINT'),
+    ('DELETE_FOREIGN_KEY', 'DELETE FOREIGN KEY'),
     ('DELETE_ENTITY', 'DELETE ENTITY'),
     ('RENAME_PROPERTY', 'RENAME PROPERTY'),
     ('RENAME_ENTITY', 'RENAME ENTITY'),
@@ -81,9 +81,9 @@ def convert_line(line):
     return line
 
 
-def convert_file(smel_path, gen_path):
-    """Convert a Specific SMEL file to Generalized version."""
-    with open(smel_path, 'r', encoding='utf-8') as f:
+def convert_file(smile_path, gen_path):
+    """Convert a Specific SMILE file to Generalized version."""
+    with open(smile_path, 'r', encoding='utf-8') as f:
         lines = f.readlines()
 
     converted = [convert_line(line) for line in lines]
@@ -91,22 +91,22 @@ def convert_file(smel_path, gen_path):
     with open(gen_path, 'w', encoding='utf-8') as f:
         f.writelines(converted)
 
-    basename_in = os.path.basename(smel_path)
+    basename_in = os.path.basename(smile_path)
     basename_out = os.path.basename(gen_path)
     print(f'  {basename_in} -> {basename_out}')
 
 
 def main():
     # Find all northwind specific files
-    smel_files = sorted(glob.glob(os.path.join(SPECIFIC_DIR, 'northwind_*.smel')))
-    print(f'Found {len(smel_files)} Specific files to convert:\n')
+    smile_files = sorted(glob.glob(os.path.join(SPECIFIC_DIR, 'northwind_*.smile')))
+    print(f'Found {len(smile_files)} Specific files to convert:\n')
 
-    for smel_path in smel_files:
-        basename = os.path.basename(smel_path).replace('.smel', '.smel_gen')
+    for smile_path in smile_files:
+        basename = os.path.basename(smile_path).replace('.smile', '.smile_gen')
         gen_path = os.path.join(GEN_DIR, basename)
-        convert_file(smel_path, gen_path)
+        convert_file(smile_path, gen_path)
 
-    print(f'\nDone! {len(smel_files)} Generalized files generated in {GEN_DIR}')
+    print(f'\nDone! {len(smile_files)} Generalized files generated in {GEN_DIR}')
 
 
 if __name__ == '__main__':

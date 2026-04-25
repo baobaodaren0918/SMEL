@@ -1,8 +1,8 @@
 \chapter{Implementation}\label{ch:implementation}
 
-  The previous chapter introduced the design of SMEL from four perspectives: the extension of the meta schema to M-Model+, the engine architecture with its six-layer
+  The previous chapter introduced the design of SMILE from four perspectives: the extension of the meta schema to M-Model+, the engine architecture with its six-layer
   structure and five-phase pipeline, the operation taxonomy, and the dual grammar design.  This chapter describes the concrete implementation of these concepts.\footnote{The complete source code is available at
-  \url{https://github.com/baobaodaren0918/SMEL-3.0}. During implementation, Claude Code was used in part for the ANTLR~4 grammar implementation. The workflow, core logic, data flow, and all architectural design decisions were developed independently by the author.} The structure follows the six architectural layers defined in \autoref{sec:architecture}. \autoref{sec:tech-stack} gives an overview of the technologies used.
+  \url{https://github.com/baobaodaren0918/SMILE-3.0}. During implementation, Claude Code was used in part for the ANTLR~4 grammar implementation. The workflow, core logic, data flow, and all architectural design decisions were developed independently by the author.} The structure follows the six architectural layers defined in \autoref{sec:architecture}. \autoref{sec:tech-stack} gives an overview of the technologies used.
   \autoref{sec:meta-impl} explains the implementation of M-Model+ as the central data structure, including the type mappings between the four database systems.
   \autoref{sec:parser-impl} covers the grammar processing chain from ANTLR~4 code generation and automatic grammar recognition to the listener-based generation of the
   operation list. \autoref{sec:transformer} describes the Schema Transformer, the central component of the core layer that receives the parsed operation list and applies each operation to the M-Model+ database object through dedicated handlers, transforming Meta Schema V1 into Meta Schema V2 as defined in \autoref{sec:operation-taxonomy}.  \autoref{sec:adapters} documents the four adapters for reverse and forward engineering. \autoref{sec:validation} presents the two-layer
@@ -11,7 +11,7 @@
 \section{Technology Stack}\label{sec:tech-stack}
 \subsection{Programming Language}\label{subsec:lang-python}
 
-  The entire implementation of SMEL is realized in Python. ANTLR~4~\cite{parr2013definitive} provides an official Python target, so that Lexer, Parser, and Listener
+  The entire implementation of SMILE is realized in Python. ANTLR~4~\cite{parr2013definitive} provides an official Python target, so that Lexer, Parser, and Listener
   classes can be generated directly from the \texttt{.g4} grammar files without introducing an additional language binding layer. Furthermore, Python's
   \texttt{dataclass} mechanism is particularly well suited for modeling M-Model+, since data classes such as \texttt{Property}, \texttt{EntityType}, or
   \texttt{Reference} can be defined declaratively with field names, types, and default values. As a dynamically typed language, Python also enables rapid prototype development~\cite{zeller2022academic}, which matches the character of a research prototype.
@@ -22,13 +22,13 @@ The visualization of migration and evolution results is provided through a web-b
   layers.
 \subsection{Schema File Processing}\label{subsec:tech-file-driven}
 
-  A deliberate design decision is that SMEL does not connect to running database instances but operates exclusively on schema definition files. PostgreSQL schemas are
+  A deliberate design decision is that SMILE does not connect to running database instances but operates exclusively on schema definition files. PostgreSQL schemas are
   parsed from SQL DDL (\texttt{.sql}), MongoDB schemas from JSON Schema documents (\texttt{.json}), Neo4j schemas from Cypher files (\texttt{.cypher}), and Cassandra
-  schemas from CQL DDL (\texttt{.cql}). This scoping decision restricts SMEL to schema-level transformations, covering structural migration and evolution without
+  schemas from CQL DDL (\texttt{.cql}). This scoping decision restricts SMILE to schema-level transformations, covering structural migration and evolution without
   addressing data migration or runtime connectivity. Each input format imposes distinct parsing constraints. SQL DDL uses a declarative, table-based syntax with typed
    column definitions, inline constraints, and foreign key references. MongoDB schemas follow a recursive JSON structure with nested \texttt{properties} and
   \texttt{required} arrays conforming to the JSON Schema specification.  Neo4j does not yet provide a generally available native schema definition language~\cite{angles2023pg}\footnote{Starting with Neo4j 2026.02 (released on February 10, 2026), graph types
-  were introduced in Cypher~25 as an Enterprise Preview feature, providing a DDL-like mechanism for defining graph schemas. Since this feature remains in Preview status   rather than general availability, SMEL uses structured comment annotations instead. See \url{https://neo4j.com/docs/cypher-manual/current/schema/graph-types/}.}, so
+  were introduced in Cypher~25 as an Enterprise Preview feature, providing a DDL-like mechanism for defining graph schemas. Since this feature remains in Preview status   rather than general availability, SMILE uses structured comment annotations instead. See \url{https://neo4j.com/docs/cypher-manual/current/schema/graph-types/}.}, so
   schemas are reconstructed from structured comment annotations in Cypher files that encode node types, relationship types, property names, and data types, as shown in    \autoref{lst:neo4j-schema-example}.
   Cassandra CQL DDL extends standard DDL syntax with partition key and clustering key declarations inside composite \texttt{PRIMARY KEY} clauses.
 
@@ -57,7 +57,7 @@ The visualization of migration and evolution results is provided through a web-b
 
 \section{M-Model+ Implementation}\label{sec:meta-impl}
 
-Chapter~3 defines M-Model+ as the canonical intermediate representation that connects the four database paradigms. For this design to function, a data structure is needed that can accommodate relational tables, nested documents, graph nodes, and wide-column tables equally. This section describes the concrete implementation of this data structure and its associated type mapping mechanism in the module \texttt{Schema/unified\_meta\_schema.py}. The adapters instantiate these classes when parsing a source schema into M-Model+. The Schema Transformer then executes SMEL operations directly on these objects. After transformation, the validation layer serializes the resulting state to JSON and compares it against the expected target.
+Chapter~3 defines M-Model+ as the canonical intermediate representation that connects the four database paradigms. For this design to function, a data structure is needed that can accommodate relational tables, nested documents, graph nodes, and wide-column tables equally. This section describes the concrete implementation of this data structure and its associated type mapping mechanism in the module \texttt{Schema/unified\_meta\_schema.py}. The adapters instantiate these classes when parsing a source schema into M-Model+. The Schema Transformer then executes SMILE operations directly on these objects. After transformation, the validation layer serializes the resulting state to JSON and compares it against the expected target.
 
 \subsection{Data Structures}\label{subsec:meta-data-structures}
 
@@ -322,10 +322,10 @@ For types without a counterpart in the target system, the forward engineering di
 
 \section{Grammar and Parsing}\label{sec:parser-impl}
 
-  This section describes how SMEL scripts are processed from source text to executable operations. As introduced in \autoref{subsec:grammar-framework}, SMEL uses
+  This section describes how SMILE scripts are processed from source text to executable operations. As introduced in \autoref{subsec:grammar-framework}, SMILE uses
   ANTLR~4~\cite{parr2013definitive} for syntax analysis. \autoref{fig:antlr-files} provides an overview of the complete processing chain. The ANTLR tool generates Lexer,
    Parser, and Listener base classes from the two \texttt{.g4} grammar files (\autoref{subsec:antlr-codegen}). These generated classes are then selected at runtime by
-  \texttt{parser\_factory.py} based on the script file extension (\autoref{subsec:parser-factory}). The custom listener classes in \texttt{smel\_listeners.py} inherit
+  \texttt{parser\_factory.py} based on the script file extension (\autoref{subsec:parser-factory}). The custom listener classes in \texttt{smile\_listeners.py} inherit
   from the generated base classes, walk the parse tree, and produce an ordered list of \texttt{Operation} objects that the Schema Transformer can execute                  (\autoref{subsec:listeners}).
   \begin{figure}[t!]
       \centering
@@ -341,9 +341,9 @@ For types without a counterpart in the target system, the forward engineering di
 
       %% Row 1: .g4 grammar files
       \node[box, fill=blue!12, minimum width=3.2cm] (g4s) at (-2.5, 0)
-        {\texttt{SMEL\_Specific.g4}};
+        {\texttt{SMILE\_Specific.g4}};
       \node[box, fill=blue!12, minimum width=3.2cm] (g4g) at (2.5, 0)
-        {\texttt{SMEL\_Generalized.g4}};
+        {\texttt{SMILE\_Generalized.g4}};
 
       %% Row 2: ANTLR4 tool
       \node[box, fill=orange!15, minimum width=7.0cm] (antlr) at (0, -1.4)
@@ -357,13 +357,13 @@ For types without a counterpart in the target system, the forward engineering di
 
       %% Row 4: parser_factory.py
       \node[box, fill=green!12, minimum width=7.0cm] (pf) at (0, -5.4)
-        {\texttt{parser\_factory.py}\\detects \texttt{.smel} / \texttt{.smel\_gen}};
+        {\texttt{parser\_factory.py}\\detects \texttt{.smile} / \texttt{.smile\_gen}};
 
-      %% Row 5: smel_listeners.py
+      %% Row 5: smile_listeners.py
       \node[box, fill=yellow!15, minimum width=7.0cm] (sl) at (0, -7.2)
-        {\texttt{smel\_listeners.py}\\
-         \texttt{SMELSpecificListener} /
-         \texttt{SMELGeneralizedListener}};
+        {\texttt{smile\_listeners.py}\\
+         \texttt{SMILESpecificListener} /
+         \texttt{SMILEGeneralizedListener}};
 
       %% Row 6: Output
       \node[box, fill=red!10, minimum width=7.0cm] (ops) at (0, -8.8)
@@ -400,7 +400,7 @@ For types without a counterpart in the target system, the forward engineering di
       \draw[arr] (sl.south) -- (ops.north);
 
       \end{tikzpicture}
-      \caption{ANTLR~4 code generation and file structure in the SMEL project}
+      \caption{ANTLR~4 code generation and file structure in the SMILE project}
       \label{fig:antlr-files}
   \end{figure}
 
@@ -408,8 +408,8 @@ For types without a counterpart in the target system, the forward engineering di
   \subsection{ANTLR4 Code Generation}\label{subsec:antlr-codegen}
 
   Each \texttt{.g4} grammar file is processed by the ANTLR tool to produce three Python files. \autoref{fig:antlr-codegen-detail} shows all six generated files for both
-  grammars. On the Specific side, the tool produces \texttt{SMEL\_SpecificLexer.py}, \texttt{SMEL\_SpecificParser.py}, and \texttt{SMEL\_SpecificListener.py}. On the
-  Generalized side, the corresponding files are \texttt{SMEL\_GeneralizedLexer.py}, \texttt{SMEL\_GeneralizedParser.py}, and \texttt{SMEL\_GeneralizedListener.py}.
+  grammars. On the Specific side, the tool produces \texttt{SMILE\_SpecificLexer.py}, \texttt{SMILE\_SpecificParser.py}, and \texttt{SMILE\_SpecificListener.py}. On the
+  Generalized side, the corresponding files are \texttt{SMILE\_GeneralizedLexer.py}, \texttt{SMILE\_GeneralizedParser.py}, and \texttt{SMILE\_GeneralizedListener.py}.
 
   \begin{figure}[htbp]
       \centering
@@ -425,9 +425,9 @@ For types without a counterpart in the target system, the forward engineering di
 
         %% Row 1: .g4 files
         \node[box, fill=blue!12, minimum width=5cm] (g4s) at (-4, 0)
-          {\textbf{SMEL\_Specific.g4}};
+          {\textbf{SMILE\_Specific.g4}};
         \node[box, fill=blue!12, minimum width=5cm] (g4g) at (4, 0)
-          {\textbf{SMEL\_Generalized.g4}};
+          {\textbf{SMILE\_Generalized.g4}};
 
         %% Row 2: ANTLR4 tool
         \node[box, fill=orange!15, minimum width=12cm] (antlr) at (0, -1.5)
@@ -435,19 +435,19 @@ For types without a counterpart in the target system, the forward engineering di
 
         %% Row 3: Generated files - Specific (left column)
         \node[file, minimum width=5cm] (lexS) at (-4, -3.2)
-          {\texttt{SMEL\_SpecificLexer.py}};
+          {\texttt{SMILE\_SpecificLexer.py}};
         \node[file, minimum width=5cm] (parS) at (-4, -4.2)
-          {\texttt{SMEL\_SpecificParser.py}};
+          {\texttt{SMILE\_SpecificParser.py}};
         \node[file, minimum width=5cm] (lisS) at (-4, -5.2)
-          {\texttt{SMEL\_SpecificListener.py}};
+          {\texttt{SMILE\_SpecificListener.py}};
 
         %% Row 3: Generated files - Generalized (right column)
         \node[file, minimum width=5cm] (lexG) at (4, -3.2)
-          {\texttt{SMEL\_GeneralizedLexer.py}};
+          {\texttt{SMILE\_GeneralizedLexer.py}};
         \node[file, minimum width=5cm] (parG) at (4, -4.2)
-          {\texttt{SMEL\_GeneralizedParser.py}};
+          {\texttt{SMILE\_GeneralizedParser.py}};
         \node[file, minimum width=5cm] (lisG) at (4, -5.2)
-          {\texttt{SMEL\_GeneralizedListener.py}};
+          {\texttt{SMILE\_GeneralizedListener.py}};
 
         %% Labels for generated
         \node[font=\scriptsize\itshape, gray] at (-4, -5.9) {generated (do not modify)};
@@ -455,14 +455,14 @@ For types without a counterpart in the target system, the forward engineering di
 
         %% Row 4: parser_factory.py
         \node[box, fill=green!12, minimum width=12cm] (pf) at (0, -7.2)
-          {\texttt{parser\_factory.py} -- selects Lexer, Parser, Listener based on file extension (\texttt{.smel} / \texttt{.smel\_gen})};
+          {\texttt{parser\_factory.py} -- selects Lexer, Parser, Listener based on file extension (\texttt{.smile} / \texttt{.smile\_gen})};
 
         %% Row 5: Custom listeners
         \node[custom, minimum width=5cm] (cusS) at (-4, -8.7)
-          {\texttt{SMELSpecificListener}};
+          {\texttt{SMILESpecificListener}};
         \node[custom, minimum width=5cm] (cusG) at (4, -8.7)
-          {\texttt{SMELGeneralizedListener}};
-        \node[font=\scriptsize\itshape, gray] at (0, -9.4) {defined in \texttt{smel\_listeners.py}};
+          {\texttt{SMILEGeneralizedListener}};
+        \node[font=\scriptsize\itshape, gray] at (0, -9.4) {defined in \texttt{smile\_listeners.py}};
 
         %% === Arrows ===
         \draw[arr] (g4s.south) -- (antlr.north -| g4s.south);
@@ -492,28 +492,28 @@ For types without a counterpart in the target system, the forward engineering di
 
   \begin{lstlisting}[basicstyle=\small\ttfamily, caption={ANTLR~4 generation commands}, label={lst:antlr-command}]
   cd grammar/specific
-  java -jar ../antlr-4.13.2-complete.jar -Dlanguage=Python3 SMEL_Specific.g4
+  java -jar ../antlr-4.13.2-complete.jar -Dlanguage=Python3 SMILE_Specific.g4
 
   cd grammar/generalized
-  java -jar ../antlr-4.13.2-complete.jar -Dlanguage=Python3 SMEL_Generalized.g4
+  java -jar ../antlr-4.13.2-complete.jar -Dlanguage=Python3 SMILE_Generalized.g4
   \end{lstlisting}
 
 The separation between generated and project code is strict. This follows the listener pattern recommended by the ANTLR~4 documentation\footnote{The ANTLR~4
   documentation describes this pattern as follows: ``ANTLR generates a listener interface that makes it easy to respond to the recognition of phrases of interest. You
   can build your listener by subclassing the base and overriding the methods of interest.'' See \url{https://github.com/antlr/antlr4/blob/master/doc/listeners.md}.},
   where the generated base class serves as the interface contract and the custom subclass provides the implementation. The generated listener base classes, such as
-  \texttt{SMEL\_SpecificListener.py}, contain only empty callback methods that define the interface but perform no action. The custom classes
-  \texttt{SMELSpecificListener} and \texttt{SMELGeneralizedListener} in \texttt{smel\_listeners.py} inherit from these generated base classes and override the callbacks   with the actual logic that extracts operation parameters from the parse tree. As a result, grammar changes only require re-running the ANTLR tool, while the
+  \texttt{SMILE\_SpecificListener.py}, contain only empty callback methods that define the interface but perform no action. The custom classes
+  \texttt{SMILESpecificListener} and \texttt{SMILEGeneralizedListener} in \texttt{smile\_listeners.py} inherit from these generated base classes and override the callbacks   with the actual logic that extracts operation parameters from the parse tree. As a result, grammar changes only require re-running the ANTLR tool, while the
   interpretation logic remains independent. In practice, adding a new grammar rule involves defining it in the \texttt{.g4} file and implementing the corresponding
-  \texttt{enter*} method in \texttt{smel\_listeners.py}, without modifying the generated code.
+  \texttt{enter*} method in \texttt{smile\_listeners.py}, without modifying the generated code.
 
   \subsection{Parser Factory}\label{subsec:parser-factory}
-The entry point for the entire syntax analysis is the function \texttt{parse\_smel\_auto(file\_path)} in \texttt{parser\_factory.py}. It is called by \texttt{core.py}
+The entry point for the entire syntax analysis is the function \texttt{parse\_smile\_auto(file\_path)} in \texttt{parser\_factory.py}. It is called by \texttt{core.py}
   with a single file path and returns a triplet \texttt{(context, operations, errors)}, which contains the parsed script header, the ordered operation list, and any
   syntax errors.
 
 \autoref{fig:parser-factory-flow} summarizes the five internal steps of the function. Grammar detection and component selection are separated into two distinct steps
-  so that adding a new grammar variant would only require registering its classes in \texttt{get\_parser\_components()}, without changing the parsing logic itself. Based   on the file extension, \texttt{detect\_grammar\_type()} selects either the Specific (\texttt{.smel}) or the Generalized (\texttt{.smel\_gen}) variant, and
+  so that adding a new grammar variant would only require registering its classes in \texttt{get\_parser\_components()}, without changing the parsing logic itself. Based   on the file extension, \texttt{detect\_grammar\_type()} selects either the Specific (\texttt{.smile}) or the Generalized (\texttt{.smile\_gen}) variant, and
   \texttt{get\_parser\_components()} returns the corresponding Lexer and Parser classes. The input text is then processed through the standard ANTLR~4 chain:
   \texttt{FileStream} $\to$ Lexer $\to$ \texttt{CommonTokenStream} $\to$ Parser $\to$ parse tree. In the final step, a \texttt{ParseTreeWalker} traverses the parse tree
   with the selected Listener, which produces the operation list as described in \autoref{subsec:listeners}.
@@ -529,7 +529,7 @@ The entry point for the entire syntax analysis is the function \texttt{parse\_sm
       %% Input
       \node[box, fill=blue!12] (input) at (0, 0)
         {\textbf{Input}\\
-         SMEL script file (\texttt{.smel} or \texttt{.smel\_gen})};
+         SMILE script file (\texttt{.smile} or \texttt{.smile\_gen})};
 
       %% Step 1: detect
       \node[box, fill=green!12] (detect) at (0, -2.0)
@@ -570,7 +570,7 @@ The entry point for the entire syntax analysis is the function \texttt{parse\_sm
       \draw[arr] (walk.south) -- (output.north);
 
     \end{tikzpicture}
-    \caption{Internal processing steps of \texttt{parse\_smel\_auto()} in \texttt{parser\_factory.py}}
+    \caption{Internal processing steps of \texttt{parse\_smile\_auto()} in \texttt{parser\_factory.py}}
     \label{fig:parser-factory-flow}
   \end{figure}
 For the calling code in \texttt{core.py}, \texttt{run\_migration()} passes the file path and receives a uniform operation list back, regardless of which grammar variant was used. The grammar distinction is fully encapsulated within \texttt{parser\_factory.py}.
@@ -579,7 +579,7 @@ For the calling code in \texttt{core.py}, \texttt{run\_migration()} passes the f
   \subsection{Listener-based Parse Tree Processing}\label{subsec:listeners}
 
   This section describes the last step of the processing chain. The listener                                                                                               classes map the nodes of the parse tree into three data structures defined
-  in \texttt{smel\_listeners.py} (\autoref{fig:listener-output}).
+  in \texttt{smile\_listeners.py} (\autoref{fig:listener-output}).
   \texttt{MigrationContext} records the information from the script header,                                                                                                including the script name, the version, the source and target database                                                                                                   type, and the distinction between migration and evolution via the field
   \texttt{is\_evolution}. For evolution scripts, the additional field
   \texttt{target\_schema\_version} contains the target version from the
@@ -621,17 +621,17 @@ For the calling code in \texttt{core.py}, \texttt{run\_migration()} passes the f
         %% Two listeners side by side
         \node[draw, rounded corners=2pt, align=center, inner sep=5pt,
               fill=yellow!8, minimum width=5.5cm, minimum height=0.7cm] (lisS) at (-3, -3.6)
-          {\texttt{SMELSpecificListener}\\
-           inherits \texttt{SMEL\_SpecificListener}};
+          {\texttt{SMILESpecificListener}\\
+           inherits \texttt{SMILE\_SpecificListener}};
         \node[draw, rounded corners=2pt, align=center, inner sep=5pt,
               fill=yellow!8, minimum width=5.5cm, minimum height=0.7cm] (lisG) at (3, -3.6)
-          {\texttt{SMELGeneralizedListener}\\
-           inherits \texttt{SMEL\_GeneralizedListener}};
+          {\texttt{SMILEGeneralizedListener}\\
+           inherits \texttt{SMILE\_GeneralizedListener}};
 
-        %% BaseSMELListener
+        %% BaseSMILEListener
         \node[draw, rounded corners=2pt, align=center, inner sep=5pt,
               fill=green!15, minimum width=12cm, minimum height=0.7cm] (base) at (0, -5.4)
-          {\textbf{BaseSMELListener} (shared helper methods)\\
+          {\textbf{BaseSMILEListener} (shared helper methods)\\
            \texttt{\_parse\_condition\_pairs()},
            \texttt{\_parse\_property\_clauses()},
            \texttt{\_parse\_entity\_clauses()}, \ldots};
@@ -687,19 +687,19 @@ For the calling code in \texttt{core.py}, \texttt{run\_migration()} passes the f
         \node[lbl, font=\scriptsize\itshape] at (0, -6.8) {produces};
 
       \end{tikzpicture}
-      \caption{Listener class hierarchy and output data structures in \texttt{smel\_listeners.py}}
+      \caption{Listener class hierarchy and output data structures in \texttt{smile\_listeners.py}}
       \label{fig:listener-output}
   \end{figure}
 
   As shown in \autoref{fig:listener-output}, both listeners need to handle
   the same recurring parsing tasks. These methods are placed in a shared
-  base class \texttt{BaseSMELListener}, for example
+  base class \texttt{BaseSMILEListener}, for example
   \texttt{\_parse\_condition\_pairs()} extracts \texttt{WHERE} join
   conditions, \texttt{\_parse\_property\_clauses()} processes
   \texttt{WITH TYPE} declarations, and \texttt{\_parse\_entity\_clauses()}
-  handles property definition lists. \texttt{SMELSpecificListener} inherits
-  from the generated \texttt{SMEL\_SpecificListener} together with
-  \texttt{BaseSMELListener}. \texttt{SMELGeneralizedListener} follows the
+  handles property definition lists. \texttt{SMILESpecificListener} inherits
+  from the generated \texttt{SMILE\_SpecificListener} together with
+  \texttt{BaseSMILEListener}. \texttt{SMILEGeneralizedListener} follows the
   same pattern. Both override the \texttt{enter*} callbacks to extract
   operation parameters from the parse tree and to wrap them in the
   OpType-specific dataclass.
@@ -892,7 +892,7 @@ implementation of each category.
 
   Alongside the dispatch mechanism, the transformer draws on a small set of
   shared utilities. Three module-level dictionaries in
-  \texttt{unified\_meta\_schema.py} centralize the conversion of SMEL
+  \texttt{unified\_meta\_schema.py} centralize the conversion of SMILE
   string literals into internal enumerations, so that a handler (and any
   other module needing the same mapping, such as a validator) resolves
   them with one lookup rather than a chain of conditionals. They cover

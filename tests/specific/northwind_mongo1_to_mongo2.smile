@@ -1,0 +1,106 @@
+-- SMILE Northwind: MongoDB V1 -> MongoDB V2 (Specific Operations Version)
+-- Same-model Schema Evolution: Document -> Document
+-- V2 Business Scenario: E-commerce platform modernization
+--
+-- Structural changes:
+--   FLATTEN:       Flatten category sub-object into product (denormalize, reduce L3->L2)
+--   UNFLATTEN:     Group customer contact fields into contacts sub-object (reorganize)
+--   ADD_EMBEDDED:  Add territories array to employee with nested region (sales territory tracking)
+
+EVOLUTION northwind_mongo1_to_mongo2:1.0
+FROM DOCUMENT TO DOCUMENT
+USING adapted_northwind_schema VERSION 1 TO 2
+
+-- ============================================
+-- Meta V1 (after Reverse Engineering of northwind_mongodb.json)
+-- ============================================
+-- orders (root) { _id [PK], order_date, required_date, shipped_date, freight, ship_name }
+--   embedded: ship_destination { ship_address, ship_city, ship_region, ship_postal_code, ship_country }
+--   embedded: customer { company_name, contact_name, contact_title, phone, fax }
+--     embedded: address { street, city, region, postal_code, country }           [L2]
+--   embedded: employee { last_name, first_name, title, birth_date, hire_date, phone, notes, reports_to }
+--     embedded: address { street, city, region, postal_code, country }           [L2]
+--   embedded: shipper { company_name, phone }
+--   embedded: details[] (ONE_TO_MANY)
+--     embedded: product { product_name, unit_price, units_in_stock, discontinued, quantity_per_unit }
+--       embedded: category { category_name, description }               [L3]
+--       embedded: supplier { company_name, contact_name, contact_title, phone, fax }
+--         embedded: address { street, city, region, postal_code, country }      [L4]
+
+-- ============================================
+-- Phase 1: FLATTEN category into product (structural -- reduce nesting)
+-- Document equivalent of MERGE: L3 -> L2, category sub-object disappears
+-- ============================================
+-- Before: product { ..., category { category_name, description }, supplier { ... } }
+-- After:  product { ..., category_category_name, category_description, supplier { ... } }
+FLATTEN orders.details.product.category
+RENAME_PROPERTY category_category_name TO category_name IN product
+RENAME_PROPERTY category_description TO description IN product
+-- Result: product { product_name, unit_price, ..., category_name, description, supplier { ... } }
+
+-- ============================================
+-- Phase 2: UNFLATTEN customer contact fields into contacts sub-object (structural)
+-- Document equivalent of SPLIT: group contact person fields into sub-object
+-- ============================================
+-- Before: customer { company_name, contact_name, contact_title, phone, fax, address { ... } }
+-- After:  customer { company_name, address { ... }, contacts { contact_name, contact_title, phone, fax } }
+UNFLATTEN customer:contact_name, contact_title, phone, fax AS contacts
+
+-- ============================================
+-- Phase 3: ADD territories array to employee (new embedded array)
+-- Document equivalent of ADD_ENTITY + M:N: employee gets territories[]
+-- ============================================
+-- After: employee { ..., territories[] { territory_id, territory_description, region { ... } } }
+ADD_EMBEDDED territories TO employee WITH CARDINALITY ONE_TO_MANY
+ADD_PROPERTY territory_id TO territories WITH TYPE String
+ADD_PROPERTY territory_description TO territories WITH TYPE String
+
+-- ============================================
+-- Phase 4: ADD region inside territories (nested embedded)
+-- Document equivalent of FK relationship: territory contains its region
+-- ============================================
+-- After: territories[] { territory_id, territory_description, region { region_id, region_description } }
+ADD_EMBEDDED region TO territories
+ADD_PROPERTY region_id TO region WITH TYPE String
+ADD_PROPERTY region_description TO region WITH TYPE String
+
+-- ============================================
+-- Phase 5: employee -- simplify + ADD
+-- ============================================
+DELETE_PROPERTY employee.birth_date
+DELETE_PROPERTY employee.notes
+ADD_PROPERTY email TO employee WITH TYPE String
+
+-- ============================================
+-- Phase 6: product + orders -- RENAME + ADD
+-- ============================================
+RENAME_PROPERTY product_name TO name IN product
+RENAME_PROPERTY freight TO shipping_cost IN orders
+ADD_PROPERTY status TO orders WITH TYPE String
+
+-- ============================================
+-- Final Meta V2 (max L4 nesting):
+-- orders { _id [PK], order_date, required_date, shipped_date, shipping_cost, ship_name, status }
+--   ship_destination { ship_address, ship_city, ship_region, ship_postal_code, ship_country }
+--   customer { company_name, address { street, city, region, postal_code, country },
+--              contacts { contact_name, contact_title, phone, fax } }
+--   employee { last_name, first_name, title, hire_date, email, phone, reports_to,
+--              address { street, city, region, postal_code, country },
+--              territories[] { territory_id, territory_description,
+--                              region { region_id, region_description } } }
+--   shipper { company_name, phone }
+--   details[] {
+--     unit_price, quantity, discount,
+--     product { name, unit_price, units_in_stock, discontinued, quantity_per_unit,
+--               category_name, description,
+--               supplier { company_name, contact_name, contact_title, phone, fax,
+--                          address { street, city, region, postal_code, country } } }
+--   }
+-- ============================================
+
+-- ============================================
+-- Operation Summary (16 steps, 6 operation types):
+--   FLATTEN: 1             UNFLATTEN: 1
+--   ADD_EMBEDDED: 2        ADD_PROPERTY: 6
+--   DELETE_PROPERTY: 2    RENAME_PROPERTY: 4
+-- ============================================

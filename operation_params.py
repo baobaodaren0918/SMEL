@@ -1,5 +1,5 @@
 """
-Operation parameter types for SMEL operations.
+Operation parameter types for SMILE operations.
 
 Each OpType has a dedicated dataclass defining the contract between the
 listener (which constructs operations while walking the ANTLR parse tree)
@@ -27,7 +27,6 @@ class NestParams:
     properties: List[str] = field(default_factory=list)
     nested: List[Dict[str, Any]] = field(default_factory=list)
     source_fk: str = ""
-    with_deletion: bool = False
     # Currently unused by _handle_nest: listener collects multi-condition
     # JOIN state (NEST ... WHERE a AND b AND c) but the handler consumes
     # only the first condition via source_fk. Kept for future extension.
@@ -160,7 +159,7 @@ class DeleteKeyParams:
 
 
 @dataclass
-class AddConstraintParams:
+class AddForeignKeyParams:
     field_name: str
     target_table: str
     target_column: str
@@ -169,7 +168,7 @@ class AddConstraintParams:
 
 
 @dataclass
-class DeleteConstraintParams:
+class DeleteForeignKeyParams:
     reference: str
 
 
@@ -273,7 +272,7 @@ OpParams = Union[
     AddPropertyParams, DeletePropertyParams, RenamePropertyParams,
     CopyPropertyParams, MovePropertyParams,
     AddKeyParams, DeleteKeyParams,
-    AddConstraintParams, DeleteConstraintParams, CastConstraintParams,
+    AddForeignKeyParams, DeleteForeignKeyParams, CastConstraintParams,
     CastEntityParams,
     AddEmbeddedParams, DeleteEmbeddedParams,
     AddLabelParams, DeleteLabelParams,

@@ -1,19 +1,19 @@
 @echo off
-REM ANTLR Parser Generator Script for SMEL_Specific.g4
+REM ANTLR Parser Generator Script for SMILE_Specific.g4
 REM Run this script from the grammar/specific/ directory
 
 cd /d "%~dp0"
 
-echo Generating ANTLR parser from SMEL_Specific.g4...
-java -jar ..\antlr-4.13.2-complete.jar -Dlanguage=Python3 -visitor SMEL_Specific.g4
+echo Generating ANTLR parser from SMILE_Specific.g4...
+java -jar ..\antlr-4.13.2-complete.jar -Dlanguage=Python3 -visitor SMILE_Specific.g4
 
 if %ERRORLEVEL% == 0 (
-    echo Done! SMEL_Specific parser files generated in current directory.
+    echo Done! SMILE_Specific parser files generated in current directory.
     echo Files created:
-    echo   - SMEL_SpecificLexer.py
-    echo   - SMEL_SpecificParser.py
-    echo   - SMEL_SpecificListener.py
-    echo   - SMEL_SpecificVisitor.py
+    echo   - SMILE_SpecificLexer.py
+    echo   - SMILE_SpecificParser.py
+    echo   - SMILE_SpecificListener.py
+    echo   - SMILE_SpecificVisitor.py
 ) else (
     echo Error generating parser!
     exit /b 1

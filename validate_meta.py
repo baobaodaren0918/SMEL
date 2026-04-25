@@ -2,10 +2,10 @@
 Layer 1 Validation: Meta Schema V2 Comparison.
 
 Compares the migration result (Meta V2) against the expected target schema
-parsed from the native schema file. Proves SMEL script correctness.
+parsed from the native schema file. Proves SMILE script correctness.
 
 Pipeline position:
-  Source -> [RE] -> Meta V1 -> [SMEL] -> Meta V2  <-  compare  ->  Expected Meta
+  Source -> [RE] -> Meta V1 -> [SMILE] -> Meta V2  <-  compare  ->  Expected Meta
                                        ^                          ^
                                   migration result       target native file parsed
 
@@ -93,6 +93,47 @@ def _walk_embedded(entities: Dict, entity_name: str, path: str, result: Dict):
 
     new_entity["embedded"] = new_embedded
     result[path] = new_entity
+
+
+def _diff_named(actual: List[Dict], expected: List[Dict],
+                key_fn=lambda x: x['name']) -> tuple:
+    """Compute by-key set diff over two lists of dicts.
+
+    Returns (missing_keys_sorted, extra_keys_sorted, common_pairs_sorted).
+    common_pairs is [(key, actual_item, expected_item), ...].
+    """
+    actual_map = {key_fn(item): item for item in actual}
+    expected_map = {key_fn(item): item for item in expected}
+    missing = sorted(set(expected_map) - set(actual_map))
+    extra = sorted(set(actual_map) - set(expected_map))
+    common = [(k, actual_map[k], expected_map[k])
+              for k in sorted(set(actual_map) & set(expected_map))]
+    return missing, extra, common
+
+
+def _pack_diff(missing: List, extra: List, hard: Dict[str, list],
+               warn: Dict[str, list]) -> Dict:
+    """Pack a comparison result into the legacy validate_meta output shape.
+
+    ``hard`` are issue-counted groups (missing/extra/mismatches).
+    ``warn`` are warning groups (cardinality, key_type, FK, ...).
+    Returns ``{}`` when there's nothing to report.
+    """
+    issue_count = len(missing) + len(extra) + sum(len(v) for v in hard.values())
+    if issue_count == 0 and not any(warn.values()):
+        return {}
+    result: Dict[str, Any] = {"issue_count": issue_count}
+    if missing:
+        result["missing"] = missing
+    if extra:
+        result["extra"] = extra
+    for k, v in hard.items():
+        if v:
+            result[k] = v
+    for k, v in warn.items():
+        if v:
+            result[k] = v
+    return result
 
 
 def compare_meta_schemas(actual: Dict[str, Any], expected: Dict[str, Any]) -> Dict[str, Any]:
@@ -257,330 +298,157 @@ def _compare_entity(actual: Dict, expected: Dict) -> Dict:
 
 
 def _compare_embedded(actual: List[Dict], expected: List[Dict]) -> Dict:
-    """Compare embedded lists by name.
-
-    Hard issues: missing/extra embedded, target entity mismatches.
-    Warnings: cardinality differences (SMEL operations default to 1..1
-    and don't explicitly control embedded cardinality).
-    """
-    actual_map = {item["name"]: item for item in actual}
-    expected_map = {item["name"]: item for item in expected}
-
-    missing = sorted(set(expected_map) - set(actual_map))
-    extra = sorted(set(actual_map) - set(expected_map))
-    target_mismatches = []
-    cardinality_warnings = []
-
-    for name in sorted(set(actual_map) & set(expected_map)):
-        a = actual_map[name]
-        e = expected_map[name]
+    """Embedded relationships: target mismatch is hard, cardinality is warning."""
+    missing, extra, common = _diff_named(actual, expected)
+    target_mismatches, cardinality_warnings = [], []
+    for name, a, e in common:
         if a.get("target") != e.get("target"):
-            target_mismatches.append({
-                "name": name,
-                "actual_target": a.get("target"),
-                "expected_target": e.get("target"),
-            })
+            target_mismatches.append({"name": name,
+                                      "actual_target": a.get("target"),
+                                      "expected_target": e.get("target")})
         if a.get("cardinality") != e.get("cardinality"):
-            cardinality_warnings.append({
-                "name": name,
-                "actual": a.get("cardinality"),
-                "expected": e.get("cardinality"),
-            })
-
-    issue_count = len(missing) + len(extra) + len(target_mismatches)
-    if issue_count == 0 and not cardinality_warnings:
-        return {}
-
-    result = {"issue_count": issue_count}
-    if missing:
-        result["missing"] = missing
-    if extra:
-        result["extra"] = extra
-    if target_mismatches:
-        result["target_mismatches"] = target_mismatches
-    if cardinality_warnings:
-        result["cardinality_warnings"] = cardinality_warnings
-    return result
+            cardinality_warnings.append({"name": name,
+                                         "actual": a.get("cardinality"),
+                                         "expected": e.get("cardinality")})
+    return _pack_diff(missing, extra,
+                      hard={"target_mismatches": target_mismatches},
+                      warn={"cardinality_warnings": cardinality_warnings})
 
 
 def _compare_properties(actual: List[Dict], expected: List[Dict]) -> Dict:
-    """Compare property lists by name.
-
-    Hard issues: missing/extra properties, type mismatches.
-    Warnings: is_key, key_type, and is_optional differences (representation-level).
-    """
-    actual_map = {a["name"]: a for a in actual}
-    expected_map = {a["name"]: a for a in expected}
-
-    missing = sorted(set(expected_map) - set(actual_map))
-    extra = sorted(set(actual_map) - set(expected_map))
-
-    type_mismatches = []
-    key_warnings = []
-    optional_warnings = []
-
-    for name in sorted(set(actual_map) & set(expected_map)):
-        a = actual_map[name]
-        e = expected_map[name]
+    """Properties: type mismatch is hard; is_key/key_type/is_optional are warnings."""
+    missing, extra, common = _diff_named(actual, expected)
+    type_mismatches, key_warnings, optional_warnings = [], [], []
+    for name, a, e in common:
         if a.get("type") != e.get("type"):
-            type_mismatches.append({
-                "attr": name,
-                "actual": a.get("type"),
-                "expected": e.get("type"),
-            })
-        # is_key and key_type are warnings (not hard failures)
-        if a.get("is_key") != e.get("is_key"):
-            key_warnings.append({
-                "attr": name,
-                "field": "is_key",
-                "actual": a.get("is_key"),
-                "expected": e.get("is_key"),
-            })
-        if a.get("key_type") != e.get("key_type"):
-            key_warnings.append({
-                "attr": name,
-                "field": "key_type",
-                "actual": a.get("key_type"),
-                "expected": e.get("key_type"),
-            })
-        # is_optional (nullability) differs across DB types — warning
+            type_mismatches.append({"attr": name,
+                                    "actual": a.get("type"),
+                                    "expected": e.get("type")})
+        for field in ("is_key", "key_type"):
+            if a.get(field) != e.get(field):
+                key_warnings.append({"attr": name, "field": field,
+                                     "actual": a.get(field),
+                                     "expected": e.get(field)})
         if a.get("is_optional") != e.get("is_optional"):
-            optional_warnings.append({
-                "attr": name,
-                "actual": a.get("is_optional"),
-                "expected": e.get("is_optional"),
-            })
-
-    issue_count = len(missing) + len(extra) + len(type_mismatches)
-    if issue_count == 0 and not key_warnings and not optional_warnings:
-        return {}
-
-    result = {"issue_count": issue_count}
-    if missing:
-        result["missing"] = missing
-    if extra:
-        result["extra"] = extra
-    if type_mismatches:
-        result["type_mismatches"] = type_mismatches
-    if key_warnings:
-        result["key_warnings"] = key_warnings
-    if optional_warnings:
-        result["optional_warnings"] = optional_warnings
-    return result
+            optional_warnings.append({"attr": name,
+                                      "actual": a.get("is_optional"),
+                                      "expected": e.get("is_optional")})
+    return _pack_diff(missing, extra,
+                      hard={"type_mismatches": type_mismatches},
+                      warn={"key_warnings": key_warnings,
+                            "optional_warnings": optional_warnings})
 
 
 def _compare_references(actual: List[Dict], expected: List[Dict]) -> Dict:
-    """Compare references by name+target.
-
-    Hard issues: missing/extra references, target mismatches, edge_properties mismatches.
-    Warnings: cardinality differences.
-    """
-    actual_map = {item["name"]: item for item in actual}
-    expected_map = {item["name"]: item for item in expected}
-
-    missing = sorted(set(expected_map) - set(actual_map))
-    extra = sorted(set(actual_map) - set(expected_map))
-    target_mismatches = []
-    attr_mismatches = []
-    cardinality_warnings = []
-
-    for name in sorted(set(actual_map) & set(expected_map)):
-        a = actual_map[name]
-        e = expected_map[name]
+    """References: target & edge_properties mismatch are hard, cardinality is warning."""
+    missing, extra, common = _diff_named(actual, expected)
+    target_mismatches, attr_mismatches, cardinality_warnings = [], [], []
+    for name, a, e in common:
         if a.get("target") != e.get("target"):
-            target_mismatches.append({
-                "name": name,
-                "actual_target": a.get("target"),
-                "expected_target": e.get("target"),
-            })
-        # Compare edge_properties (if either side has them)
+            target_mismatches.append({"name": name,
+                                      "actual_target": a.get("target"),
+                                      "expected_target": e.get("target")})
         a_attrs = {at["name"]: at["type"] for at in a.get("edge_properties", [])}
         e_attrs = {at["name"]: at["type"] for at in e.get("edge_properties", [])}
         if a_attrs != e_attrs:
-            attr_mismatches.append({
-                "name": name,
-                "actual": a_attrs,
-                "expected": e_attrs,
-            })
+            attr_mismatches.append({"name": name,
+                                    "actual": a_attrs, "expected": e_attrs})
         if a.get("cardinality") != e.get("cardinality"):
-            cardinality_warnings.append({
-                "name": name,
-                "actual": a.get("cardinality"),
-                "expected": e.get("cardinality"),
-            })
-
-    issue_count = len(missing) + len(extra) + len(target_mismatches) + len(attr_mismatches)
-    if issue_count == 0 and not cardinality_warnings:
-        return {}
-
-    result = {"issue_count": issue_count}
-    if missing:
-        result["missing"] = missing
-    if extra:
-        result["extra"] = extra
-    if target_mismatches:
-        result["target_mismatches"] = target_mismatches
-    if attr_mismatches:
-        result["attr_mismatches"] = attr_mismatches
-    if cardinality_warnings:
-        result["cardinality_warnings"] = cardinality_warnings
-    return result
+            cardinality_warnings.append({"name": name,
+                                         "actual": a.get("cardinality"),
+                                         "expected": e.get("cardinality")})
+    return _pack_diff(missing, extra,
+                      hard={"target_mismatches": target_mismatches,
+                            "attr_mismatches": attr_mismatches},
+                      warn={"cardinality_warnings": cardinality_warnings})
 
 
 def _compare_edges(actual: List[Dict], expected: List[Dict]) -> Dict:
-    """Compare edges by name. Target/source mismatches are issues, cardinality is warning."""
-    actual_map = {item["name"]: item for item in actual}
-    expected_map = {item["name"]: item for item in expected}
-
-    missing = sorted(set(expected_map) - set(actual_map))
-    extra = sorted(set(actual_map) - set(expected_map))
-    mismatches = []
-    cardinality_warnings = []
-
-    for name in sorted(set(actual_map) & set(expected_map)):
-        a = actual_map[name]
-        e = expected_map[name]
-        field_diffs = {}
-        for f in ["target", "source"]:
-            if a.get(f) != e.get(f):
-                field_diffs[f] = {"actual": a.get(f), "expected": e.get(f)}
+    """Edges: source & target mismatch are hard, cardinality is warning."""
+    missing, extra, common = _diff_named(actual, expected)
+    mismatches, cardinality_warnings = [], []
+    for name, a, e in common:
+        field_diffs = {f: {"actual": a.get(f), "expected": e.get(f)}
+                       for f in ("target", "source") if a.get(f) != e.get(f)}
         if field_diffs:
             mismatches.append({"name": name, "diffs": field_diffs})
         if a.get("cardinality") != e.get("cardinality"):
-            cardinality_warnings.append({
-                "name": name,
-                "actual": a.get("cardinality"),
-                "expected": e.get("cardinality"),
-            })
-
-    issue_count = len(missing) + len(extra) + len(mismatches)
-    if issue_count == 0 and not cardinality_warnings:
-        return {}
-
-    result = {"issue_count": issue_count}
-    if missing:
-        result["missing"] = missing
-    if extra:
-        result["extra"] = extra
-    if mismatches:
-        result["mismatches"] = mismatches
-    if cardinality_warnings:
-        result["cardinality_warnings"] = cardinality_warnings
-    return result
+            cardinality_warnings.append({"name": name,
+                                         "actual": a.get("cardinality"),
+                                         "expected": e.get("cardinality")})
+    return _pack_diff(missing, extra,
+                      hard={"mismatches": mismatches},
+                      warn={"cardinality_warnings": cardinality_warnings})
 
 
 def _compare_constraints(actual: List[Dict], expected: List[Dict]) -> Dict:
-    """Compare constraint lists.
-
-    Hard issues: missing/extra PK constraints.
-    Warnings: FK differences, primary_key_types differences
-        (e.g. Cassandra PARTITION vs CLUSTERING key distinction).
-    """
-    # Separate PK and FK constraints
+    """Constraints: PK structure mismatch is hard; FK + Cassandra PK-subtype are warnings."""
+    # Bucket by constraint type
     actual_pk = [c for c in actual if c["type"] in ("PRIMARY_KEY", "UNIQUE")]
     expected_pk = [c for c in expected if c["type"] in ("PRIMARY_KEY", "UNIQUE")]
     actual_fk = [c for c in actual if c["type"] == "FOREIGN_KEY"]
     expected_fk = [c for c in expected if c["type"] == "FOREIGN_KEY"]
 
-    # Compare PKs by column set
-    def _pk_key(c):
-        return (c["type"], tuple(sorted(c.get("columns", []))))
-
-    actual_pk_set = {_pk_key(c): c for c in actual_pk}
-    expected_pk_set = {_pk_key(c): c for c in expected_pk}
-
+    # PKs are keyed by (type, sorted column tuple)
+    pk_key = lambda c: (c["type"], tuple(sorted(c.get("columns", []))))
+    actual_pk_set = {pk_key(c): c for c in actual_pk}
+    expected_pk_set = {pk_key(c): c for c in expected_pk}
     missing_pk = [expected_pk_set[k] for k in sorted(set(expected_pk_set) - set(actual_pk_set))]
-    extra_pk = [actual_pk_set[k] for k in sorted(set(actual_pk_set) - set(expected_pk_set))]
+    extra_pk   = [actual_pk_set[k]   for k in sorted(set(actual_pk_set) - set(expected_pk_set))]
 
-    # Compare primary_key_types on matching PKs (warning, not hard issue)
     pk_type_warnings = []
     for key in sorted(set(actual_pk_set) & set(expected_pk_set)):
         a_types = actual_pk_set[key].get("primary_key_types")
         e_types = expected_pk_set[key].get("primary_key_types")
         if a_types != e_types:
-            pk_type_warnings.append({
-                "columns": list(key[1]),
-                "actual": a_types,
-                "expected": e_types,
-            })
+            pk_type_warnings.append({"columns": list(key[1]),
+                                     "actual": a_types, "expected": e_types})
 
-    # FK differences are warnings
-    def _fk_key(c):
-        return (c.get("column", ""), c.get("references_entity", ""))
-
-    actual_fk_set = {_fk_key(c) for c in actual_fk}
-    expected_fk_set = {_fk_key(c) for c in expected_fk}
+    # FK differences as a single warning entry (legacy shape)
+    fk_key = lambda c: (c.get("column", ""), c.get("references_entity", ""))
+    actual_fk_set = {fk_key(c) for c in actual_fk}
+    expected_fk_set = {fk_key(c) for c in expected_fk}
     fk_warnings = []
     if actual_fk_set != expected_fk_set:
         fk_warnings.append({
             "missing_fks": sorted(expected_fk_set - actual_fk_set),
-            "extra_fks": sorted(actual_fk_set - expected_fk_set),
+            "extra_fks":   sorted(actual_fk_set - expected_fk_set),
         })
 
     issue_count = len(missing_pk) + len(extra_pk)
     if issue_count == 0 and not fk_warnings and not pk_type_warnings:
         return {}
-
-    result = {"issue_count": issue_count}
-    if missing_pk:
-        result["missing_pk"] = missing_pk
-    if extra_pk:
-        result["extra_pk"] = extra_pk
-    if pk_type_warnings:
-        result["pk_type_warnings"] = pk_type_warnings
-    if fk_warnings:
-        result["fk_warnings"] = fk_warnings
+    result: Dict[str, Any] = {"issue_count": issue_count}
+    if missing_pk:        result["missing_pk"] = missing_pk
+    if extra_pk:          result["extra_pk"] = extra_pk
+    if pk_type_warnings:  result["pk_type_warnings"] = pk_type_warnings
+    if fk_warnings:       result["fk_warnings"] = fk_warnings
     return result
 
 
-
 def _compare_relationship_types(actual: Dict, expected: Dict) -> Dict:
-    """Compare __relationship_types__ dicts.
-
-    Hard issues: missing/extra relationship types, source/target/property mismatches.
-    Warnings: cardinality differences (consistent with edges/references/embedded).
-    """
+    """__relationship_types__: source/target/properties are hard; cardinality is warning."""
     missing = sorted(set(expected) - set(actual))
-    extra = sorted(set(actual) - set(expected))
-    mismatches = []
-    cardinality_warnings = []
-
+    extra   = sorted(set(actual) - set(expected))
+    mismatches, cardinality_warnings = [], []
     for name in sorted(set(actual) & set(expected)):
-        a = actual[name]
-        e = expected[name]
-        diffs = {}
-        for field in ["source_entity", "target_entity"]:
-            if a.get(field) != e.get(field):
-                diffs[field] = {"actual": a.get(field), "expected": e.get(field)}
-        # Cardinality is a warning (not a hard issue)
+        a, e = actual[name], expected[name]
+        diffs = {f: {"actual": a.get(f), "expected": e.get(f)}
+                 for f in ("source_entity", "target_entity")
+                 if a.get(f) != e.get(f)}
         if a.get("cardinality") != e.get("cardinality"):
-            cardinality_warnings.append({
-                "name": name,
-                "actual": a.get("cardinality"),
-                "expected": e.get("cardinality"),
-            })
-        # Compare relationship properties
-        a_attrs = {attr["name"]: attr["type"] for attr in a.get("properties", [])}
-        e_attrs = {attr["name"]: attr["type"] for attr in e.get("properties", [])}
+            cardinality_warnings.append({"name": name,
+                                         "actual": a.get("cardinality"),
+                                         "expected": e.get("cardinality")})
+        a_attrs = {at["name"]: at["type"] for at in a.get("properties", [])}
+        e_attrs = {at["name"]: at["type"] for at in e.get("properties", [])}
         if a_attrs != e_attrs:
             diffs["properties"] = {"actual": a_attrs, "expected": e_attrs}
         if diffs:
             mismatches.append({"name": name, "diffs": diffs})
-
-    issue_count = len(missing) + len(extra) + len(mismatches)
-    if issue_count == 0 and not cardinality_warnings:
-        return {}
-
-    result = {"issue_count": issue_count}
-    if missing:
-        result["missing"] = missing
-    if extra:
-        result["extra"] = extra
-    if mismatches:
-        result["mismatches"] = mismatches
-    if cardinality_warnings:
-        result["cardinality_warnings"] = cardinality_warnings
-    return result
+    return _pack_diff(missing, extra,
+                      hard={"mismatches": mismatches},
+                      warn={"cardinality_warnings": cardinality_warnings})
 
 
 def _resolve_target_file(config_key: str, target_type: str):

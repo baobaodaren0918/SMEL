@@ -2,7 +2,7 @@
 # Based on André Conrad's meta_model design with extensions
 
 from enum import Enum
-from typing import Dict, List, Optional, Any, Union
+from typing import ClassVar, Dict, List, Optional, Any, Union
 from dataclasses import dataclass, field
 from abc import ABC, abstractmethod
 import json
@@ -92,9 +92,9 @@ class Cardinality(str, Enum):
 
 
 # ============================================================================
-# SMEL STRING <-> META ENUM MAPPINGS
+# SMILE STRING <-> META ENUM MAPPINGS
 # ============================================================================
-# Translate SMEL-script literals into meta-model enum values. Centralized here
+# Translate SMILE-script literals into meta-model enum values. Centralized here
 # so that the transformer, validators, and any future consumer share one
 # canonical vocabulary instead of reaching into SchemaTransformer or cloning
 # the mappings.
@@ -656,6 +656,7 @@ class Constraint(ABC):
 @dataclass
 class UniqueConstraint(Constraint):
     """Unique or Primary Key constraint (from André Conrad)."""
+    kind: ClassVar[str] = "unique"
     is_primary_key: bool
     is_managed: bool
     unique_properties: List[UniqueProperty] = field(default_factory=list)
@@ -685,6 +686,7 @@ class UniqueConstraint(Constraint):
 @dataclass
 class ForeignKeyConstraint(Constraint):
     """Foreign Key constraint (from André Conrad)."""
+    kind: ClassVar[str] = "foreign_key"
     is_managed: bool
     foreign_key_properties: List[ForeignKeyProperty] = field(default_factory=list)
 
@@ -714,6 +716,15 @@ class ForeignKeyConstraint(Constraint):
 
 @dataclass
 class Relationship(ABC):
+    """Base for Reference / Embedded / Edge.
+
+    Each concrete subclass sets a ``kind`` class-level constant
+    ('reference' / 'embedded' / 'edge'), so callers can write
+    ``rel.kind == 'reference'`` instead of ``rel.kind == "reference"`` —
+    cheaper and decoupled from the Python class hierarchy.
+    """
+    kind: ClassVar[str] = "abstract"
+
     cardinality: Cardinality = Cardinality.ONE_TO_ONE
     is_optional: bool = True
     description: Optional[str] = None
@@ -750,6 +761,7 @@ class Relationship(ABC):
 
 @dataclass
 class Reference(Relationship):
+    kind: ClassVar[str] = "reference"
     ref_name: str = ""
     refs_to: str = ""  # Entity name (string only, not object reference)
     edge_properties: List[Property] = field(default_factory=list)
@@ -789,6 +801,7 @@ class Reference(Relationship):
 @dataclass
 class Embedded(Relationship):
     """Embedded/Aggregate relationship for nested documents (MongoDB style)."""
+    kind: ClassVar[str] = "embedded"
     aggr_name: str = ""
     aggregates: str = ""  # Entity name (string only, not object reference)
 
@@ -829,6 +842,7 @@ class Edge(Relationship):
     """Graph edge relationship (from Andre Conrad's paper Figure 2).
     References a RelationshipType by name, linking source to target entity.
     """
+    kind: ClassVar[str] = "edge"
     rel_type_name: str = ""    # Name of the RelationshipType (e.g. "ACTED_IN")
     source_entity: str = ""    # Source entity name
     target_entity: str = ""    # Target entity name
@@ -887,6 +901,10 @@ class EntityType:
     target_entity: Optional[str] = None  # EDGE only: target node entity name
     edge_cardinality: Optional[Cardinality] = None  # EDGE only: relationship cardinality
     description: Optional[str] = None
+    # When True, _normalize_entity_kinds() leaves this entity's entity_kind alone
+    # (set by CAST_ENTITY handler so the user's explicit choice is preserved
+    # through target-paradigm normalization).
+    kind_locked: bool = False
     meta_id: str = field(default_factory=_uid)
 
     @property
@@ -917,17 +935,17 @@ class EntityType:
     def get_primary_key(self) -> Optional[UniqueConstraint]:
         """Get the primary key constraint."""
         for c in self.constraints:
-            if isinstance(c, UniqueConstraint) and c.is_primary_key:
+            if c.kind == "unique" and c.is_primary_key:
                 return c
         return None
 
     def get_unique_constraints(self) -> List[UniqueConstraint]:
         """Get all unique constraints (non-primary)."""
-        return [c for c in self.constraints if isinstance(c, UniqueConstraint) and not c.is_primary_key]
+        return [c for c in self.constraints if c.kind == "unique" and not c.is_primary_key]
 
     def get_foreign_keys(self) -> List[ForeignKeyConstraint]:
         """Get all foreign key constraints."""
-        return [c for c in self.constraints if isinstance(c, ForeignKeyConstraint)]
+        return [c for c in self.constraints if c.kind == "foreign_key"]
 
     # Property methods
     def add_property(self, attr: Property):
@@ -951,11 +969,11 @@ class EntityType:
         self.relationships.append(rel)
 
     def get_references(self) -> List[Reference]:
-        return [r for r in self.relationships if isinstance(r, Reference)]
+        return [r for r in self.relationships if r.kind == "reference"]
 
     def get_embedded(self) -> List[Embedded]:
         """Get all embedded relationships."""
-        return [r for r in self.relationships if isinstance(r, Embedded)]
+        return [r for r in self.relationships if r.kind == "embedded"]
 
     # Backward compatibility alias
     def get_aggregates(self) -> List[Embedded]:
@@ -963,15 +981,15 @@ class EntityType:
 
     def get_edges(self) -> List['Edge']:
         """Get all edge relationships (graph database)."""
-        return [r for r in self.relationships if isinstance(r, Edge)]
+        return [r for r in self.relationships if r.kind == "edge"]
 
     def remove_relationship(self, name: str) -> Optional[Relationship]:
         for i, r in enumerate(self.relationships):
-            if isinstance(r, Reference):
+            if r.kind == "reference":
                 rel_name = r.ref_name
-            elif isinstance(r, Embedded):
+            elif r.kind == "embedded":
                 rel_name = r.aggr_name
-            elif isinstance(r, Edge):
+            elif r.kind == "edge":
                 rel_name = r.rel_type_name
             else:
                 continue

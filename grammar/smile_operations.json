@@ -1,0 +1,534 @@
+{
+  "$comment": "Single source of truth for SMILE operations. Used by schema_diff/script_renderer (server-side) and CodeMirror autocomplete (client-side). Each operation: 'specific' = .smile keyword (underscore form), 'generalized' = .smile_gen keyword (space form). 'template_specific'/'template_generalized' use Python str.format placeholders ({entity}, {field}, etc.). 'snippet' uses the LSP/textmate ${1:label} syntax for editor expansion. 'clauses' each may have: name, values (enum), snippet, optional, when (entity_kind filter), doc.",
+  "version": "1.0",
+  "header": {
+    "migration": {
+      "snippet": "MIGRATION ${1:migration_name}:${2:1.0}\nFROM ${3|RELATIONAL,DOCUMENT,GRAPH,COLUMNAR|} TO ${4|RELATIONAL,DOCUMENT,GRAPH,COLUMNAR|}\nUSING ${5:schema_name} VERSION ${6:1.0}\n\n$0",
+      "template": "MIGRATION {name}:{version}\nFROM {source_type} TO {target_type}\nUSING {schema_name} VERSION {schema_version}"
+    },
+    "evolution": {
+      "snippet": "EVOLUTION ${1:evolution_name}:${2:1.0}\nFROM ${3|RELATIONAL,DOCUMENT,GRAPH,COLUMNAR|} TO ${4|RELATIONAL,DOCUMENT,GRAPH,COLUMNAR|}\nUSING ${5:schema_name} VERSION ${6:1.0} TO ${7:2.0}\n\n$0",
+      "template": "EVOLUTION {name}:{version}\nFROM {source_type} TO {target_type}\nUSING {schema_name} VERSION {schema_version_from} TO {schema_version_to}"
+    }
+  },
+  "enums": {
+    "databaseType": ["RELATIONAL", "DOCUMENT", "GRAPH", "COLUMNAR"],
+    "cardinalityType": ["ONE_TO_ONE", "ONE_TO_MANY", "ZERO_TO_ONE", "ZERO_TO_MANY"],
+    "constraintKeyType": ["PRIMARY KEY", "UNIQUE KEY", "PARTITION KEY", "CLUSTERING KEY", "NODE KEY", "DOCUMENT_ID"],
+    "dataType": ["String", "Text", "Int", "Integer", "Long", "Double", "Float", "Decimal", "Boolean", "Date", "DateTime", "Timestamp", "UUID", "Binary"]
+  },
+  "operations": {
+    "ADD_PROPERTY": {
+      "category": "add",
+      "specific": "ADD_PROPERTY",
+      "generalized": "ADD PROPERTY",
+      "doc": "Add a new property to an entity",
+      "syntax_specific": "ADD_PROPERTY <name> [TO <entity>] [WITH TYPE <dataType>] [WITH DEFAULT <literal>] [NOT NULL]",
+      "syntax_generalized": "ADD PROPERTY <name> [TO <entity>] [WITH TYPE <dataType>] [WITH DEFAULT <literal>] [NOT NULL]",
+      "snippet_specific": "ADD_PROPERTY ${1:property_name} TO ${2:entity} WITH TYPE ${3|String,Text,Integer,Long,Double,Decimal,Boolean,Date,Timestamp,UUID|}$0",
+      "snippet_generalized": "ADD PROPERTY ${1:property_name} TO ${2:entity} WITH TYPE ${3|String,Text,Integer,Long,Double,Decimal,Boolean,Date,Timestamp,UUID|}$0",
+      "template_specific": "ADD_PROPERTY {name} TO {entity}{type_clause}{default_clause}{notnull_clause}",
+      "template_generalized": "ADD PROPERTY {name} TO {entity}{type_clause}{default_clause}{notnull_clause}",
+      "clauses": [
+        {"name": "WITH TYPE", "values_ref": "dataType", "optional": true, "doc": "Property data type"},
+        {"name": "WITH DEFAULT", "snippet": "WITH DEFAULT ${1:value}", "optional": true, "doc": "Default value literal"},
+        {"name": "NOT NULL", "optional": true, "doc": "Disallow null values"}
+      ]
+    },
+
+    "ADD_FOREIGN_KEY": {
+      "category": "add",
+      "specific": "ADD_FOREIGN_KEY",
+      "generalized": "ADD FOREIGN KEY",
+      "doc": "Add a foreign key constraint with REFERENCES",
+      "syntax_specific": "ADD_FOREIGN_KEY <entity.field> REFERENCES <entity>(<field>) [WITH CARDINALITY <type>] [USING KEY <name>] [WHERE <cond>]",
+      "syntax_generalized": "ADD FOREIGN KEY <entity.field> REFERENCES <entity>(<field>) [WITH CARDINALITY <type>] [USING KEY <name>] [WHERE <cond>]",
+      "snippet_specific": "ADD_FOREIGN_KEY ${1:entity}.${2:field} REFERENCES ${3:target_entity}(${4:target_field})$0",
+      "snippet_generalized": "ADD FOREIGN KEY ${1:entity}.${2:field} REFERENCES ${3:target_entity}(${4:target_field})$0",
+      "template_specific": "ADD_FOREIGN_KEY {entity}.{field} REFERENCES {target_entity}({target_field}){cardinality_clause}",
+      "template_generalized": "ADD FOREIGN KEY {entity}.{field} REFERENCES {target_entity}({target_field}){cardinality_clause}",
+      "clauses": [
+        {"name": "REFERENCES", "snippet": "REFERENCES ${1:target_entity}(${2:target_field})", "optional": false, "doc": "Target entity and column the FK references"},
+        {"name": "WITH CARDINALITY", "values_ref": "cardinalityType", "optional": true, "doc": "Reference multiplicity"},
+        {"name": "USING KEY", "snippet": "USING KEY ${1:key_name}", "optional": true, "doc": "Name an existing index/key to use"},
+        {"name": "WHERE", "snippet": "WHERE ${1:cond}", "optional": true, "doc": "Optional join/predicate clause"}
+      ]
+    },
+
+    "ADD_PRIMARY_KEY": {
+      "category": "add",
+      "specific": "ADD_PRIMARY_KEY",
+      "generalized": "ADD PRIMARY KEY",
+      "doc": "Add a primary key constraint",
+      "syntax_specific": "ADD_PRIMARY_KEY <entity.field|(field1,field2)> [AS <dataType>] [TO <entity>]",
+      "syntax_generalized": "ADD PRIMARY KEY <entity.field|(field1,field2)> [AS <dataType>] [TO <entity>]",
+      "snippet_specific": "ADD_PRIMARY_KEY ${1:entity}.${2:id} AS ${3|String,Integer,Long,UUID|}$0",
+      "snippet_generalized": "ADD PRIMARY KEY ${1:entity}.${2:id} AS ${3|String,Integer,Long,UUID|}$0",
+      "template_specific": "ADD_PRIMARY_KEY {key_columns}{as_clause}{to_clause}",
+      "template_generalized": "ADD PRIMARY KEY {key_columns}{as_clause}{to_clause}",
+      "clauses": [
+        {"name": "AS", "values_ref": "dataType", "optional": true, "doc": "Data type of the key"},
+        {"name": "TO", "snippet": "TO ${1:entity}", "optional": true, "doc": "Target entity (legacy)"}
+      ]
+    },
+
+    "ADD_UNIQUE_KEY": {
+      "category": "add",
+      "specific": "ADD_UNIQUE_KEY",
+      "generalized": "ADD UNIQUE KEY",
+      "doc": "Add a unique constraint",
+      "syntax_specific": "ADD_UNIQUE_KEY <entity.field|(f1,f2)> [AS <dataType>] [TO <entity>]",
+      "syntax_generalized": "ADD UNIQUE KEY <entity.field|(f1,f2)> [AS <dataType>] [TO <entity>]",
+      "snippet_specific": "ADD_UNIQUE_KEY ${1:entity}.${2:field}$0",
+      "snippet_generalized": "ADD UNIQUE KEY ${1:entity}.${2:field}$0",
+      "template_specific": "ADD_UNIQUE_KEY {key_columns}{as_clause}{to_clause}",
+      "template_generalized": "ADD UNIQUE KEY {key_columns}{as_clause}{to_clause}",
+      "clauses": [
+        {"name": "AS", "values_ref": "dataType", "optional": true},
+        {"name": "TO", "snippet": "TO ${1:entity}", "optional": true}
+      ]
+    },
+
+    "ADD_PARTITION_KEY": {
+      "category": "add",
+      "specific": "ADD_PARTITION_KEY",
+      "generalized": "ADD PARTITION KEY",
+      "doc": "Add a Cassandra partition key",
+      "syntax_specific": "ADD_PARTITION_KEY <entity.field|(f1,f2)> [AS <dataType>] [TO <entity>]",
+      "syntax_generalized": "ADD PARTITION KEY <entity.field|(f1,f2)> [AS <dataType>] [TO <entity>]",
+      "snippet_specific": "ADD_PARTITION_KEY ${1:entity}.${2:field}$0",
+      "snippet_generalized": "ADD PARTITION KEY ${1:entity}.${2:field}$0",
+      "template_specific": "ADD_PARTITION_KEY {key_columns}{as_clause}{to_clause}",
+      "template_generalized": "ADD PARTITION KEY {key_columns}{as_clause}{to_clause}",
+      "when_target": ["columnar"],
+      "clauses": [
+        {"name": "AS", "values_ref": "dataType", "optional": true},
+        {"name": "TO", "snippet": "TO ${1:entity}", "optional": true}
+      ]
+    },
+
+    "ADD_CLUSTERING_KEY": {
+      "category": "add",
+      "specific": "ADD_CLUSTERING_KEY",
+      "generalized": "ADD CLUSTERING KEY",
+      "doc": "Add a Cassandra clustering key",
+      "syntax_specific": "ADD_CLUSTERING_KEY <entity.field> [AS <dataType>] [TO <entity>]",
+      "syntax_generalized": "ADD CLUSTERING KEY <entity.field> [AS <dataType>] [TO <entity>]",
+      "snippet_specific": "ADD_CLUSTERING_KEY ${1:entity}.${2:field}$0",
+      "snippet_generalized": "ADD CLUSTERING KEY ${1:entity}.${2:field}$0",
+      "template_specific": "ADD_CLUSTERING_KEY {key_columns}{as_clause}{to_clause}",
+      "template_generalized": "ADD CLUSTERING KEY {key_columns}{as_clause}{to_clause}",
+      "when_target": ["columnar"],
+      "clauses": [
+        {"name": "AS", "values_ref": "dataType", "optional": true},
+        {"name": "TO", "snippet": "TO ${1:entity}", "optional": true}
+      ]
+    },
+
+    "ADD_LABEL": {
+      "category": "add",
+      "specific": "ADD_LABEL",
+      "generalized": "ADD LABEL",
+      "doc": "Add a Neo4j label to a node",
+      "syntax_specific": "ADD_LABEL <label> TO <entity>",
+      "syntax_generalized": "ADD LABEL <label> TO <entity>",
+      "snippet_specific": "ADD_LABEL ${1:Label} TO ${2:Entity}$0",
+      "snippet_generalized": "ADD LABEL ${1:Label} TO ${2:Entity}$0",
+      "template_specific": "ADD_LABEL {label} TO {entity}",
+      "template_generalized": "ADD LABEL {label} TO {entity}",
+      "when_target": ["graph"]
+    },
+
+    "ADD_EMBEDDED": {
+      "category": "add",
+      "specific": "ADD_EMBEDDED",
+      "generalized": "ADD EMBEDDED",
+      "doc": "Add an embedded object relationship (MongoDB style)",
+      "syntax_specific": "ADD_EMBEDDED <name> TO <entity> [WITH CARDINALITY <type>] [WITH STRUCTURE (f1, f2, ...)]",
+      "syntax_generalized": "ADD EMBEDDED <name> TO <entity> [WITH CARDINALITY <type>] [WITH STRUCTURE (f1, f2, ...)]",
+      "snippet_specific": "ADD_EMBEDDED ${1:embed_name} TO ${2:entity} WITH CARDINALITY ${3|ONE_TO_ONE,ZERO_TO_ONE,ONE_TO_MANY,ZERO_TO_MANY|}$0",
+      "snippet_generalized": "ADD EMBEDDED ${1:embed_name} TO ${2:entity} WITH CARDINALITY ${3|ONE_TO_ONE,ZERO_TO_ONE,ONE_TO_MANY,ZERO_TO_MANY|}$0",
+      "template_specific": "ADD_EMBEDDED {name} TO {entity}{cardinality_clause}{structure_clause}",
+      "template_generalized": "ADD EMBEDDED {name} TO {entity}{cardinality_clause}{structure_clause}",
+      "when_target": ["document"],
+      "clauses": [
+        {"name": "WITH CARDINALITY", "values_ref": "cardinalityType", "optional": true},
+        {"name": "WITH STRUCTURE", "snippet": "WITH STRUCTURE (${1:field1}, ${2:field2})", "optional": true}
+      ]
+    },
+
+    "ADD_ENTITY": {
+      "category": "add",
+      "specific": "ADD_ENTITY",
+      "generalized": "ADD ENTITY",
+      "doc": "Add a new entity (table/document/node) or edge (graph relationship type)",
+      "syntax_specific": "ADD_ENTITY <name> [FROM <src> TO <tgt>] [WITH CARDINALITY <type>] [WITH PROPERTIES (n1 T1, n2 T2, ...)] [WITH KEY <name>]",
+      "syntax_generalized": "ADD ENTITY <name> [FROM <src> TO <tgt>] [WITH CARDINALITY <type>] [WITH PROPERTIES (n1 T1, n2 T2, ...)] [WITH KEY <name>]",
+      "snippet_specific": "ADD_ENTITY ${1:EntityName} WITH PROPERTIES (${2:id} ${3|String,Integer,UUID|}, ${4:name} ${5|String,Text|})$0",
+      "snippet_generalized": "ADD ENTITY ${1:EntityName} WITH PROPERTIES (${2:id} ${3|String,Integer,UUID|}, ${4:name} ${5|String,Text|})$0",
+      "template_specific": "ADD_ENTITY {name}{edge_endpoints}{cardinality_clause}{properties_clause}{key_clause}",
+      "template_generalized": "ADD ENTITY {name}{edge_endpoints}{cardinality_clause}{properties_clause}{key_clause}",
+      "clauses": [
+        {"name": "FROM ... TO ...", "snippet": "FROM ${1:source_entity} TO ${2:target_entity}", "optional": true, "doc": "Edge endpoints (graph database only)"},
+        {"name": "WITH CARDINALITY", "values_ref": "cardinalityType", "optional": true},
+        {"name": "WITH PROPERTIES", "snippet": "WITH PROPERTIES (${1:name} ${2|String,Integer|})", "optional": true},
+        {"name": "WITH KEY", "snippet": "WITH KEY ${1:key_name}", "optional": true}
+      ]
+    },
+
+    "DELETE_PROPERTY": {
+      "category": "delete",
+      "specific": "DELETE_PROPERTY",
+      "generalized": "DELETE PROPERTY",
+      "doc": "Remove a property from an entity",
+      "syntax_specific": "DELETE_PROPERTY <entity.field>",
+      "syntax_generalized": "DELETE PROPERTY <entity.field>",
+      "snippet_specific": "DELETE_PROPERTY ${1:entity}.${2:field}$0",
+      "snippet_generalized": "DELETE PROPERTY ${1:entity}.${2:field}$0",
+      "template_specific": "DELETE_PROPERTY {entity}.{field}",
+      "template_generalized": "DELETE PROPERTY {entity}.{field}"
+    },
+
+    "DELETE_FOREIGN_KEY": {
+      "category": "delete",
+      "specific": "DELETE_FOREIGN_KEY",
+      "generalized": "DELETE FOREIGN KEY",
+      "doc": "Remove a foreign key constraint",
+      "syntax_specific": "DELETE_FOREIGN_KEY <entity.field>",
+      "syntax_generalized": "DELETE FOREIGN KEY <entity.field>",
+      "snippet_specific": "DELETE_FOREIGN_KEY ${1:entity}.${2:field}$0",
+      "snippet_generalized": "DELETE FOREIGN KEY ${1:entity}.${2:field}$0",
+      "template_specific": "DELETE_FOREIGN_KEY {entity}.{field}",
+      "template_generalized": "DELETE FOREIGN KEY {entity}.{field}"
+    },
+
+    "DELETE_EMBEDDED": {
+      "category": "delete",
+      "specific": "DELETE_EMBEDDED",
+      "generalized": "DELETE EMBEDDED",
+      "doc": "Remove an embedded relationship",
+      "syntax_specific": "DELETE_EMBEDDED <entity.field>",
+      "syntax_generalized": "DELETE EMBEDDED <entity.field>",
+      "snippet_specific": "DELETE_EMBEDDED ${1:entity}.${2:field}$0",
+      "snippet_generalized": "DELETE EMBEDDED ${1:entity}.${2:field}$0",
+      "template_specific": "DELETE_EMBEDDED {entity}.{field}",
+      "template_generalized": "DELETE EMBEDDED {entity}.{field}"
+    },
+
+    "DELETE_ENTITY": {
+      "category": "delete",
+      "specific": "DELETE_ENTITY",
+      "generalized": "DELETE ENTITY",
+      "doc": "Remove an entity (table/document/node)",
+      "syntax_specific": "DELETE_ENTITY <name>",
+      "syntax_generalized": "DELETE ENTITY <name>",
+      "snippet_specific": "DELETE_ENTITY ${1:entity}$0",
+      "snippet_generalized": "DELETE ENTITY ${1:entity}$0",
+      "template_specific": "DELETE_ENTITY {name}",
+      "template_generalized": "DELETE ENTITY {name}"
+    },
+
+    "DELETE_PRIMARY_KEY": {
+      "category": "delete",
+      "specific": "DELETE_PRIMARY_KEY",
+      "generalized": "DELETE PRIMARY KEY",
+      "doc": "Remove a primary key constraint",
+      "syntax_specific": "DELETE_PRIMARY_KEY <field|(f1,f2)> [FROM <entity>]",
+      "syntax_generalized": "DELETE PRIMARY KEY <field|(f1,f2)> [FROM <entity>]",
+      "snippet_specific": "DELETE_PRIMARY_KEY ${1:field} FROM ${2:entity}$0",
+      "snippet_generalized": "DELETE PRIMARY KEY ${1:field} FROM ${2:entity}$0",
+      "template_specific": "DELETE_PRIMARY_KEY {key_columns}{from_clause}",
+      "template_generalized": "DELETE PRIMARY KEY {key_columns}{from_clause}"
+    },
+
+    "DELETE_UNIQUE_KEY": {
+      "category": "delete",
+      "specific": "DELETE_UNIQUE_KEY",
+      "generalized": "DELETE UNIQUE KEY",
+      "doc": "Remove a unique constraint",
+      "syntax_specific": "DELETE_UNIQUE_KEY <field> [FROM <entity>]",
+      "syntax_generalized": "DELETE UNIQUE KEY <field> [FROM <entity>]",
+      "snippet_specific": "DELETE_UNIQUE_KEY ${1:field} FROM ${2:entity}$0",
+      "snippet_generalized": "DELETE UNIQUE KEY ${1:field} FROM ${2:entity}$0",
+      "template_specific": "DELETE_UNIQUE_KEY {key_columns}{from_clause}",
+      "template_generalized": "DELETE UNIQUE KEY {key_columns}{from_clause}"
+    },
+
+    "DELETE_PARTITION_KEY": {
+      "category": "delete",
+      "specific": "DELETE_PARTITION_KEY",
+      "generalized": "DELETE PARTITION KEY",
+      "doc": "Remove a partition key (Cassandra)",
+      "syntax_specific": "DELETE_PARTITION_KEY <field> [FROM <entity>]",
+      "syntax_generalized": "DELETE PARTITION KEY <field> [FROM <entity>]",
+      "snippet_specific": "DELETE_PARTITION_KEY ${1:field} FROM ${2:entity}$0",
+      "snippet_generalized": "DELETE PARTITION KEY ${1:field} FROM ${2:entity}$0",
+      "template_specific": "DELETE_PARTITION_KEY {key_columns}{from_clause}",
+      "template_generalized": "DELETE PARTITION KEY {key_columns}{from_clause}"
+    },
+
+    "DELETE_CLUSTERING_KEY": {
+      "category": "delete",
+      "specific": "DELETE_CLUSTERING_KEY",
+      "generalized": "DELETE CLUSTERING KEY",
+      "doc": "Remove a clustering key (Cassandra)",
+      "syntax_specific": "DELETE_CLUSTERING_KEY <field> [FROM <entity>]",
+      "syntax_generalized": "DELETE CLUSTERING KEY <field> [FROM <entity>]",
+      "snippet_specific": "DELETE_CLUSTERING_KEY ${1:field} FROM ${2:entity}$0",
+      "snippet_generalized": "DELETE CLUSTERING KEY ${1:field} FROM ${2:entity}$0",
+      "template_specific": "DELETE_CLUSTERING_KEY {key_columns}{from_clause}",
+      "template_generalized": "DELETE CLUSTERING KEY {key_columns}{from_clause}"
+    },
+
+    "DELETE_LABEL": {
+      "category": "delete",
+      "specific": "DELETE_LABEL",
+      "generalized": "DELETE LABEL",
+      "doc": "Remove a Neo4j label from a node",
+      "syntax_specific": "DELETE_LABEL <label> FROM <entity>",
+      "syntax_generalized": "DELETE LABEL <label> FROM <entity>",
+      "snippet_specific": "DELETE_LABEL ${1:Label} FROM ${2:Entity}$0",
+      "snippet_generalized": "DELETE LABEL ${1:Label} FROM ${2:Entity}$0",
+      "template_specific": "DELETE_LABEL {label} FROM {entity}",
+      "template_generalized": "DELETE LABEL {label} FROM {entity}",
+      "when_target": ["graph"]
+    },
+
+    "RENAME_PROPERTY": {
+      "category": "rename",
+      "specific": "RENAME_PROPERTY",
+      "generalized": "RENAME PROPERTY",
+      "doc": "Rename a property within an entity",
+      "syntax_specific": "RENAME_PROPERTY <old> TO <new> [IN <entity>]",
+      "syntax_generalized": "RENAME PROPERTY <old> TO <new> [IN <entity>]",
+      "snippet_specific": "RENAME_PROPERTY ${1:old_name} TO ${2:new_name} IN ${3:entity}$0",
+      "snippet_generalized": "RENAME PROPERTY ${1:old_name} TO ${2:new_name} IN ${3:entity}$0",
+      "template_specific": "RENAME_PROPERTY {old_name} TO {new_name}{in_clause}",
+      "template_generalized": "RENAME PROPERTY {old_name} TO {new_name}{in_clause}"
+    },
+
+    "RENAME_ENTITY": {
+      "category": "rename",
+      "specific": "RENAME_ENTITY",
+      "generalized": "RENAME ENTITY",
+      "doc": "Rename an entity",
+      "syntax_specific": "RENAME_ENTITY <old> TO <new>",
+      "syntax_generalized": "RENAME ENTITY <old> TO <new>",
+      "snippet_specific": "RENAME_ENTITY ${1:old_name} TO ${2:new_name}$0",
+      "snippet_generalized": "RENAME ENTITY ${1:old_name} TO ${2:new_name}$0",
+      "template_specific": "RENAME_ENTITY {old_name} TO {new_name}",
+      "template_generalized": "RENAME ENTITY {old_name} TO {new_name}"
+    },
+
+    "FLATTEN": {
+      "category": "structure",
+      "specific": "FLATTEN",
+      "generalized": "FLATTEN",
+      "doc": "Flatten a nested object: its fields become prefixed columns of the parent",
+      "syntax_specific": "FLATTEN <entity.nested>",
+      "syntax_generalized": "FLATTEN <entity.nested>",
+      "snippet_specific": "FLATTEN ${1:entity}.${2:nested}$0",
+      "snippet_generalized": "FLATTEN ${1:entity}.${2:nested}$0",
+      "template_specific": "FLATTEN {entity}.{nested}",
+      "template_generalized": "FLATTEN {entity}.{nested}"
+    },
+
+    "UNFLATTEN": {
+      "category": "structure",
+      "specific": "UNFLATTEN",
+      "generalized": "UNFLATTEN",
+      "doc": "Combine flat fields into a nested object (reverse of FLATTEN)",
+      "syntax_specific": "UNFLATTEN <entity>:<f1>, <f2>, ... AS <nested_name>",
+      "syntax_generalized": "UNFLATTEN <entity>:<f1>, <f2>, ... AS <nested_name>",
+      "snippet_specific": "UNFLATTEN ${1:entity}:${2:f1}, ${3:f2} AS ${4:nested_name}$0",
+      "snippet_generalized": "UNFLATTEN ${1:entity}:${2:f1}, ${3:f2} AS ${4:nested_name}$0",
+      "template_specific": "UNFLATTEN {entity}:{fields} AS {nested_name}",
+      "template_generalized": "UNFLATTEN {entity}:{fields} AS {nested_name}"
+    },
+
+    "UNNEST": {
+      "category": "structure",
+      "specific": "UNNEST",
+      "generalized": "UNNEST",
+      "doc": "Extract a nested object to a separate entity (normalization)",
+      "syntax_specific": "UNNEST <entity.nested>:<f1>, <f2>, ... AS <new_entity> [WITH <src.field> TO <new.field>, ...]",
+      "syntax_generalized": "UNNEST <entity.nested>:<f1>, <f2>, ... AS <new_entity> [WITH <src.field> TO <new.field>, ...]",
+      "snippet_specific": "UNNEST ${1:entity}.${2:nested}:${3:f1}, ${4:f2} AS ${5:new_entity} WITH ${1:entity}.${6:id} TO ${5:new_entity}.${7:fk}$0",
+      "snippet_generalized": "UNNEST ${1:entity}.${2:nested}:${3:f1}, ${4:f2} AS ${5:new_entity} WITH ${1:entity}.${6:id} TO ${5:new_entity}.${7:fk}$0",
+      "template_specific": "UNNEST {entity}.{nested}:{fields} AS {new_entity}{carry_clause}",
+      "template_generalized": "UNNEST {entity}.{nested}:{fields} AS {new_entity}{carry_clause}"
+    },
+
+    "NEST": {
+      "category": "structure",
+      "specific": "NEST",
+      "generalized": "NEST",
+      "doc": "Embed a separate entity into a parent as a nested object (denormalization)",
+      "syntax_specific": "NEST <source>:<f1>, <f2>, ... IN <target.field> WHERE <cond>",
+      "syntax_generalized": "NEST <source>:<f1>, <f2>, ... IN <target.field> WHERE <cond>",
+      "snippet_specific": "NEST ${1:source_entity}:${2:f1}, ${3:f2} IN ${4:parent}.${5:embed_name} WHERE ${4:parent}.${6:fk} = ${1:source_entity}.${7:id}$0",
+      "snippet_generalized": "NEST ${1:source_entity}:${2:f1}, ${3:f2} IN ${4:parent}.${5:embed_name} WHERE ${4:parent}.${6:fk} = ${1:source_entity}.${7:id}$0",
+      "template_specific": "NEST {source}:{fields} IN {parent}.{embed_name} WHERE {cond}",
+      "template_generalized": "NEST {source}:{fields} IN {parent}.{embed_name} WHERE {cond}"
+    },
+
+    "WIND": {
+      "category": "structure",
+      "specific": "WIND",
+      "generalized": "WIND",
+      "doc": "Convert a scalar property back to an array (reverse of UNWIND)",
+      "syntax_specific": "WIND <entity.field>",
+      "syntax_generalized": "WIND <entity.field>",
+      "snippet_specific": "WIND ${1:entity}.${2:field}$0",
+      "snippet_generalized": "WIND ${1:entity}.${2:field}$0",
+      "template_specific": "WIND {entity}.{field}",
+      "template_generalized": "WIND {entity}.{field}"
+    },
+
+    "UNWIND": {
+      "category": "structure",
+      "specific": "UNWIND",
+      "generalized": "UNWIND",
+      "doc": "Expand an array field into multiple rows (or into a new entity)",
+      "syntax_specific": "UNWIND <entity.field> [INTO <new_entity>]",
+      "syntax_generalized": "UNWIND <entity.field> [INTO <new_entity>]",
+      "snippet_specific": "UNWIND ${1:entity}.${2:field} INTO ${3:new_entity}$0",
+      "snippet_generalized": "UNWIND ${1:entity}.${2:field} INTO ${3:new_entity}$0",
+      "template_specific": "UNWIND {entity}.{field}{into_clause}",
+      "template_generalized": "UNWIND {entity}.{field}{into_clause}"
+    },
+
+    "COPY_PROPERTY": {
+      "category": "simple",
+      "specific": "COPY_PROPERTY",
+      "generalized": "COPY PROPERTY",
+      "doc": "Duplicate a property from one entity to another (keeps the original)",
+      "syntax_specific": "COPY_PROPERTY <name> FROM <src_entity> TO <dst_entity>",
+      "syntax_generalized": "COPY PROPERTY <name> FROM <src_entity> TO <dst_entity>",
+      "snippet_specific": "COPY_PROPERTY ${1:property} FROM ${2:src} TO ${3:dst}$0",
+      "snippet_generalized": "COPY PROPERTY ${1:property} FROM ${2:src} TO ${3:dst}$0",
+      "template_specific": "COPY_PROPERTY {name} FROM {src} TO {dst}",
+      "template_generalized": "COPY PROPERTY {name} FROM {src} TO {dst}"
+    },
+
+    "COPY_ENTITY": {
+      "category": "simple",
+      "specific": "COPY_ENTITY",
+      "generalized": "COPY ENTITY",
+      "doc": "Duplicate an entire entity",
+      "syntax_specific": "COPY_ENTITY <name> AS <new_name> [FROM <src> TO <tgt>]",
+      "syntax_generalized": "COPY ENTITY <name> AS <new_name> [FROM <src> TO <tgt>]",
+      "snippet_specific": "COPY_ENTITY ${1:source_entity} AS ${2:new_entity}$0",
+      "snippet_generalized": "COPY ENTITY ${1:source_entity} AS ${2:new_entity}$0",
+      "template_specific": "COPY_ENTITY {name} AS {new_name}{edge_endpoints}",
+      "template_generalized": "COPY ENTITY {name} AS {new_name}{edge_endpoints}"
+    },
+
+    "MOVE_PROPERTY": {
+      "category": "simple",
+      "specific": "MOVE_PROPERTY",
+      "generalized": "MOVE PROPERTY",
+      "doc": "Relocate a property to another entity (removes the original)",
+      "syntax_specific": "MOVE_PROPERTY <name> FROM <src> TO <dst>",
+      "syntax_generalized": "MOVE PROPERTY <name> FROM <src> TO <dst>",
+      "snippet_specific": "MOVE_PROPERTY ${1:property} FROM ${2:src} TO ${3:dst}$0",
+      "snippet_generalized": "MOVE PROPERTY ${1:property} FROM ${2:src} TO ${3:dst}$0",
+      "template_specific": "MOVE_PROPERTY {name} FROM {src} TO {dst}",
+      "template_generalized": "MOVE PROPERTY {name} FROM {src} TO {dst}"
+    },
+
+    "MERGE": {
+      "category": "simple",
+      "specific": "MERGE",
+      "generalized": "MERGE",
+      "doc": "Combine two entities into one new entity",
+      "syntax_specific": "MERGE <A>, <B> INTO <C> [AS <alias>]",
+      "syntax_generalized": "MERGE <A>, <B> INTO <C> [AS <alias>]",
+      "snippet_specific": "MERGE ${1:entityA}, ${2:entityB} INTO ${3:merged}$0",
+      "snippet_generalized": "MERGE ${1:entityA}, ${2:entityB} INTO ${3:merged}$0",
+      "template_specific": "MERGE {a}, {b} INTO {c}{as_clause}",
+      "template_generalized": "MERGE {a}, {b} INTO {c}{as_clause}"
+    },
+
+    "SPLIT": {
+      "category": "simple",
+      "specific": "SPLIT",
+      "generalized": "SPLIT",
+      "doc": "Divide one entity into multiple separate entities",
+      "syntax_specific": "SPLIT <entity> INTO <part1>:<f1,f2>; <part2>:<f3,f4>",
+      "syntax_generalized": "SPLIT <entity> INTO <part1>:<f1,f2>; <part2>:<f3,f4>",
+      "snippet_specific": "SPLIT ${1:entity} INTO ${2:part1}:${3:id}, ${4:f1}; ${5:part2}:${3:id}, ${6:f2}$0",
+      "snippet_generalized": "SPLIT ${1:entity} INTO ${2:part1}:${3:id}, ${4:f1}; ${5:part2}:${3:id}, ${6:f2}$0",
+      "template_specific": "SPLIT {entity} INTO {parts}",
+      "template_generalized": "SPLIT {entity} INTO {parts}"
+    },
+
+    "CAST_PROPERTY": {
+      "category": "cast",
+      "specific": "CAST_PROPERTY",
+      "generalized": "CAST PROPERTY",
+      "doc": "Change the data type of a property",
+      "syntax_specific": "CAST_PROPERTY <entity.field> TO <dataType>",
+      "syntax_generalized": "CAST PROPERTY <entity.field> TO <dataType>",
+      "snippet_specific": "CAST_PROPERTY ${1:entity}.${2:field} TO ${3|String,Integer,Long,Double,Decimal,Boolean,Date,Timestamp,UUID|}$0",
+      "snippet_generalized": "CAST PROPERTY ${1:entity}.${2:field} TO ${3|String,Integer,Long,Double,Decimal,Boolean,Date,Timestamp,UUID|}$0",
+      "template_specific": "CAST_PROPERTY {entity}.{field} TO {data_type}",
+      "template_generalized": "CAST PROPERTY {entity}.{field} TO {data_type}"
+    },
+
+    "CAST_CONSTRAINT": {
+      "category": "cast",
+      "specific": "CAST_CONSTRAINT",
+      "generalized": "CAST CONSTRAINT",
+      "doc": "Change the type of a constraint (e.g., to PARTITION KEY)",
+      "syntax_specific": "CAST_CONSTRAINT <entity.field> TO <constraintKeyType>",
+      "syntax_generalized": "CAST CONSTRAINT <entity.field> TO <constraintKeyType>",
+      "snippet_specific": "CAST_CONSTRAINT ${1:entity}.${2:field} TO ${3|PRIMARY KEY,UNIQUE KEY,PARTITION KEY,CLUSTERING KEY,NODE KEY,DOCUMENT_ID|}$0",
+      "snippet_generalized": "CAST CONSTRAINT ${1:entity}.${2:field} TO ${3|PRIMARY KEY,UNIQUE KEY,PARTITION KEY,CLUSTERING KEY,NODE KEY,DOCUMENT_ID|}$0",
+      "template_specific": "CAST_CONSTRAINT {entity}.{field} TO {constraint_type}",
+      "template_generalized": "CAST CONSTRAINT {entity}.{field} TO {constraint_type}"
+    },
+
+    "CAST_ENTITY": {
+      "category": "cast",
+      "specific": "CAST_ENTITY",
+      "generalized": "CAST ENTITY",
+      "doc": "Change the entity_kind of an entity (cross-paradigm)",
+      "syntax_specific": "CAST_ENTITY <entity> TO <databaseType>",
+      "syntax_generalized": "CAST ENTITY <entity> TO <databaseType>",
+      "snippet_specific": "CAST_ENTITY ${1:entity} TO ${2|RELATIONAL,DOCUMENT,GRAPH,COLUMNAR|}$0",
+      "snippet_generalized": "CAST ENTITY ${1:entity} TO ${2|RELATIONAL,DOCUMENT,GRAPH,COLUMNAR|}$0",
+      "template_specific": "CAST_ENTITY {entity} TO {database_type}",
+      "template_generalized": "CAST ENTITY {entity} TO {database_type}"
+    },
+
+    "RECARD": {
+      "category": "cast",
+      "specific": "RECARD",
+      "generalized": "RECARD",
+      "doc": "Change the cardinality of a reference",
+      "syntax_specific": "RECARD <entity.field> TO <cardinalityType>",
+      "syntax_generalized": "RECARD <entity.field> TO <cardinalityType>",
+      "snippet_specific": "RECARD ${1:entity}.${2:field} TO ${3|ONE_TO_ONE,ONE_TO_MANY,ZERO_TO_ONE,ZERO_TO_MANY|}$0",
+      "snippet_generalized": "RECARD ${1:entity}.${2:field} TO ${3|ONE_TO_ONE,ONE_TO_MANY,ZERO_TO_ONE,ZERO_TO_MANY|}$0",
+      "template_specific": "RECARD {entity}.{field} TO {cardinality}",
+      "template_generalized": "RECARD {entity}.{field} TO {cardinality}"
+    },
+
+    "TRANSFORM": {
+      "category": "structure",
+      "specific": "TRANSFORM",
+      "generalized": "TRANSFORM",
+      "doc": "Transform an entity between node and edge (graph database)",
+      "syntax_specific": "TRANSFORM <entity> INTO RELATIONSHIP FROM <src> TO <tgt> [WITH CARDINALITY <type>]\nTRANSFORM <entity> INTO ENTITY",
+      "syntax_generalized": "TRANSFORM <entity> INTO RELATIONSHIP FROM <src> TO <tgt> [WITH CARDINALITY <type>]\nTRANSFORM <entity> INTO ENTITY",
+      "snippet_specific": "TRANSFORM ${1:entity} INTO ${2|RELATIONSHIP FROM src TO tgt,ENTITY|}$0",
+      "snippet_generalized": "TRANSFORM ${1:entity} INTO ${2|RELATIONSHIP FROM src TO tgt,ENTITY|}$0",
+      "template_specific_to_relationship": "TRANSFORM {entity} INTO RELATIONSHIP FROM {source} TO {target}{cardinality_clause}",
+      "template_generalized_to_relationship": "TRANSFORM {entity} INTO RELATIONSHIP FROM {source} TO {target}{cardinality_clause}",
+      "template_specific_to_entity": "TRANSFORM {entity} INTO ENTITY",
+      "template_generalized_to_entity": "TRANSFORM {entity} INTO ENTITY",
+      "when_target": ["graph"]
+    }
+  }
+}

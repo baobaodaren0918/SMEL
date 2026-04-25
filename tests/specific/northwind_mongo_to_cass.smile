@@ -1,0 +1,261 @@
+-- SMILE Northwind: MongoDB -> Cassandra (Cross-model Migration)
+-- Orders Document (multi-level nested objects + arrays) -> Wide-column Tables
+-- Direction: Denormalized (Embedded) -> Columnar (query-driven partition/clustering keys)
+--
+-- Pipeline: Source MongoDB -> Reverse Engineering -> Meta V1 (Document)
+--           -> SMILE Operations (this script) -> Meta V2 (Columnar)
+--           -> Forward Engineering -> Target Cassandra
+--
+-- Operation Semantics:
+--   UNNEST:             Extract nested object to separate entity (normalization)
+--   FLATTEN:            Flatten nested object fields into same entity (reduce depth by 1)
+--   ADD_PARTITION_KEY:  Define partition key for query-driven data distribution
+--   ADD_CLUSTERING_KEY: Define clustering key for sort order within partition
+
+MIGRATION northwind_mongo_to_cass:1.0
+FROM DOCUMENT TO COLUMNAR
+USING adapted_northwind_schema VERSION 1
+
+-- ============================================
+-- Source: MongoDB Orders Document
+-- ============================================
+-- {
+--   _id: "ORD001",
+--   order_date, required_date, shipped_date, freight, ship_name,
+--   ship_destination: { ship_address, ship_city, ship_region, ship_postal_code, ship_country },
+--   customer: { company_name, contact_name, contact_title, phone, fax,
+--               address: { street, city, region, postal_code, country } },
+--   employee: { last_name, first_name, title, birth_date, hire_date, phone, notes, reports_to,
+--               address: { street, city, region, postal_code, country } },
+--   shipper: { company_name, phone },
+--   details: [
+--     { unit_price, quantity, discount,
+--       product: { product_name, unit_price, units_in_stock, discontinued, quantity_per_unit,
+--                  category: { category_name, description },
+--                  supplier: { company_name, contact_name, contact_title, phone, fax,
+--                              address: { street, city, region, postal_code, country } } } }
+--   ]
+-- }
+
+-- ============================================
+-- Target: Cassandra Wide-column Tables (8 tables)
+-- ============================================
+-- categories     (category_id [PARTITION], category_name, description)
+-- suppliers      (supplier_id [PARTITION], company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country)
+-- shippers       (shipper_id [PARTITION], company_name, phone)
+-- employees      (employee_id [PARTITION], last_name, first_name, title, birth_date, hire_date, phone, notes, street, city, region, postal_code, country, reports_to)
+-- customers      (customer_id [PARTITION], company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country)
+-- products       (category_id [PARTITION], supplier_id [PARTITION], product_id [CLUSTERING], product_name, unit_price, units_in_stock, discontinued, quantity_per_unit)
+-- orders         (customer_id [PARTITION], order_date [CLUSTERING], order_id [CLUSTERING], required_date, shipped_date, freight, ship_name, ship_address, ship_city, ship_region, ship_postal_code, ship_country, employee_id, shipper_id)
+-- order_details  (order_id [PARTITION], product_id [PARTITION], unit_price, quantity, discount)
+
+-- ============================================
+-- Step 1: Rename PK from MongoDB convention
+-- ============================================
+-- Reverse of: RENAME_PROPERTY order_id TO _id IN orders
+RENAME_PROPERTY _id TO order_id IN orders
+-- Result:
+-- orders: { order_id, order_date, required_date, shipped_date, freight, ship_name,
+--   ship_destination: { ship_address, ship_city, ship_region, ship_postal_code, ship_country },
+--           customer{...}, employee{...}, shipper{...}, details[{...}] }
+
+-- ============================================
+-- Step 2: UNNEST details[] from orders -> order_details (Level 1 -- array)
+-- ============================================
+-- Reverse of: NEST order_details:... IN orders.details
+UNNEST orders.details:unit_price, quantity, discount, product{product_name, unit_price, units_in_stock, discontinued, quantity_per_unit, category{category_name, description}, supplier{company_name, contact_name, contact_title, phone, fax, address{street, city, region, postal_code, country}}} AS order_details WITH orders.order_id TO order_details.order_id
+-- Result:
+-- orders: { order_id, order_date, required_date, shipped_date, freight, ship_name,
+--   ship_destination: { ship_address, ship_city, ship_region, ship_postal_code, ship_country },
+--           customer{...}, employee{...}, shipper{...} }
+-- order_details: { order_id, unit_price, quantity, discount,
+--                  product{product_name, unit_price, units_in_stock, discontinued, quantity_per_unit,
+--                          category{...}, supplier{...}} }
+
+-- ============================================
+-- Step 3: UNNEST customer from orders -> customers (Level 1)
+-- ============================================
+-- Reverse of: NEST customers:... IN orders.customer
+UNNEST orders.customer:company_name, contact_name, contact_title, phone, fax, address{street, city, region, postal_code, country} AS customers WITH orders.order_id TO customers.order_id
+DELETE_PROPERTY customers.order_id
+ADD_PRIMARY_KEY customers.customer_id AS String
+ADD_PROPERTY customer_id TO orders WITH TYPE String
+-- Result:
+-- orders: { order_id, ..., customer_id, employee{...}, shipper{...} }
+-- customers: { customer_id, company_name, contact_name, contact_title, phone, fax, address{street, city, region, postal_code, country} }
+
+-- ============================================
+-- Step 4: UNNEST employee from orders -> employees (Level 1)
+-- ============================================
+-- Reverse of: NEST employees:... IN orders.employee
+UNNEST orders.employee:last_name, first_name, title, birth_date, hire_date, phone, notes, reports_to, address{street, city, region, postal_code, country} AS employees WITH orders.order_id TO employees.order_id
+DELETE_PROPERTY employees.order_id
+ADD_PRIMARY_KEY employees.employee_id AS String
+ADD_PROPERTY employee_id TO orders WITH TYPE String
+-- Result:
+-- orders: { order_id, ..., customer_id, employee_id, shipper{...} }
+-- employees: { employee_id, last_name, first_name, title, birth_date, hire_date, phone, notes, reports_to, address{...} }
+
+-- ============================================
+-- Step 5: UNNEST shipper from orders -> shippers (Level 1)
+-- ============================================
+-- Reverse of: NEST shippers:... IN orders.shipper
+UNNEST orders.shipper:company_name, phone AS shippers WITH orders.order_id TO shippers.order_id
+DELETE_PROPERTY shippers.order_id
+ADD_PRIMARY_KEY shippers.shipper_id AS String
+ADD_PROPERTY shipper_id TO orders WITH TYPE String
+-- Result:
+-- orders: { order_id, order_date, required_date, shipped_date, freight, ship_name,
+--   ship_destination: { ship_address, ship_city, ship_region, ship_postal_code, ship_country },
+--           customer_id, employee_id, shipper_id }
+-- shippers: { shipper_id, company_name, phone }
+
+-- ============================================
+-- Step 6: UNNEST product from order_details -> products (Level 2)
+-- ============================================
+-- Reverse of: NEST products:... IN order_details.product
+UNNEST order_details.product:product_name, unit_price, units_in_stock, discontinued, quantity_per_unit, category{category_name, description}, supplier{company_name, contact_name, contact_title, phone, fax, address{street, city, region, postal_code, country}} AS products WITH order_details.order_id TO products.order_id
+DELETE_PROPERTY products.order_id
+ADD_PRIMARY_KEY products.product_id AS String
+ADD_PROPERTY product_id TO order_details WITH TYPE String
+-- Result:
+-- order_details: { order_id, product_id, unit_price, quantity, discount }
+-- products: { product_id, product_name, unit_price, units_in_stock, discontinued, quantity_per_unit,
+--             category{category_name, description}, supplier{...} }
+
+-- ============================================
+-- Step 7: UNNEST supplier from products -> suppliers (Level 3)
+-- ============================================
+-- Reverse of: NEST suppliers:... IN products.supplier
+UNNEST products.supplier:company_name, contact_name, contact_title, phone, fax, address{street, city, region, postal_code, country} AS suppliers WITH products.product_id TO suppliers.product_id
+DELETE_PROPERTY suppliers.product_id
+ADD_PRIMARY_KEY suppliers.supplier_id AS String
+ADD_PROPERTY supplier_id TO products WITH TYPE String
+-- Result:
+-- products: { product_id, product_name, unit_price, units_in_stock, discontinued, quantity_per_unit,
+--             supplier_id, category{category_name, description} }
+-- suppliers: { supplier_id, company_name, contact_name, contact_title, phone, fax, address{street, city, region, postal_code, country} }
+
+-- ============================================
+-- Step 8: UNNEST category from products -> categories (Level 3)
+-- ============================================
+-- Reverse of: NEST categories:... IN products.category
+UNNEST products.category:category_name, description AS categories WITH products.product_id TO categories.product_id
+DELETE_PROPERTY categories.product_id
+ADD_PRIMARY_KEY categories.category_id AS String
+ADD_PROPERTY category_id TO products WITH TYPE String
+-- Result:
+-- products: { product_id, product_name, unit_price, units_in_stock, discontinued, quantity_per_unit,
+--             supplier_id, category_id }
+-- categories: { category_id, category_name, description }
+
+-- ============================================
+-- Step 9: FLATTEN address sub-objects (3 entities -> flat fields)
+-- ============================================
+-- Reverse of: UNFLATTEN suppliers/customers/employees:street, city, region, postal_code, country AS address
+
+-- 9a: FLATTEN suppliers.address
+FLATTEN suppliers.address
+RENAME_PROPERTY address_street TO street IN suppliers
+RENAME_PROPERTY address_city TO city IN suppliers
+RENAME_PROPERTY address_region TO region IN suppliers
+RENAME_PROPERTY address_postal_code TO postal_code IN suppliers
+RENAME_PROPERTY address_country TO country IN suppliers
+-- Result:
+-- suppliers: { supplier_id, company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country }
+
+-- 9b: FLATTEN customers.address
+FLATTEN customers.address
+RENAME_PROPERTY address_street TO street IN customers
+RENAME_PROPERTY address_city TO city IN customers
+RENAME_PROPERTY address_region TO region IN customers
+RENAME_PROPERTY address_postal_code TO postal_code IN customers
+RENAME_PROPERTY address_country TO country IN customers
+-- Result:
+-- customers: { customer_id, company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country }
+
+-- 9c: FLATTEN employees.address
+FLATTEN employees.address
+RENAME_PROPERTY address_street TO street IN employees
+RENAME_PROPERTY address_city TO city IN employees
+RENAME_PROPERTY address_region TO region IN employees
+RENAME_PROPERTY address_postal_code TO postal_code IN employees
+RENAME_PROPERTY address_country TO country IN employees
+
+-- FLATTEN orders.ship_destination (shipping address)
+FLATTEN orders.ship_destination
+RENAME_PROPERTY ship_destination_ship_address TO ship_address IN orders
+RENAME_PROPERTY ship_destination_ship_city TO ship_city IN orders
+RENAME_PROPERTY ship_destination_ship_region TO ship_region IN orders
+RENAME_PROPERTY ship_destination_ship_postal_code TO ship_postal_code IN orders
+RENAME_PROPERTY ship_destination_ship_country TO ship_country IN orders
+-- Result:
+-- employees: { employee_id, last_name, first_name, title, birth_date, hire_date, phone, notes, street, city, region, postal_code, country, reports_to }
+
+-- ============================================
+-- Step 10: CAST primary keys to Cassandra Partition Keys
+-- ============================================
+-- Simple tables: PRIMARY KEY -> PARTITION KEY (explicit for Cassandra target)
+CAST_CONSTRAINT categories.category_id TO PARTITION KEY
+CAST_CONSTRAINT suppliers.supplier_id TO PARTITION KEY
+CAST_CONSTRAINT shippers.shipper_id TO PARTITION KEY
+CAST_CONSTRAINT employees.employee_id TO PARTITION KEY
+CAST_CONSTRAINT customers.customer_id TO PARTITION KEY
+
+-- ============================================
+-- Step 11: Restructure keys for Cassandra (complex tables)
+-- ============================================
+-- Simple tables (categories, suppliers, shippers, customers, employees) have simple PKs
+-- that auto-convert to PARTITION KEYs via EntityKind auto-conversion.
+-- Complex tables need explicit key restructuring.
+
+-- 11a: Restructure products keys (PK -> partition + clustering)
+-- Cassandra: partition by category_id (query products by category), cluster by product_id
+DELETE_PRIMARY_KEY product_id FROM products
+ADD_PARTITION_KEY (category_id, supplier_id) TO products
+ADD_CLUSTERING_KEY product_id TO products
+-- Result:
+-- products (category_id [PARTITION], supplier_id [PARTITION], product_id [CLUSTERING], product_name, unit_price, units_in_stock, discontinued, quantity_per_unit)
+
+-- 11b: Restructure orders keys (PK -> partition + clustering)
+-- Cassandra: partition by customer_id (query orders by customer), cluster by order_date, order_id
+DELETE_PRIMARY_KEY order_id FROM orders
+ADD_PARTITION_KEY customer_id TO orders
+ADD_CLUSTERING_KEY order_date TO orders
+ADD_CLUSTERING_KEY order_id TO orders
+-- Result:
+-- orders (customer_id [PARTITION], order_date [CLUSTERING], order_id [CLUSTERING], required_date, shipped_date, freight, ship_name, ship_address, ship_city, ship_region, ship_postal_code, ship_country, employee_id, shipper_id)
+
+-- 11c: Restructure order_details keys (add partition + clustering)
+-- order_details has order_id and product_id as regular attributes (from UNNEST carry-field)
+-- Cassandra: partition by order_id (query details by order), cluster by product_id
+ADD_PARTITION_KEY (order_id, product_id) TO order_details
+-- Result:
+-- order_details (order_id [PARTITION], product_id [PARTITION], unit_price, quantity, discount)
+
+-- ============================================
+-- Final Target (8 wide-column tables):
+-- categories:     { category_id [PARTITION], category_name, description }
+-- suppliers:      { supplier_id [PARTITION], company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country }
+-- shippers:       { shipper_id [PARTITION], company_name, phone }
+-- employees:      { employee_id [PARTITION], last_name, first_name, title, birth_date, hire_date, phone, notes, street, city, region, postal_code, country, reports_to }
+-- customers:      { customer_id [PARTITION], company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country }
+-- products:       { category_id [PARTITION], supplier_id [PARTITION], product_id [CLUSTERING], product_name, unit_price, units_in_stock, discontinued, quantity_per_unit }
+-- orders:         { customer_id [PARTITION], order_date [CLUSTERING], order_id [CLUSTERING], required_date, shipped_date, freight, ship_name, ship_address, ship_city, ship_region, ship_postal_code, ship_country, employee_id, shipper_id }
+-- order_details:  { order_id [PARTITION], product_id [PARTITION], unit_price, quantity, discount }
+-- ============================================
+
+-- ============================================
+-- Operation Summary (49 steps):
+--   RENAME_PROPERTY: 13   (1 PK rename + 12 FLATTEN renames)
+--   UNNEST: 7              (details, customer, employee, shipper, product, supplier, category)
+--   FLATTEN: 3             (suppliers.address, customers.address, employees.address)
+--   ADD_PRIMARY_KEY: 6     (customers, employees, shippers, products, suppliers, categories)
+--   CAST_CONSTRAINT: 5     (categories, suppliers, shippers, employees, customers -> PARTITION KEY)
+--   DELETE_PROPERTY: 6    (carry-field cleanup for customers, employees, shippers, products, suppliers, categories)
+--   ADD_PROPERTY: 6       (FK fields: customer_id, employee_id, shipper_id, product_id, supplier_id, category_id)
+--   DELETE_PRIMARY_KEY: 2  (products, orders -- before Cassandra key restructuring)
+--   ADD_PARTITION_KEY: 3   (products, orders, order_details)
+--   ADD_CLUSTERING_KEY: 3  (products, orders x2)
+--   EntityKind auto-convert: DOCUMENT -> WIDE_COLUMN_TABLE (all 8 entities)
+-- ============================================

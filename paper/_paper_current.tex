@@ -444,7 +444,7 @@ Ref. &Foreign Key &--- &Reference &Relationship &Reference \\
 
 \begin{table*}[t!]
   \centering
-  \caption{Comparison of schema evolution and migration operations across existing approaches and SMEL.$^\ast$}
+  \caption{Comparison of schema evolution and migration operations across existing approaches and SMILE.$^\ast$}
   \label{tab:operation-comparison}
   \resizebox{\textwidth}{!}{
   \begin{tabular}{|l|l|l|c|c|c|c|c|c|c|>{\columncolor{blue!10}}l|}
@@ -458,7 +458,7 @@ Ref. &Foreign Key &--- &Reference &Relationship &Reference \\
     \rotatebox{70}{\textbf{Orion}} &
     \rotatebox{70}{\textbf{GEO}} &
     \rotatebox{70}{\textbf{Meier}} &
-    \multicolumn{1}{c|}{\textbf{SMEL}}\\
+    \multicolumn{1}{c|}{\textbf{SMILE}}\\
 
   \hline
   \multirow{8}{*}{Entity Type Ops}
@@ -580,7 +580,7 @@ Ref. &Foreign Key &--- &Reference &Relationship &Reference \\
   \vspace{0.15cm}
   \begin{flushleft}
   \footnotesize
-  $^\ast$ SMEL supports two syntax variants: \emph{specific} (e.g., \texttt{ADD\_PROPERTY}) and \emph{general} (e.g., \texttt{ADD PROPERTY}).\\
+  $^\ast$ SMILE supports two syntax variants: \emph{specific} (e.g., \texttt{ADD\_PROPERTY}) and \emph{general} (e.g., \texttt{ADD PROPERTY}).\\
   $^{a}$ In CoDEL achievable via \texttt{Split\textsubscript{row}}; in BiDEL achievable via \texttt{DECOMPOSE}.\\
   $^{b}$ In PRISM achievable via \texttt{ADD COLUMN \ldots\ AS func()}.\\
   CoDEL additionally defines row-level operations (\texttt{Add\textsubscript{row}}, \texttt{Del\textsubscript{row}},
@@ -939,12 +939,12 @@ Figure~\ref{fig:meta-schema} shows these additions, where black elements origina
     % ============ Legend ============
     \node[lbl, anchor=north west] at (-7.2,-14.2) {
       Black = M-Model~\cite{conrad2022metamodels}\quad
-      \textcolor{blue}{Blue} = SMEL extension
+      \textcolor{blue}{Blue} = SMILE extension
     };
 
     \end{tikzpicture}
     }% end resizebox
-    \caption{M-Model\textsuperscript{+}: M-Model (black) with SMEL extensions ({\textcolor{blue}{blue}})}
+    \caption{M-Model\textsuperscript{+}: M-Model (black) with SMILE extensions ({\textcolor{blue}{blue}})}
     \label{fig:meta-schema}
   \end{figure}
 
@@ -996,7 +996,7 @@ The implementation combines a layered architecture with a pipeline that routes a
   \node[mod, fill=green!12, minimum width=1.4cm] (pf) at (0.4, -2.6)
     {\texttt{parser\_\!factory}};
   \node[mod, fill=green!12, minimum width=1.6cm] (sl) at (2.2, -2.6)
-    {\texttt{smel\_listeners}};
+    {\texttt{smile\_listeners}};
   \node[mod, fill=green!12, minimum width=1.4cm] (gr) at (4.2, -2.6)
     {Grammars\,$\times$\,2};
   \node[lyr, fit=(pf)(sl)(gr),
@@ -1071,7 +1071,7 @@ As a result, the same transformation logic can be reused regardless of whether t
 This paradigm-independent execution model is essential because \textsc{Smile} is intended to cover both intra-system evolution and inter-system migration within one operation framework.
 
 The \emph{parsing layer} isolates concrete syntax from execution semantics.
-A \texttt{parser\_factory} selects the appropriate grammar variant based on the file extension, and \texttt{smel\_listeners}\footnote{The implementation retains the earlier working title \emph{SMEL} in file and module names (e.g., \texttt{.smel} extension, \texttt{smel\_listeners.py}); the language was subsequently renamed to \textsc{Smile}.} translate the parse tree into an ordered list of operations.
+A \texttt{parser\_factory} selects the appropriate grammar variant based on the file extension, and \texttt{smile\_listeners}\footnote{The implementation retains the earlier working title \emph{SMILE} in file and module names (e.g., \texttt{.smile} extension, \texttt{smile\_listeners.py}); the language was subsequently renamed to \textsc{Smile}.} translate the parse tree into an ordered list of operations.
 This design allows the Specific and Generalized grammars to remain distinct at the syntax level while converging to the same internal representation.
 The engine therefore supports multiple surface notations without duplicating semantic logic.
 
@@ -1175,7 +1175,7 @@ The generated target schema, execution log, and validation results are exposed t
 \draw[arr] (sml) -- (v2);
 \draw[arr] (v2)  -- (fe);
 \draw[arr] (fe)  -- (exp);
-\node[file] at (6.6, 1.2) (script) {\textsc{Smile} Script (.smel/.smel\_gen)};
+\node[file] at (6.6, 1.2) (script) {\textsc{Smile} Script (.smile/.smile\_gen)};
 \draw[arr] (script) -- (sml);
 %% Layer 1
 \node[layer=green!25] at (0.6,-1.6) (l1) {Layer 1};
