@@ -2538,137 +2538,23 @@ def parse_original_source(raw_source: str, source_type: str) -> Dict[str, Any]:
 
 def _calculate_changes(prev: Dict, after: Dict, op,
                        hint_entity_names: Optional[List[str]] = None) -> Dict:
-    """Calculate the changes made by an operation.
+    """Calculate the changes made by an operation (web-UI shape).
 
-    ``hint_entity_names`` is an optional list of entity names that the handler
-    declared it touched (via ``transformer._touch(name)``). When supplied, the
-    expensive "modified" deep-compare loop is restricted to these entities;
-    set-difference checks for new/deleted entities still run on the full key
-    sets so additions/removals are never missed. When ``None`` (legacy default),
-    every entity present in both snapshots is deep-compared.
+    Thin wrapper around the unified ``database_diff.compute_diff`` core +
+    ``database_diff_formatters.to_ui_changes`` formatter. The shared core
+    is the *single* source of truth for "how do two snapshots differ"; the
+    Layer 1 / Layer 2 validators use the same engine via a different
+    formatter.
+
+    ``hint_entity_names`` restricts the per-entity deep-compare loop (the
+    handler's ``_touch`` mechanism). Set-difference checks for added/deleted
+    entities still scan the full key set so add/delete are never missed.
     """
-    changes = {
-        "affected_entities": [],
-        "new_entities": [],
-        "deleted_entities": [],
-        "modified_entities": [],
-        "new_relationship_types": [],
-        "deleted_relationship_types": [],
-        "modified_relationship_types": []
-    }
-
-    # Separate entity keys from special keys (__relationship_types__)
-    prev_entity_names = {k for k in prev.keys() if not k.startswith("__")}
-    after_entity_names = {k for k in after.keys() if not k.startswith("__")}
-
-    # Track relationship_type changes
-    prev_rts = prev.get("__relationship_types__", {})
-    after_rts = after.get("__relationship_types__", {})
-    for rt_name in set(after_rts.keys()) - set(prev_rts.keys()):
-        changes["new_relationship_types"].append(rt_name)
-        changes["affected_entities"].append({
-            "name": rt_name,
-            "status": "new_reltype",
-            "entity": after_rts[rt_name]
-        })
-    for rt_name in set(prev_rts.keys()) - set(after_rts.keys()):
-        changes["deleted_relationship_types"].append(rt_name)
-        changes["affected_entities"].append({
-            "name": rt_name,
-            "status": "deleted_reltype",
-            "entity": prev_rts[rt_name]
-        })
-
-    # New entities
-    for name in after_entity_names - prev_entity_names:
-        changes["new_entities"].append(name)
-        changes["affected_entities"].append({
-            "name": name,
-            "status": "new",
-            "entity": after[name]
-        })
-
-    # Deleted entities
-    for name in prev_entity_names - after_entity_names:
-        changes["deleted_entities"].append(name)
-        changes["affected_entities"].append({
-            "name": name,
-            "status": "deleted",
-            "entity": prev[name]
-        })
-
-    # Modified entities — restrict to handler hint when present (perf opt:
-    # avoids deep-compare on unchanged entities).
-    candidates = prev_entity_names & after_entity_names
-    if hint_entity_names is not None:
-        candidates &= set(hint_entity_names)
-    for name in candidates:
-        prev_entity = prev[name]
-        after_entity = after[name]
-
-        # Check for changes in properties
-        prev_attrs = {a["name"]: a for a in prev_entity.get("properties", [])}
-        after_attrs = {a["name"]: a for a in after_entity.get("properties", [])}
-
-        # Check for changes in embedded
-        prev_embedded = {e["name"]: e for e in prev_entity.get("embedded", [])}
-        after_embedded = {e["name"]: e for e in after_entity.get("embedded", [])}
-
-        # Check for changes in references
-        prev_refs = {r["name"]: r for r in prev_entity.get("references", [])}
-        after_refs = {r["name"]: r for r in after_entity.get("references", [])}
-
-        # Check for changes in edges
-        prev_edges = {e["name"]: e for e in prev_entity.get("edges", [])}
-        after_edges = {e["name"]: e for e in after_entity.get("edges", [])}
-
-        new_attrs = set(after_attrs.keys()) - set(prev_attrs.keys())
-        deleted_attrs = set(prev_attrs.keys()) - set(after_attrs.keys())
-        new_embedded = set(after_embedded.keys()) - set(prev_embedded.keys())
-        deleted_embedded = set(prev_embedded.keys()) - set(after_embedded.keys())
-        new_refs = set(after_refs.keys()) - set(prev_refs.keys())
-        deleted_refs = set(prev_refs.keys()) - set(after_refs.keys())
-        new_edges = set(after_edges.keys()) - set(prev_edges.keys())
-        deleted_edges = set(prev_edges.keys()) - set(after_edges.keys())
-
-        # Check for property TYPE changes (for CAST and UNWIND operations)
-        type_changed_attrs = []
-        for attr_name in set(prev_attrs.keys()) & set(after_attrs.keys()):
-            prev_type = prev_attrs[attr_name].get("type", "")
-            after_type = after_attrs[attr_name].get("type", "")
-            if prev_type != after_type:
-                type_changed_attrs.append({
-                    "name": attr_name,
-                    "old_type": prev_type,
-                    "new_type": after_type
-                })
-
-        # Check for constraint changes (ADD_KEY, DELETE_KEY, CAST_CONSTRAINT)
-        prev_constraints = prev_entity.get("constraints", [])
-        after_constraints = after_entity.get("constraints", [])
-        constraints_changed = prev_constraints != after_constraints
-
-        # Check for entity_kind changes
-        entity_kind_changed = (prev_entity.get("entity_kind") != after_entity.get("entity_kind"))
-
-        if new_attrs or deleted_attrs or new_embedded or deleted_embedded or new_refs or deleted_refs or new_edges or deleted_edges or type_changed_attrs or constraints_changed or entity_kind_changed:
-            changes["modified_entities"].append(name)
-            changes["affected_entities"].append({
-                "name": name,
-                "status": "modified",
-                "entity": after_entity,
-                "new_properties": [after_attrs[a] for a in new_attrs],
-                "deleted_properties": list(deleted_attrs),
-                "new_embedded": [after_embedded[e] for e in new_embedded],
-                "deleted_embedded": list(deleted_embedded),
-                "new_references": [after_refs[r] for r in new_refs],
-                "deleted_references": list(deleted_refs),
-                "new_edges": [after_edges[e] for e in new_edges],
-                "deleted_edges": list(deleted_edges),
-                "type_changed_properties": type_changed_attrs
-            })
-
-    return changes
+    from database_diff import compute_diff
+    from database_diff_formatters import to_ui_changes
+    only = set(hint_entity_names) if hint_entity_names is not None else None
+    diff = compute_diff(prev, after, only_entities=only)
+    return to_ui_changes(diff, prev, after)
 
 
 
