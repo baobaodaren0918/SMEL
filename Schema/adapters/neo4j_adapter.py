@@ -17,17 +17,19 @@ Data Flow:
 Design: from Andre Conrad
 """
 import json
+import json
 import re
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Union
 from ..unified_meta_schema import (
     Database, DatabaseType, EntityType, EntityKind, Property,
     UniqueConstraint, UniqueProperty, PKTypeEnum,
     Edge, Cardinality, PrimitiveDataType, PrimitiveType,
     TypeMappings
 )
+from ._base import DatabaseAdapter
 
 
-class Neo4jAdapter:
+class Neo4jAdapter(DatabaseAdapter):
     """
     Adapter to parse Neo4j graph schema JSON and create Unified Meta Schema.
 
@@ -64,9 +66,17 @@ class Neo4jAdapter:
     # PARSE METHODS (JSON -> Unified Meta Schema)
     # =========================================================================
 
-    def parse(self, schema: Dict[str, Any], db_name: str = "database") -> Database:
+    def parse(self, schema: Union[Dict[str, Any], str], db_name: str = "database") -> Database:
         """
-        Parse Neo4j graph schema JSON and return Database object.
+        Parse Neo4j graph schema and return Database object.
+
+        Accepts:
+          * a JSON dict (legacy);
+          * a JSON string (auto-detected by leading ``{``/``[``);
+          * a Cypher script (auto-detected; routed to ``parse_cypher``).
+
+        Using the string form lets callers treat all four adapters uniformly
+        via the ``DatabaseAdapter`` ABC.
 
         Example Input (Neo4j Graph JSON):
             {
@@ -130,6 +140,13 @@ class Neo4jAdapter:
             2. Parse each node -> EntityType(entity_kind=VERTEX)
             3. Parse each relationship -> EntityType(EDGE) + Edge on source entity
         """
+        # Auto-detect string input (canonical entry per DatabaseAdapter ABC).
+        if isinstance(schema, str):
+            stripped = schema.lstrip()
+            if stripped.startswith("{") or stripped.startswith("["):
+                schema = json.loads(stripped)
+            else:
+                return self.parse_cypher(schema, db_name)
         self.database = Database(db_name=db_name, db_type=DatabaseType.GRAPH)
 
         # Step 1: Parse nodes -> EntityType with entity_kind=VERTEX

@@ -25,9 +25,10 @@ from ..unified_meta_schema import (
     ListDataType, SetDataType, MapDataType,
     RelationshipType, TypeMappings
 )
+from ._base import DatabaseAdapter
 
 
-class PostgreSQLAdapter:
+class PostgreSQLAdapter(DatabaseAdapter):
     """
     Adapter to parse PostgreSQL DDL and create Unified Meta Schema.
 

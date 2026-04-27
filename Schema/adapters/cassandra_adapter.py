@@ -30,9 +30,10 @@ from ..unified_meta_schema import (
     UniqueConstraint, UniqueProperty, PKTypeEnum,
     PrimitiveDataType, PrimitiveType, Cardinality, TypeMappings
 )
+from ._base import DatabaseAdapter
 
 
-class CassandraAdapter:
+class CassandraAdapter(DatabaseAdapter):
     """
     Adapter to parse Cassandra CQL DDL and create Unified Meta Schema.
 

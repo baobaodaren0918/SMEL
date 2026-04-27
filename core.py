@@ -102,6 +102,33 @@ _ENTITY_KIND_DEFAULT = {
 }
 
 
+# ---------------------------------------------------------------------------
+# Handler registry — populated at class-definition time by @register_handler
+# decorators on each SchemaTransformer._handle_* method. Avoids the previous
+# hardcoded 30-entry dict in __init__ that had to stay in sync with the
+# methods by hand.
+# ---------------------------------------------------------------------------
+_HANDLER_REGISTRY: Dict["OpType", str] = {}
+
+
+def register_handler(op_type):
+    """Bind an OpType to its handler method by name.
+
+    Stores the method *name* (not the function object) so the registry stays
+    valid across subclassing and method overrides — the binding to ``self``
+    happens later in ``SchemaTransformer.__init__`` via ``getattr``.
+    """
+    def decorator(method):
+        if op_type in _HANDLER_REGISTRY:
+            raise RuntimeError(
+                f"Duplicate handler registration for {op_type}: "
+                f"{_HANDLER_REGISTRY[op_type]} vs {method.__name__}"
+            )
+        _HANDLER_REGISTRY[op_type] = method.__name__
+        return method
+    return decorator
+
+
 class SchemaTransformer:
     """Transform schema based on SMILE operations."""
 
@@ -119,38 +146,12 @@ class SchemaTransformer:
         # = fall back to full-DB diff (legacy behavior).
         self._touched: Optional[List[str]] = None
         self._init_source_keys()
-        # Handler registry: OpType -> method (used by run_migration dispatch loop)
+        # Handler registry: OpType -> bound method (populated from
+        # _HANDLER_REGISTRY, which @register_handler decorators below filled
+        # in at class-definition time).
         self._handlers = {
-            OpType.NEST: self._handle_nest,
-            OpType.UNNEST: self._handle_unnest,
-            OpType.FLATTEN: self._handle_flatten,
-            OpType.UNFLATTEN: self._handle_unflatten,
-            OpType.WIND: self._handle_wind,
-            OpType.UNWIND: self._handle_unwind,
-            OpType.ADD_ENTITY: self._handle_add_entity,
-            OpType.DELETE_ENTITY: self._handle_delete_entity,
-            OpType.RENAME_ENTITY: self._handle_rename_entity,
-            OpType.COPY_ENTITY: self._handle_copy_entity,
-            OpType.ADD_PROPERTY: self._handle_add_property,
-            OpType.DELETE_PROPERTY: self._handle_delete_property,
-            OpType.RENAME_PROPERTY: self._handle_rename_property,
-            OpType.COPY_PROPERTY: self._handle_copy_property,
-            OpType.MOVE_PROPERTY: self._handle_move_property,
-            OpType.ADD_KEY: self._handle_add_key,
-            OpType.DELETE_KEY: self._handle_delete_key,
-            OpType.ADD_FOREIGN_KEY: self._handle_add_foreign_key,
-            OpType.DELETE_FOREIGN_KEY: self._handle_delete_foreign_key,
-            OpType.CAST_CONSTRAINT: self._handle_cast_constraint,
-            OpType.CAST_ENTITY: self._handle_cast_entity,
-            OpType.ADD_EMBEDDED: self._handle_add_embedded,
-            OpType.DELETE_EMBEDDED: self._handle_delete_embedded,
-            OpType.ADD_LABEL: self._handle_add_label,
-            OpType.DELETE_LABEL: self._handle_delete_label,
-            OpType.TRANSFORM: self._handle_transform,
-            OpType.MERGE: self._handle_merge,
-            OpType.SPLIT: self._handle_split,
-            OpType.CAST_PROPERTY: self._handle_cast_property,
-            OpType.RECARD: self._handle_recard,
+            op_type: getattr(self, method_name)
+            for op_type, method_name in _HANDLER_REGISTRY.items()
         }
 
     def _touch(self, *entity_names: str) -> None:
@@ -224,6 +225,7 @@ class SchemaTransformer:
         entity = self._get_entity(entity_name, op_name)
         return (entity, attr_name)
 
+    @register_handler(OpType.NEST)
     def _handle_nest(self, params: NestParams) -> OperationResult:
         """
         NEST: Embed separate table into parent as nested object (denormalization).
@@ -346,6 +348,7 @@ class SchemaTransformer:
         self.changes.append(f"NEST:{target_name}.{alias}")
         return OperationResult.ok()
 
+    @register_handler(OpType.FLATTEN)
     def _handle_flatten(self, params: FlattenParams) -> OperationResult:
         """
         FLATTEN: Flatten nested object fields into parent table (reduce depth by 1).
@@ -412,6 +415,7 @@ class SchemaTransformer:
         self.changes.append(f"FLATTEN:{source_path}")
         return OperationResult.ok()
 
+    @register_handler(OpType.UNFLATTEN)
     def _handle_unflatten(self, params: UnflattenParams) -> OperationResult:
         """
         UNFLATTEN: Combine flat fields into nested object (reverse of FLATTEN).
@@ -456,6 +460,7 @@ class SchemaTransformer:
         self.changes.append(f"UNFLATTEN:{entity_name}({','.join(fields)})->{nested_name}")
         return OperationResult.ok()
 
+    @register_handler(OpType.UNNEST)
     def _handle_unnest(self, params: UnnestParams) -> OperationResult:
         """
         UNNEST: Extract nested object to separate table (normalization).
@@ -612,6 +617,7 @@ class SchemaTransformer:
                 is_optional=inner_rel.is_optional,
             ))
 
+    @register_handler(OpType.UNWIND)
     def _handle_unwind(self, params: UnwindParams) -> OperationResult:
         """
         UNWIND: Expand array field.
@@ -680,6 +686,7 @@ class SchemaTransformer:
         self._touch(parent_path, target_name)
         return OperationResult.ok()
 
+    @register_handler(OpType.WIND)
     def _handle_wind(self, params: WindParams) -> OperationResult:
         """
         WIND: Convert scalar property back to array (reverse of UNWIND).
@@ -706,6 +713,7 @@ class SchemaTransformer:
                 return OperationResult.ok()
         return OperationResult.skipped("wind: precondition not met")
 
+    @register_handler(OpType.DELETE_FOREIGN_KEY)
     def _handle_delete_foreign_key(self, params: DeleteForeignKeyParams) -> OperationResult:
         entity_name, ref_name = self._split_path(params.reference)
         entity = self._get_entity(entity_name) if entity_name else None
@@ -726,6 +734,7 @@ class SchemaTransformer:
             return OperationResult.ok()
         return OperationResult.skipped("delete_foreign_key: precondition not met")
 
+    @register_handler(OpType.DELETE_EMBEDDED)
     def _handle_delete_embedded(self, params: DeleteEmbeddedParams) -> OperationResult:
         parent_name, embedded_name = self._split_path(params.embedded)
         embedded_name = embedded_name.replace("[]", "")
@@ -744,6 +753,7 @@ class SchemaTransformer:
         self.changes.append(f"DELETE_EMBEDDED:{parent_name}.{embedded_name}")
         return OperationResult.ok()
 
+    @register_handler(OpType.ADD_FOREIGN_KEY)
     def _handle_add_foreign_key(self, params: AddForeignKeyParams) -> OperationResult:
         """ADD_FOREIGN_KEY entity.field REFERENCES target_table(target_column) WITH CARDINALITY"""
         field_name = params.field_name
@@ -811,6 +821,7 @@ class SchemaTransformer:
         self.changes.append(f"ADD_REF:{entity_name}.{field_name}")
         return OperationResult.ok()
 
+    @register_handler(OpType.ADD_PROPERTY)
     def _handle_add_property(self, params: AddPropertyParams) -> OperationResult:
         """ADD PROPERTY email TO Customer WITH TYPE String NOT NULL"""
         name = params.name
@@ -836,6 +847,7 @@ class SchemaTransformer:
         self.changes.append(f"ADD_PROP:{entity_name}.{name}")
         return OperationResult.ok()
 
+    @register_handler(OpType.ADD_EMBEDDED)
     def _handle_add_embedded(self, params: AddEmbeddedParams) -> OperationResult:
         """ADD EMBEDDED address TO Customer WITH CARDINALITY ONE_TO_ONE"""
         name = params.name
@@ -859,6 +871,7 @@ class SchemaTransformer:
             return OperationResult.ok()
         return OperationResult.skipped("add_embedded: precondition not met")
 
+    @register_handler(OpType.ADD_ENTITY)
     def _handle_add_entity(self, params: AddEntityParams) -> OperationResult:
         """ADD_ENTITY Product WITH PROPERTIES (id String, name String)
         Also handles EDGE entities: ADD_ENTITY name FROM src TO tgt WITH PROPERTIES (...)
@@ -936,6 +949,7 @@ class SchemaTransformer:
         self.changes.append(f"ADD_ENTITY:{name}")
         return OperationResult.ok()
 
+    @register_handler(OpType.DELETE_PROPERTY)
     def _handle_delete_property(self, params: DeletePropertyParams) -> OperationResult:
         """DELETE PROPERTY Customer.email"""
         target = params.target
@@ -968,6 +982,7 @@ class SchemaTransformer:
         self.changes.append(f"DELETE_PROP:{target}")
         return OperationResult.ok()
 
+    @register_handler(OpType.DELETE_ENTITY)
     def _handle_delete_entity(self, params: DeleteEntityParams) -> OperationResult:
         """DELETE ENTITY Customer (also handles EDGE entities)"""
         name = params.name
@@ -1019,10 +1034,12 @@ class SchemaTransformer:
         self.changes.append(f"DELETE_ENTITY:{name}")
         return OperationResult.ok()
 
+    @register_handler(OpType.DELETE_KEY)
     def _handle_delete_key(self, params: DeleteKeyParams) -> OperationResult:
         """DELETE PRIMARY/FOREIGN/UNIQUE KEY - destructive removal"""
         return self._remove_key_constraint(params, operation="DELETE")
 
+    @register_handler(OpType.DELETE_LABEL)
     def _handle_delete_label(self, params: DeleteLabelParams) -> OperationResult:
         """DELETE LABEL Employee FROM Person (graph database)"""
         label = params.label
@@ -1038,6 +1055,7 @@ class SchemaTransformer:
         self.changes.append(f"DELETE_LABEL:{entity_name}.{label}")
         return OperationResult.ok()
 
+    @register_handler(OpType.ADD_LABEL)
     def _handle_add_label(self, params: AddLabelParams) -> OperationResult:
         """ADD LABEL Employee TO Person (graph database)"""
         label = params.label
@@ -1053,6 +1071,7 @@ class SchemaTransformer:
         self.changes.append(f"ADD_LABEL:{entity_name}.{label}")
         return OperationResult.ok()
 
+    @register_handler(OpType.ADD_KEY)
     def _handle_add_key(self, params: AddKeyParams) -> OperationResult:
         """ADD_PS KEY id AS String OR ADD_PS PRIMARY KEY (id1, id2) TO Customer"""
         entity_name = params.entity
@@ -1281,6 +1300,7 @@ class SchemaTransformer:
                     return OperationResult.ok()
         return OperationResult.skipped("add_key: precondition not met")
 
+    @register_handler(OpType.RENAME_PROPERTY)
     def _handle_rename_property(self, params: RenamePropertyParams) -> OperationResult:
         """RENAME_PROPERTY: Rename a property within an entity."""
         old_name = params.old_name
@@ -1308,6 +1328,7 @@ class SchemaTransformer:
             return OperationResult.ok()
         return OperationResult.skipped("rename_property: precondition not met")
 
+    @register_handler(OpType.RENAME_ENTITY)
     def _handle_rename_entity(self, params: RenameEntityParams) -> OperationResult:
         """RENAME ENTITY: Rename an entity."""
         old_name = params.old_name
@@ -1355,6 +1376,7 @@ class SchemaTransformer:
         self.changes.append(f"RENAME_ENTITY:{old_name}->{new_name}")
         return OperationResult.ok()
 
+    @register_handler(OpType.COPY_PROPERTY)
     def _handle_copy_property(self, params: CopyPropertyParams) -> OperationResult:
         """
         COPY_PROPERTY: Copy property from source to target.
@@ -1392,6 +1414,7 @@ class SchemaTransformer:
                 return OperationResult.ok()
         return OperationResult.skipped("copy_property: precondition not met")
 
+    @register_handler(OpType.COPY_ENTITY)
     def _handle_copy_entity(self, params: CopyEntityParams) -> OperationResult:
         """COPY_ENTITY: Duplicate an entire entity with all its structure.
 
@@ -1457,6 +1480,7 @@ class SchemaTransformer:
         self.changes.append(f"COPY_ENTITY:{source_name}->{target_name}")
         return OperationResult.ok()
 
+    @register_handler(OpType.MOVE_PROPERTY)
     def _handle_move_property(self, params: MovePropertyParams) -> OperationResult:
         """MOVE_PROPERTY: Move property from one entity to another."""
         source_path = params.source
@@ -1478,6 +1502,7 @@ class SchemaTransformer:
                     return OperationResult.ok()
         return OperationResult.skipped("move_property: precondition not met")
 
+    @register_handler(OpType.MERGE)
     def _handle_merge(self, params: MergeParams) -> OperationResult:
         """MERGE: Merge two entities into one."""
         source1_name = params.source1
@@ -1601,6 +1626,7 @@ class SchemaTransformer:
         self.changes.append(f"MERGE:{source1_name},{source2_name}->{target_name}")
         return OperationResult.ok()
 
+    @register_handler(OpType.SPLIT)
     def _handle_split(self, params: SplitParams) -> OperationResult:
         """
         SPLIT: Divide one entity into multiple separate entities (vertical partitioning).
@@ -1704,6 +1730,7 @@ class SchemaTransformer:
         self.changes.append(f"SPLIT:{source_name}->{parts_str}")
         return OperationResult.ok()
 
+    @register_handler(OpType.CAST_PROPERTY)
     def _handle_cast_property(self, params: CastPropertyParams) -> OperationResult:
         """CAST_PROPERTY: Change property data type."""
         target = params.target
@@ -1724,6 +1751,7 @@ class SchemaTransformer:
         self.changes.append(f"CAST_PROP:{target}->{new_type_str}")
         return OperationResult.ok()
 
+    @register_handler(OpType.CAST_CONSTRAINT)
     def _handle_cast_constraint(self, params: CastConstraintParams) -> OperationResult:
         """CAST_CONSTRAINT: Change the type of a constraint.
 
@@ -1770,6 +1798,7 @@ class SchemaTransformer:
                         return OperationResult.ok()
         return OperationResult.skipped("cast_constraint: precondition not met")
 
+    @register_handler(OpType.CAST_ENTITY)
     def _handle_cast_entity(self, params: CastEntityParams) -> OperationResult:
         """CAST_ENTITY: Change the entity_kind of an entity type (cross-paradigm type conversion).
 
@@ -1826,6 +1855,7 @@ class SchemaTransformer:
                         rel.cardinality = new_cardinality
                         break
 
+    @register_handler(OpType.RECARD)
     def _handle_recard(self, params: RecardParams) -> OperationResult:
         """RECARD: Change the multiplicity/cardinality of a reference.
 
@@ -1860,6 +1890,7 @@ class SchemaTransformer:
                 return OperationResult.ok()
         return OperationResult.skipped("recard: precondition not met")
 
+    @register_handler(OpType.TRANSFORM)
     def _handle_transform(self, params: TransformParams) -> OperationResult:
         """TRANSFORM: Convert between entity (node) and relationship type (edge).
 

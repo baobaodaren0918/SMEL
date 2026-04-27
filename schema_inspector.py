@@ -158,25 +158,13 @@ def inspect_schema(source: str, db_type: str, input_mode: str = "file",
 
     adapter = adapter_class()
 
-    # Perform Reverse Engineering
+    # Perform Reverse Engineering — uniform DatabaseAdapter API: every adapter's
+    # parse(content: str) handles its native format internally (json.loads /
+    # JSON-vs-Cypher detection / DDL parsing).
     if input_mode == "file":
         db = adapter_class.load_from_file(source, db_name)
     elif input_mode == "text":
-        # MongoDB parse() expects a dict, others expect string
-        if resolved_type == SOURCE_TYPE_DOCUMENT:
-            schema_dict = json.loads(source)
-            db = adapter.parse(schema_dict, db_name)
-        elif resolved_type == SOURCE_TYPE_GRAPH:
-            # Neo4j: detect if text is JSON or Cypher
-            stripped = source.strip()
-            if stripped.startswith("{") or stripped.startswith("["):
-                schema_dict = json.loads(source)
-                db = adapter.parse(schema_dict, db_name)
-            else:
-                db = adapter.parse_cypher(source, db_name)
-        else:
-            # PostgreSQL, Cassandra: text DDL
-            db = adapter.parse(source, db_name)
+        db = adapter.parse(source, db_name)
     else:
         raise ValueError(f"Invalid input_mode: {input_mode}. Use 'file' or 'text'.")
 

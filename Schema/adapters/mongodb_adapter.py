@@ -15,7 +15,7 @@ Data Flow:
   { "bsonType": "object" }        ->     EntityType (nested)
 """
 import json
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Union
 from ..unified_meta_schema import (
     Database, DatabaseType, EntityType, EntityKind, Property,
     UniqueConstraint, UniqueProperty, PKTypeEnum,
@@ -23,9 +23,10 @@ from ..unified_meta_schema import (
     ListDataType, SetDataType, MapDataType,
     RelationshipType, TypeMappings
 )
+from ._base import DatabaseAdapter
 
 
-class MongoDBAdapter:
+class MongoDBAdapter(DatabaseAdapter):
     """
     Adapter to parse MongoDB JSON Schema and create Unified Meta Schema.
 
@@ -43,9 +44,13 @@ class MongoDBAdapter:
     def __init__(self):
         self.database: Optional[Database] = None
 
-    def parse(self, schema: Dict[str, Any], db_name: str = "database") -> Database:
+    def parse(self, schema: Union[Dict[str, Any], str], db_name: str = "database") -> Database:
         """
         Parse MongoDB JSON Schema and return Database object.
+
+        Accepts either a JSON string (parsed via ``json.loads``) or a pre-parsed
+        dict. The string form is the canonical input — using it lets callers
+        treat all four adapters uniformly via the ``DatabaseAdapter`` ABC.
 
         Example Input (MongoDB JSON Schema):
             {
@@ -74,6 +79,8 @@ class MongoDBAdapter:
                 }
             )
         """
+        if isinstance(schema, str):
+            schema = json.loads(schema)
         self.database = Database(db_name=db_name, db_type=DatabaseType.DOCUMENT)
 
         # Parse root document as main entity
