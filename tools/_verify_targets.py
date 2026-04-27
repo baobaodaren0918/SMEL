@@ -37,7 +37,7 @@ def db_entity_attrs(db, include_edges=True):
     for name, entity in db.entity_types.items():
         if not include_edges and entity.entity_kind == EntityKind.EDGE:
             continue
-        attrs = sorted([a.attr_name for a in entity.properties])
+        attrs = sorted([a.name for a in entity.properties])
         result[name] = attrs
     return result
 
@@ -49,7 +49,7 @@ def db_reltypes(db):
         result[name] = {
             'source': rt.source_entity,
             'target': rt.target_entity,
-            'attrs': sorted([a.attr_name for a in rt.properties]) if hasattr(rt, 'properties') else []
+            'attrs': sorted([a.name for a in rt.properties]) if hasattr(rt, 'properties') else []
         }
     return result
 
@@ -94,7 +94,7 @@ ok_count = 0
 
 for cfg_key in specific_keys:
     cfg = MIGRATION_CONFIGS[cfg_key]
-    target_type = cfg['target_type']
+    target_type = cfg.target_type
 
     result = run_migration(cfg_key)
     result_meta = result.get('result', {})

@@ -224,7 +224,7 @@ class CassandraAdapter:
             if attr:
                 entity.add_property(attr)
                 if is_inline_pk:
-                    inline_pk_col = attr.attr_name
+                    inline_pk_col = attr.name
 
         # Build primary key constraint
         if table_pk_clause:
@@ -323,7 +323,7 @@ class CassandraAdapter:
 
         # is_key will be set later when building the PK constraint
         attr = Property(
-            attr_name=col_name,
+            name=col_name,
             data_type=data_type,
             is_key=is_inline_pk,
             is_optional=not is_inline_pk
@@ -560,7 +560,7 @@ class CassandraAdapter:
             "value DOUBLE"
         """
         cql_type = cls._get_cql_type(attr)
-        return f"{attr.attr_name} {cql_type}"
+        return f"{attr.name} {cql_type}"
 
     @classmethod
     def _get_cql_type(cls, attr: Property) -> str:
@@ -613,12 +613,12 @@ class CassandraAdapter:
                 continue
 
             if up.primary_key_type == PKTypeEnum.PARTITION:
-                partition_cols.append(attr.attr_name)
+                partition_cols.append(attr.name)
             elif up.primary_key_type == PKTypeEnum.CLUSTERING:
-                clustering_cols.append(attr.attr_name)
+                clustering_cols.append(attr.name)
             else:
                 # SIMPLE or unknown -> treat as partition key
-                partition_cols.append(attr.attr_name)
+                partition_cols.append(attr.name)
 
         if not partition_cols:
             return None

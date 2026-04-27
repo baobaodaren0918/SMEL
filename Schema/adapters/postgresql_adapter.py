@@ -324,7 +324,7 @@ class PostgreSQLAdapter:
         is_optional = 'NOT NULL' not in constraints.upper() and not is_key
 
         attr = Property(
-            attr_name=col_name,
+            name=col_name,
             data_type=data_type,
             is_key=is_key,
             is_optional=is_optional
@@ -525,7 +525,7 @@ class PostgreSQLAdapter:
         for entity in entities:
             deps = set()
             for rel in entity.relationships:
-                if rel.kind == "reference":
+                if isinstance(rel, Reference):
                     target = rel.get_target_entity_name()
                     if target != entity.name:  # Avoid self-reference
                         deps.add(target)
@@ -576,7 +576,7 @@ class PostgreSQLAdapter:
         # Build FK lookup: column_name -> Reference relationship
         fk_refs = {}
         for rel in entity.relationships:
-            if rel.kind == "reference":
+            if isinstance(rel, Reference):
                 fk_refs[rel.ref_name] = rel
 
         # Check for composite primary key (e.g., M:N join tables)
@@ -586,13 +586,13 @@ class PostgreSQLAdapter:
             for up in pk_constraint.unique_properties:
                 pk_attr = entity.get_property_by_id(up.property_id)
                 if pk_attr:
-                    pk_columns.append(pk_attr.attr_name)
+                    pk_columns.append(pk_attr.name)
 
         is_composite_pk = len(pk_columns) > 1
 
         # Process properties -> columns
         for attr in entity.properties:
-            col_def = cls._export_property_to_column(attr, fk_refs.get(attr.attr_name), database, is_composite_pk)
+            col_def = cls._export_property_to_column(attr, fk_refs.get(attr.name), database, is_composite_pk)
             columns.append(f"    {col_def}")
 
         # Add composite PRIMARY KEY constraint if needed
@@ -618,7 +618,7 @@ class PostgreSQLAdapter:
             FK:           "person_id INTEGER NOT NULL REFERENCES person(id)"
             Composite PK: "person_id VARCHAR(255) NOT NULL" (PK constraint is separate)
         """
-        parts = [attr.attr_name]
+        parts = [attr.name]
 
         # Data type (VARCHAR, INTEGER, SERIAL, etc.)
         sql_type = cls._get_sql_type(attr)
@@ -705,7 +705,7 @@ class PostgreSQLAdapter:
                     # Use property_id to look up the property
                     pk_attr = target_entity.get_property_by_id(pk.unique_properties[0].property_id)
                     if pk_attr:
-                        return pk_attr.attr_name
+                        return pk_attr.name
 
         # Fallback: default naming convention
         return f"{entity_name}_id"

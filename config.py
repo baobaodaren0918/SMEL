@@ -4,7 +4,26 @@ SMILE Configuration - Centralized path and settings management.
 This module contains all configurable paths and settings for the SMILE project.
 Users can modify these values to customize the behavior of the migration tool.
 """
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Dict
+
+
+@dataclass(frozen=True)
+class MigrationConfig:
+    """One registered migration scenario.
+
+    Using a frozen dataclass instead of a plain dict turns config typos
+    (missing keys, misspelled keys) into a TypeError at module load time
+    instead of a KeyError deep inside ``run_migration`` at runtime.
+    Attribute access (``cfg.source_file``) also lets the IDE catch typos
+    and supports refactoring tools.
+    """
+    source_file: Path
+    smile_file: Path
+    source_type: str
+    target_type: str
+    display_name: str
 
 # =============================================================================
 # PATH CONFIGURATION
@@ -96,9 +115,11 @@ MIGRATION_TARGET_FILES = {
 # =============================================================================
 # MIGRATION CONFIGURATIONS
 # =============================================================================
-# Define available migration scenarios with their source/target files
+# Define available migration scenarios with their source/target files.
+# The literal dict below is kept for readability; the MigrationConfig
+# wrapper at the bottom of this section enforces the schema.
 
-MIGRATION_CONFIGS = {
+_RAW_CONFIGS = {
     # Person: MongoDB -> PostgreSQL (Specific Grammar)
     "person_d2r_specific": {
         "source_file": TESTS_DIR / "person_mongodb.json",
@@ -424,5 +445,12 @@ MIGRATION_CONFIGS = {
         "target_type": SOURCE_TYPE_RELATIONAL,
         "display_name": "Grammar completeness: 9 unused ops",
     },
+}
+
+
+# Wrap raw dicts in MigrationConfig — fails loudly at import time if any
+# entry has a missing or extra key.
+MIGRATION_CONFIGS: Dict[str, MigrationConfig] = {
+    k: MigrationConfig(**v) for k, v in _RAW_CONFIGS.items()
 }
 

@@ -32,7 +32,7 @@ from config import (
 )
 from smile_listeners import MigrationContext, Operation, OpType
 from operation_params import (
-    OpParams,
+    OpParams, OperationResult,
     NestParams, UnnestParams, FlattenParams, UnflattenParams,
     WindParams, UnwindParams,
     AddEntityParams, DeleteEntityParams, RenameEntityParams, CopyEntityParams,
@@ -187,8 +187,8 @@ class SchemaTransformer:
                 continue
             first = pk_attrs[0]
             self.source_key_snapshot[entity_name] = {
-                "key_field": first.attr_name,                       # backward compat (scalar)
-                "key_fields": [a.attr_name for a in pk_attrs],      # full composite tuple
+                "key_field": first.name,                       # backward compat (scalar)
+                "key_fields": [a.name for a in pk_attrs],      # full composite tuple
                 "key_type": first.data_type.primitive_type.value if hasattr(first.data_type, 'primitive_type') else "string",
                 "prefix": None,
                 "generated": False,
@@ -224,7 +224,7 @@ class SchemaTransformer:
         entity = self._get_entity(entity_name, op_name)
         return (entity, attr_name)
 
-    def _handle_nest(self, params: NestParams) -> bool:
+    def _handle_nest(self, params: NestParams) -> OperationResult:
         """
         NEST: Embed separate table into parent as nested object (denormalization).
 
@@ -254,7 +254,7 @@ class SchemaTransformer:
         source_entity = self._get_entity(source_name, "NEST")
         target_entity = self._get_entity(target_name, "NEST")
         if not source_entity or not target_entity:
-            return False
+            return OperationResult.skipped("nest: precondition not met")
 
         # Determine embedding cardinality based on FK direction:
         #   - target holds FK to source (e.g., orders.customer_id → customers):
@@ -264,14 +264,14 @@ class SchemaTransformer:
         cardinality = Cardinality.ONE_TO_ONE
         # Check if SOURCE has FK pointing to TARGET → many-to-one → embed as array
         for rel in source_entity.relationships:
-            if rel.kind == "reference" and rel.get_target_entity_name() == target_name:
+            if isinstance(rel, Reference) and rel.get_target_entity_name() == target_name:
                 # Source holds FK to target: many sources per target → ONE_TO_MANY
                 cardinality = Cardinality.ONE_TO_MANY if not rel.is_optional else Cardinality.ZERO_TO_MANY
                 break
         # Check if TARGET has FK pointing to SOURCE → one-to-one → embed as object
         if cardinality == Cardinality.ONE_TO_ONE:
             for rel in target_entity.relationships:
-                if rel.kind == "reference" and rel.get_target_entity_name() == source_name:
+                if isinstance(rel, Reference) and rel.get_target_entity_name() == source_name:
                     cardinality = Cardinality.ONE_TO_ONE if not rel.is_optional else Cardinality.ZERO_TO_ONE
                     break
 
@@ -286,12 +286,12 @@ class SchemaTransformer:
             for attr_name in properties:
                 attr = source_entity.get_property(attr_name)
                 if attr:
-                    embedded_entity.add_property(Property(attr.attr_name, attr.data_type, False, attr.is_optional))
+                    embedded_entity.add_property(Property(attr.name, attr.data_type, False, attr.is_optional))
         else:
             # Use all non-FK properties (backward compatibility)
             for attr in source_entity.properties:
-                if attr.attr_name not in fk_attr_names:
-                    embedded_entity.add_property(Property(attr.attr_name, attr.data_type, False, attr.is_optional))
+                if attr.name not in fk_attr_names:
+                    embedded_entity.add_property(Property(attr.name, attr.data_type, False, attr.is_optional))
 
         # Copy nested embedded relationships from source entity
         # e.g., NEST company:name, address{street,city} -> copy "address" Embedded from company
@@ -307,7 +307,7 @@ class SchemaTransformer:
         # Remove FK reference from target to source
         fk_removed = False
         for rel in list(target_entity.relationships):
-            if rel.kind == "reference" and rel.get_target_entity_name() == source_name:
+            if isinstance(rel, Reference) and rel.get_target_entity_name() == source_name:
                 # Also remove matching ForeignKeyConstraint
                 fk_attr = target_entity.get_property(rel.ref_name)
                 if fk_attr:
@@ -344,9 +344,9 @@ class SchemaTransformer:
                                                 is_optional=not cardinality.is_required()))
         self._touch(source_name, target_name, alias)
         self.changes.append(f"NEST:{target_name}.{alias}")
-        return True
+        return OperationResult.ok()
 
-    def _handle_flatten(self, params: FlattenParams) -> bool:
+    def _handle_flatten(self, params: FlattenParams) -> OperationResult:
         """
         FLATTEN: Flatten nested object fields into parent table (reduce depth by 1).
 
@@ -364,11 +364,11 @@ class SchemaTransformer:
         # Parse path: person.name -> parent=person, nested=name
         parent_path, nested_name = self._split_path(source_path)
         if not parent_path:
-            return False
+            return OperationResult.skipped("flatten: precondition not met")
 
         parent_entity = self._get_entity(parent_path, "FLATTEN")
         if not parent_entity:
-            return False
+            return OperationResult.skipped("flatten: precondition not met")
 
         # Try to find the embedded entity
         embedded_entity = None
@@ -388,12 +388,12 @@ class SchemaTransformer:
 
         if not embedded_entity:
             logger.info(f"FLATTEN skipped: embedded '{full_embedded_path}' not found")
-            return False
+            return OperationResult.skipped("flatten: precondition not met")
 
         # Flatten: copy all properties from embedded entity to parent with prefix
         prefix = nested_name + "_"
         for attr in embedded_entity.properties:
-            new_attr_name = prefix + attr.attr_name
+            new_attr_name = prefix + attr.name
             if not parent_entity.get_property(new_attr_name):
                 parent_entity.add_property(Property(
                     new_attr_name, attr.data_type, False, attr.is_optional
@@ -401,7 +401,7 @@ class SchemaTransformer:
 
         # Remove the embedded relationship from parent
         for rel in list(parent_entity.relationships):
-            if rel.kind == "embedded" and rel.aggr_name == nested_name:
+            if isinstance(rel, Embedded) and rel.aggr_name == nested_name:
                 parent_entity.remove_relationship(rel.aggr_name)
                 break
 
@@ -410,9 +410,9 @@ class SchemaTransformer:
 
         self._touch(parent_path, full_embedded_path)
         self.changes.append(f"FLATTEN:{source_path}")
-        return True
+        return OperationResult.ok()
 
-    def _handle_unflatten(self, params: UnflattenParams) -> bool:
+    def _handle_unflatten(self, params: UnflattenParams) -> OperationResult:
         """
         UNFLATTEN: Combine flat fields into nested object (reverse of FLATTEN).
 
@@ -428,7 +428,7 @@ class SchemaTransformer:
 
         entity = self._get_entity(entity_name, "UNFLATTEN")
         if not entity:
-            return False
+            return OperationResult.skipped("unflatten: precondition not met")
 
         # Create new embedded entity for the nested object
         nested_entity = EntityType(object_name=[nested_name])
@@ -438,7 +438,7 @@ class SchemaTransformer:
             attr = entity.get_property(field_name)
             if attr:
                 nested_entity.add_property(Property(
-                    attr.attr_name, attr.data_type, attr.is_key, attr.is_optional
+                    attr.name, attr.data_type, attr.is_key, attr.is_optional
                 ))
                 entity.remove_property(field_name)
 
@@ -454,9 +454,9 @@ class SchemaTransformer:
 
         self._touch(entity_name, nested_name)
         self.changes.append(f"UNFLATTEN:{entity_name}({','.join(fields)})->{nested_name}")
-        return True
+        return OperationResult.ok()
 
-    def _handle_unnest(self, params: UnnestParams) -> bool:
+    def _handle_unnest(self, params: UnnestParams) -> OperationResult:
         """
         UNNEST: Extract nested object to separate table (normalization).
 
@@ -470,7 +470,7 @@ class SchemaTransformer:
         source_path = params.source_path
         target_name = params.target
         if not source_path or not target_name:
-            return False
+            return OperationResult.skipped("unnest: precondition not met")
 
         # New parser format uses [{'name': 'company', ...}]; legacy is just ['company'].
         nested_objects = [
@@ -480,10 +480,10 @@ class SchemaTransformer:
 
         parent_path, nested_name = self._split_path(source_path)
         if not parent_path:
-            return False
+            return OperationResult.skipped("unnest: precondition not met")
         parent_entity = self._get_entity(parent_path, "UNNEST")
         if not parent_entity:
-            return False
+            return OperationResult.skipped("unnest: precondition not met")
 
         embedded_entity, embedded_rel, full_embedded_path = self._resolve_unnest_source(
             parent_entity, nested_name, source_path
@@ -508,7 +508,7 @@ class SchemaTransformer:
 
         self._touch(parent_path, target_name, full_embedded_path)
         self.changes.append(f"UNNEST:{source_path}->{target_name}")
-        return True
+        return OperationResult.ok()
 
     def _resolve_unnest_source(self, parent_entity, nested_name, source_path):
         """Locate the embedded entity referenced by an UNNEST.
@@ -551,7 +551,7 @@ class SchemaTransformer:
             attr = embedded_entity.get_property(field_name) if embedded_entity else None
             if attr:
                 new_entity.add_property(Property(
-                    attr.attr_name, attr.data_type, False, attr.is_optional
+                    attr.name, attr.data_type, False, attr.is_optional
                 ))
             else:
                 new_entity.add_property(Property(
@@ -564,7 +564,7 @@ class SchemaTransformer:
         """Return {aggr_name: Embedded} for all Embedded relationships on `entity`."""
         if not entity:
             return {}
-        return {rel.aggr_name: rel for rel in entity.relationships if rel.kind == "embedded"}
+        return {rel.aggr_name: rel for rel in entity.relationships if isinstance(rel, Embedded)}
 
     def _transfer_nested_embeddeds(self, new_entity, nested_objects, embedded_map,
                                    old_prefix, new_prefix):
@@ -602,7 +602,7 @@ class SchemaTransformer:
                 self.database.add_entity_type(nested_entity)
                 # Inner Embedded.aggregates that still point to old prefix must follow.
                 for rel in nested_entity.relationships:
-                    if rel.kind == "embedded" and rel.aggregates.startswith(old_prefix + "."):
+                    if isinstance(rel, Embedded) and rel.aggregates.startswith(old_prefix + "."):
                         rel.aggregates = new_prefix + rel.aggregates[len(old_prefix):]
 
             new_entity.add_relationship(Embedded(
@@ -612,7 +612,7 @@ class SchemaTransformer:
                 is_optional=inner_rel.is_optional,
             ))
 
-    def _handle_unwind(self, params: UnwindParams) -> bool:
+    def _handle_unwind(self, params: UnwindParams) -> OperationResult:
         """
         UNWIND: Expand array field.
 
@@ -640,22 +640,22 @@ class SchemaTransformer:
                     entity_name = self._split_path(source_path)[0]
                     self._touch(entity_name)
                     self.changes.append(f"UNWIND_INPLACE:{entity_name}.{attr_name}")
-                    return True
-            return False
+                    return OperationResult.ok()
+            return OperationResult.skipped("unwind: precondition not met")
 
         # Mode 1: Create new table
         target_name = params.target
         if not target_name:
-            return False
+            return OperationResult.skipped("unwind: precondition not met")
 
         # Parse source path: person.tags[] -> parent=person, array_name=tags
         parent_path, array_name = self._split_path(source_path.replace("[]", ""))
         if not parent_path:
-            return False
+            return OperationResult.skipped("unwind: precondition not met")
 
         parent_entity = self._get_entity(parent_path, "UNWIND")
         if not parent_entity:
-            return False
+            return OperationResult.skipped("unwind: precondition not met")
 
         # Check if source is an array property
         attr = parent_entity.get_property(array_name)
@@ -678,9 +678,9 @@ class SchemaTransformer:
         if attr:
             parent_entity.remove_property(array_name)
         self._touch(parent_path, target_name)
-        return True
+        return OperationResult.ok()
 
-    def _handle_wind(self, params: WindParams) -> bool:
+    def _handle_wind(self, params: WindParams) -> OperationResult:
         """
         WIND: Convert scalar property back to array (reverse of UNWIND).
 
@@ -703,10 +703,10 @@ class SchemaTransformer:
                 entity_name = self._split_path(source_path)[0]
                 self._touch(entity_name)
                 self.changes.append(f"WIND:{entity_name}.{attr_name}")
-                return True
-        return False
+                return OperationResult.ok()
+        return OperationResult.skipped("wind: precondition not met")
 
-    def _handle_delete_foreign_key(self, params: DeleteForeignKeyParams) -> bool:
+    def _handle_delete_foreign_key(self, params: DeleteForeignKeyParams) -> OperationResult:
         entity_name, ref_name = self._split_path(params.reference)
         entity = self._get_entity(entity_name) if entity_name else None
         if entity:
@@ -723,15 +723,15 @@ class SchemaTransformer:
                 ]
             self._touch(entity_name)
             self.changes.append(f"DELETE_FOREIGN_KEY:{entity_name}.{ref_name}")
-            return True
-        return False
+            return OperationResult.ok()
+        return OperationResult.skipped("delete_foreign_key: precondition not met")
 
-    def _handle_delete_embedded(self, params: DeleteEmbeddedParams) -> bool:
+    def _handle_delete_embedded(self, params: DeleteEmbeddedParams) -> OperationResult:
         parent_name, embedded_name = self._split_path(params.embedded)
         embedded_name = embedded_name.replace("[]", "")
         parent_entity = self._get_entity(parent_name, "DELETE_EMBEDDED") if parent_name else None
         if not parent_entity:
-            return False
+            return OperationResult.skipped("delete_embedded: precondition not met")
         # Find the full entity path from the Embedded relationship
         full_path = f"{parent_name}.{embedded_name}"
         for rel in parent_entity.get_embedded():
@@ -742,9 +742,9 @@ class SchemaTransformer:
         self.database.remove_entity_type(full_path)
         self._touch(parent_name, full_path)
         self.changes.append(f"DELETE_EMBEDDED:{parent_name}.{embedded_name}")
-        return True
+        return OperationResult.ok()
 
-    def _handle_add_foreign_key(self, params: AddForeignKeyParams) -> bool:
+    def _handle_add_foreign_key(self, params: AddForeignKeyParams) -> OperationResult:
         """ADD_FOREIGN_KEY entity.field REFERENCES target_table(target_column) WITH CARDINALITY"""
         field_name = params.field_name
         target_table = params.target_table
@@ -752,11 +752,11 @@ class SchemaTransformer:
         entity_name = params.entity
 
         if not entity_name or not field_name or not target_table:
-            return False
+            return OperationResult.skipped("add_foreign_key: precondition not met")
 
         entity = self._get_entity(entity_name, "ADD_FOREIGN_KEY")
         if not entity:
-            return False
+            return OperationResult.skipped("add_foreign_key: precondition not met")
 
         # Get target entity's primary key type for FK property
         target_entity = self._get_entity(target_table)
@@ -779,7 +779,7 @@ class SchemaTransformer:
 
         # Avoid duplicate Reference (if already exists, update it)
         existing_ref = next(
-            (r for r in entity.relationships if r.kind == "reference" and r.ref_name == field_name),
+            (r for r in entity.relationships if isinstance(r, Reference) and r.ref_name == field_name),
             None
         )
         if existing_ref:
@@ -809,9 +809,9 @@ class SchemaTransformer:
 
         self._touch(entity_name)
         self.changes.append(f"ADD_REF:{entity_name}.{field_name}")
-        return True
+        return OperationResult.ok()
 
-    def _handle_add_property(self, params: AddPropertyParams) -> bool:
+    def _handle_add_property(self, params: AddPropertyParams) -> OperationResult:
         """ADD PROPERTY email TO Customer WITH TYPE String NOT NULL"""
         name = params.name
         entity_name = params.entity
@@ -830,13 +830,13 @@ class SchemaTransformer:
 
         entity = self._get_entity(entity_name, "ADD_PROPERTY") if entity_name else None
         if not entity:
-            return False
+            return OperationResult.skipped("add_property: precondition not met")
         entity.add_property(Property(name, data_type, False, is_optional))
         self._touch(entity_name)
         self.changes.append(f"ADD_PROP:{entity_name}.{name}")
-        return True
+        return OperationResult.ok()
 
-    def _handle_add_embedded(self, params: AddEmbeddedParams) -> bool:
+    def _handle_add_embedded(self, params: AddEmbeddedParams) -> OperationResult:
         """ADD EMBEDDED address TO Customer WITH CARDINALITY ONE_TO_ONE"""
         name = params.name
         entity_name = params.entity
@@ -856,10 +856,10 @@ class SchemaTransformer:
                 self.database.add_entity_type(EntityType(object_name=[name]))
             self._touch(entity_name, name)
             self.changes.append(f"ADD_EMBEDDED:{entity_name}.{name}")
-            return True
-        return False
+            return OperationResult.ok()
+        return OperationResult.skipped("add_embedded: precondition not met")
 
-    def _handle_add_entity(self, params: AddEntityParams) -> bool:
+    def _handle_add_entity(self, params: AddEntityParams) -> OperationResult:
         """ADD_ENTITY Product WITH PROPERTIES (id String, name String)
         Also handles EDGE entities: ADD_ENTITY name FROM src TO tgt WITH PROPERTIES (...)
         """
@@ -898,11 +898,11 @@ class SchemaTransformer:
             source_ent = self.database.get_entity_type(source_entity)
             if not source_ent:
                 logger.info(f"ADD_ENTITY (EDGE) skipped: source entity '{source_entity}' not found")
-                return False
+                return OperationResult.skipped("add_entity: precondition not met")
             target_ent = self.database.get_entity_type(target_entity)
             if not target_ent:
                 logger.info(f"ADD_ENTITY (EDGE) skipped: target entity '{target_entity}' not found")
-                return False
+                return OperationResult.skipped("add_entity: precondition not met")
 
             # Add Edge to source entity's relationships
             edge = Edge(
@@ -916,7 +916,7 @@ class SchemaTransformer:
             self.database.add_entity_type(new_entity)
             self._touch(name, source_entity, target_entity)
             self.changes.append(f"ADD_ENTITY:{name}({source_entity}->{target_entity})")
-            return True
+            return OperationResult.ok()
 
         # Regular entity: set primary key if specified
         if key_name:
@@ -934,14 +934,14 @@ class SchemaTransformer:
         self.database.add_entity_type(new_entity)
         self._touch(name)
         self.changes.append(f"ADD_ENTITY:{name}")
-        return True
+        return OperationResult.ok()
 
-    def _handle_delete_property(self, params: DeletePropertyParams) -> bool:
+    def _handle_delete_property(self, params: DeletePropertyParams) -> OperationResult:
         """DELETE PROPERTY Customer.email"""
         target = params.target
         entity, attr_name = self._resolve_entity_attr(target)
         if not entity:
-            return False
+            return OperationResult.skipped("delete_property: precondition not met")
         self._touch(entity.name)
 
         # Get meta_id before removal for constraint cleanup
@@ -961,19 +961,19 @@ class SchemaTransformer:
             ]
         # Clean up Reference relationships matching the deleted property
         for rel in list(entity.relationships):
-            if rel.kind == "reference" and rel.ref_name == attr_name:
+            if isinstance(rel, Reference) and rel.ref_name == attr_name:
                 entity.remove_relationship(attr_name)
                 break
 
         self.changes.append(f"DELETE_PROP:{target}")
-        return True
+        return OperationResult.ok()
 
-    def _handle_delete_entity(self, params: DeleteEntityParams) -> bool:
+    def _handle_delete_entity(self, params: DeleteEntityParams) -> OperationResult:
         """DELETE ENTITY Customer (also handles EDGE entities)"""
         name = params.name
         deleted_entity = self._get_entity(name, "DELETE_ENTITY")
         if not deleted_entity:
-            return False
+            return OperationResult.skipped("delete_entity: precondition not met")
 
         # If deleting an EDGE entity, clean up Edge from source entity
         if deleted_entity.entity_kind == EntityKind.EDGE and deleted_entity.source_entity:
@@ -998,7 +998,7 @@ class SchemaTransformer:
                 rel for rel in other_entity.relationships
                 if not (hasattr(rel, 'refs_to') and rel.refs_to == name)
                 and not (hasattr(rel, 'aggregates') and rel.aggregates == name)
-                and not (rel.kind == "edge" and (rel.source_entity == name or rel.target_entity == name))
+                and not (isinstance(rel, Edge) and (rel.source_entity == name or rel.target_entity == name))
             ]
             # Clean up ForeignKeyConstraints pointing to the deleted entity
             if deleted_up_ids:
@@ -1017,48 +1017,48 @@ class SchemaTransformer:
             self.database.remove_entity_type(e_name)
         self._touch(name, *edges_to_remove)
         self.changes.append(f"DELETE_ENTITY:{name}")
-        return True
+        return OperationResult.ok()
 
-    def _handle_delete_key(self, params: DeleteKeyParams) -> bool:
+    def _handle_delete_key(self, params: DeleteKeyParams) -> OperationResult:
         """DELETE PRIMARY/FOREIGN/UNIQUE KEY - destructive removal"""
         return self._remove_key_constraint(params, operation="DELETE")
 
-    def _handle_delete_label(self, params: DeleteLabelParams) -> bool:
+    def _handle_delete_label(self, params: DeleteLabelParams) -> OperationResult:
         """DELETE LABEL Employee FROM Person (graph database)"""
         label = params.label
         entity_name = params.entity
 
         entity = self._get_entity(entity_name, "DELETE_LABEL") if entity_name else None
         if not entity:
-            return False
+            return OperationResult.skipped("delete_label: precondition not met")
 
         if label in entity.labels:
             entity.labels.remove(label)
         self._touch(entity_name)
         self.changes.append(f"DELETE_LABEL:{entity_name}.{label}")
-        return True
+        return OperationResult.ok()
 
-    def _handle_add_label(self, params: AddLabelParams) -> bool:
+    def _handle_add_label(self, params: AddLabelParams) -> OperationResult:
         """ADD LABEL Employee TO Person (graph database)"""
         label = params.label
         entity_name = params.entity
 
         entity = self._get_entity(entity_name, "ADD_LABEL") if entity_name else None
         if not entity or not label:
-            return False
+            return OperationResult.skipped("add_label: precondition not met")
 
         if label not in entity.labels:
             entity.labels.append(label)
         self._touch(entity_name)
         self.changes.append(f"ADD_LABEL:{entity_name}.{label}")
-        return True
+        return OperationResult.ok()
 
-    def _handle_add_key(self, params: AddKeyParams) -> bool:
+    def _handle_add_key(self, params: AddKeyParams) -> OperationResult:
         """ADD_PS KEY id AS String OR ADD_PS PRIMARY KEY (id1, id2) TO Customer"""
         entity_name = params.entity
         key_columns = params.key_columns
         if not key_columns:
-            return False
+            return OperationResult.skipped("add_key: precondition not met")
 
         key_data_type = (
             PrimitiveDataType(TYPE_STR_MAP.get(params.data_type.upper(), PrimitiveType.STRING))
@@ -1087,14 +1087,14 @@ class SchemaTransformer:
             if self._append_to_existing_pk(entity, constraint, pk_type_enum):
                 self._touch(entity_name)
                 self.changes.append(f"ADD_KEY:{entity_name}.({', '.join(key_columns)})")
-                return True
+                return OperationResult.ok()
             if pk_type_enum == PKTypeEnum.SIMPLE:
                 self._clear_existing_pk(entity, key_columns)
 
         entity.add_constraint(constraint)
         self._touch(entity_name)
         self.changes.append(f"ADD_KEY:{entity_name}.({', '.join(key_columns)})")
-        return True
+        return OperationResult.ok()
 
     def _upsert_key_properties(self, entity, key_columns, key_data_type, data_type_explicit):
         """Look up or create a Property for each column of a composite key.
@@ -1165,19 +1165,19 @@ class SchemaTransformer:
         usual `entity.add_constraint` step. Otherwise return False.
         """
         if pk_type_enum not in (PKTypeEnum.PARTITION, PKTypeEnum.CLUSTERING):
-            return False
+            return OperationResult.skipped("add_key: precondition not met")
         existing_pk = next(
             (c for c in entity.constraints
              if c.kind == "unique" and c.is_primary_key),
             None,
         )
         if not existing_pk:
-            return False
+            return OperationResult.skipped("add_key: precondition not met")
         existing_ids = {up.property_id for up in existing_pk.unique_properties}
         for up in constraint.unique_properties:
             if up.property_id not in existing_ids:
                 existing_pk.unique_properties.append(up)
-        return True
+        return OperationResult.ok()
 
     def _clear_existing_pk(self, entity, incoming_key_columns):
         """Drop any existing primary-key constraint and strip `is_key` from
@@ -1187,7 +1187,7 @@ class SchemaTransformer:
             if old_c.kind == "unique" and old_c.is_primary_key:
                 for up in old_c.unique_properties:
                     old_attr = entity.get_property_by_id(up.property_id)
-                    if old_attr and old_attr.attr_name not in incoming_key_columns:
+                    if old_attr and old_attr.name not in incoming_key_columns:
                         old_attr.is_key = False
         entity.constraints = [
             c for c in entity.constraints
@@ -1208,7 +1208,7 @@ class SchemaTransformer:
         if target_attr_name:
             for up in target_pk.unique_properties:
                 attr = target_entity.get_property_by_id(up.property_id)
-                if attr and attr.attr_name == target_attr_name:
+                if attr and attr.name == target_attr_name:
                     return up.meta_id
         # Default to first UniqueProperty
         return target_pk.unique_properties[0].meta_id
@@ -1221,7 +1221,7 @@ class SchemaTransformer:
 
         entity = self.database.get_entity_type(entity_name) if entity_name else None
         if not entity or not key_columns:
-            return False
+            return OperationResult.skipped("add_key: precondition not met")
 
         key_columns_set = set(key_columns)
 
@@ -1232,7 +1232,7 @@ class SchemaTransformer:
                 for fk_prop in constraint.foreign_key_properties:
                     fk_attr = entity.get_property_by_id(fk_prop.property_id)
                     if fk_attr:
-                        fk_attr_names.add(fk_attr.attr_name)
+                        fk_attr_names.add(fk_attr.name)
                 if fk_attr_names == key_columns_set:
                     entity.constraints.remove(constraint)
                     for fk_prop in constraint.foreign_key_properties:
@@ -1241,7 +1241,7 @@ class SchemaTransformer:
                             fk_attr.is_key = False
                     key_names_str = ", ".join(key_columns)
                     self.changes.append(f"{operation}_KEY:{entity_name}.({key_names_str})")
-                    return True
+                    return OperationResult.ok()
 
             elif key_type_str in ("primary", "unique") and constraint.kind == "unique":
                 is_primary = (key_type_str == "primary")
@@ -1251,7 +1251,7 @@ class SchemaTransformer:
                     for up in constraint.unique_properties:
                         up_attr = entity.get_property_by_id(up.property_id)
                         if up_attr:
-                            constraint_attr_names.add(up_attr.attr_name)
+                            constraint_attr_names.add(up_attr.name)
                     if constraint_attr_names == key_columns_set:
                         entity.constraints.remove(constraint)
                         for up in constraint.unique_properties:
@@ -1260,7 +1260,7 @@ class SchemaTransformer:
                                 up_attr.is_key = False
                         key_names_str = ", ".join(key_columns)
                         self.changes.append(f"{operation}_KEY:{entity_name}.({key_names_str})")
-                        return True
+                        return OperationResult.ok()
 
             elif isinstance(key_type_str, PKTypeEnum) and constraint.kind == "unique":
                 # Cassandra PARTITION/CLUSTERING keys: remove matching properties
@@ -1268,7 +1268,7 @@ class SchemaTransformer:
                 for up in list(constraint.unique_properties):
                     if up.primary_key_type == key_type_str:
                         up_attr = entity.get_property_by_id(up.property_id)
-                        if up_attr and up_attr.attr_name in key_columns_set:
+                        if up_attr and up_attr.name in key_columns_set:
                             constraint.unique_properties.remove(up)
                             up_attr.is_key = False
                             removed_any = True
@@ -1278,10 +1278,10 @@ class SchemaTransformer:
                     if not constraint.unique_properties:
                         entity.constraints.remove(constraint)
                     self._touch(entity_name)
-                    return True
-        return False
+                    return OperationResult.ok()
+        return OperationResult.skipped("add_key: precondition not met")
 
-    def _handle_rename_property(self, params: RenamePropertyParams) -> bool:
+    def _handle_rename_property(self, params: RenamePropertyParams) -> OperationResult:
         """RENAME_PROPERTY: Rename a property within an entity."""
         old_name = params.old_name
         new_name = params.new_name
@@ -1289,37 +1289,37 @@ class SchemaTransformer:
 
         if not entity_name:
             logger.info(f"RENAME_PROPERTY skipped: no entity specified for '{old_name}'")
-            return False
+            return OperationResult.skipped("rename_property: precondition not met")
 
         entity = self._get_entity(entity_name, "RENAME_PROPERTY")
         if not entity:
-            return False
+            return OperationResult.skipped("rename_property: precondition not met")
 
         attr = entity.get_property(old_name)
         if attr:
-            attr.attr_name = new_name
+            attr.name = new_name
             # Update Reference.ref_name if this property is a FK
             for rel in entity.relationships:
-                if rel.kind == "reference" and rel.ref_name == old_name:
+                if isinstance(rel, Reference) and rel.ref_name == old_name:
                     rel.ref_name = new_name
                     break
             self._touch(entity_name)
             self.changes.append(f"RENAME_PROP:{entity_name}.{old_name}->{new_name}")
-            return True
-        return False
+            return OperationResult.ok()
+        return OperationResult.skipped("rename_property: precondition not met")
 
-    def _handle_rename_entity(self, params: RenameEntityParams) -> bool:
+    def _handle_rename_entity(self, params: RenameEntityParams) -> OperationResult:
         """RENAME ENTITY: Rename an entity."""
         old_name = params.old_name
         new_name = params.new_name
 
         entity = self._get_entity(old_name, "RENAME_ENTITY")
         if not entity:
-            return False
+            return OperationResult.skipped("rename_entity: precondition not met")
         # Collision check: prevent overwriting an existing entity
         if self.database.get_entity_type(new_name):
             logger.info(f"RENAME_ENTITY skipped: target '{new_name}' already exists")
-            return False
+            return OperationResult.skipped("rename_entity: precondition not met")
 
         self.database.remove_entity_type(old_name)
         # Update object_name: keep parent path, change last element
@@ -1332,7 +1332,7 @@ class SchemaTransformer:
                     rel.refs_to = new_name
                 if hasattr(rel, 'aggregates') and rel.aggregates == old_name:
                     rel.aggregates = new_name
-                if rel.kind == "edge":
+                if isinstance(rel, Edge):
                     if rel.source_entity == old_name:
                         rel.source_entity = new_name
                     if rel.target_entity == old_name:
@@ -1349,13 +1349,13 @@ class SchemaTransformer:
             source_ent = self.database.get_entity_type(entity.source_entity)
             if source_ent:
                 for rel in source_ent.relationships:
-                    if rel.kind == "edge" and rel.rel_type_name == old_name:
+                    if isinstance(rel, Edge) and rel.rel_type_name == old_name:
                         rel.rel_type_name = new_name
         self._touch(old_name, new_name)
         self.changes.append(f"RENAME_ENTITY:{old_name}->{new_name}")
-        return True
+        return OperationResult.ok()
 
-    def _handle_copy_property(self, params: CopyPropertyParams) -> bool:
+    def _handle_copy_property(self, params: CopyPropertyParams) -> OperationResult:
         """
         COPY_PROPERTY: Copy property from source to target.
 
@@ -1378,7 +1378,7 @@ class SchemaTransformer:
                 tgt_entity.add_property(new_attr)
                 self._touch(src_entity.name, tgt_entity.name)
                 self.changes.append(f"COPY_PROP:{source_path}->{target_path}")
-                return True
+                return OperationResult.ok()
         elif "." not in source_path and "." not in target_path:
             # Copy entity
             src_entity = self.database.get_entity_type(source_path)
@@ -1389,10 +1389,10 @@ class SchemaTransformer:
                 self.database.add_entity_type(new_entity)
                 self._touch(source_path, target_path)
                 self.changes.append(f"COPY_PROP:{source_path}->{target_path}")
-                return True
-        return False
+                return OperationResult.ok()
+        return OperationResult.skipped("copy_property: precondition not met")
 
-    def _handle_copy_entity(self, params: CopyEntityParams) -> bool:
+    def _handle_copy_entity(self, params: CopyEntityParams) -> OperationResult:
         """COPY_ENTITY: Duplicate an entire entity with all its structure.
 
         Reference: PRISM "COPY TABLE R INTO S", CoDEL "Addtable(S, R)"
@@ -1409,31 +1409,31 @@ class SchemaTransformer:
 
         src_entity = self._get_entity(source_name, "COPY_ENTITY")
         if not src_entity:
-            return False
+            return OperationResult.skipped("copy_entity: precondition not met")
 
         # EDGE requires explicit FROM...TO
         if src_entity.entity_kind == EntityKind.EDGE and not (source_entity_name and target_entity_name):
             logger.error(f"COPY_ENTITY failed: source '{source_name}' is an EDGE entity, FROM...TO is required")
-            return False
+            return OperationResult.skipped("copy_entity: precondition not met")
 
         # Non-EDGE must not use FROM...TO
         if src_entity.entity_kind != EntityKind.EDGE and (source_entity_name or target_entity_name):
             logger.error(f"COPY_ENTITY failed: source '{source_name}' is not an EDGE entity, FROM...TO is not allowed (use CAST_ENTITY to change entity kind)")
-            return False
+            return OperationResult.skipped("copy_entity: precondition not met")
 
         new_entity = copy.deepcopy(src_entity)
         new_entity.object_name = [target_name]
         # Update relationship paths that reference the old entity name
         for rel in new_entity.relationships:
-            if rel.kind == "embedded":
+            if isinstance(rel, Embedded):
                 if rel.aggregates.startswith(source_name + "."):
                     rel.aggregates = target_name + rel.aggregates[len(source_name):]
                 elif rel.aggregates == source_name:
                     rel.aggregates = target_name
-            elif rel.kind == "reference":
+            elif isinstance(rel, Reference):
                 if rel.refs_to == source_name:
                     rel.refs_to = target_name
-            elif rel.kind == "edge":
+            elif isinstance(rel, Edge):
                 if rel.source_entity == source_name:
                     rel.source_entity = target_name
 
@@ -1455,9 +1455,9 @@ class SchemaTransformer:
         self.database.add_entity_type(new_entity)
         self._touch(source_name, target_name)
         self.changes.append(f"COPY_ENTITY:{source_name}->{target_name}")
-        return True
+        return OperationResult.ok()
 
-    def _handle_move_property(self, params: MovePropertyParams) -> bool:
+    def _handle_move_property(self, params: MovePropertyParams) -> OperationResult:
         """MOVE_PROPERTY: Move property from one entity to another."""
         source_path = params.source
         target_path = params.target
@@ -1475,10 +1475,10 @@ class SchemaTransformer:
                     src_entity.remove_property(src_attr_name)
                     self._touch(src_entity.name, tgt_entity.name)
                     self.changes.append(f"MOVE_PROP:{source_path}->{target_path}")
-                    return True
-        return False
+                    return OperationResult.ok()
+        return OperationResult.skipped("move_property: precondition not met")
 
-    def _handle_merge(self, params: MergeParams) -> bool:
+    def _handle_merge(self, params: MergeParams) -> OperationResult:
         """MERGE: Merge two entities into one."""
         source1_name = params.source1
         source2_name = params.source2
@@ -1487,15 +1487,15 @@ class SchemaTransformer:
         source1 = self._get_entity(source1_name, "MERGE")
         source2 = self._get_entity(source2_name, "MERGE")
         if not source1 or not source2:
-            return False
+            return OperationResult.skipped("merge: precondition not met")
 
         # EDGE entities cannot be merged
         if source1.entity_kind == EntityKind.EDGE:
             logger.error(f"MERGE failed: entity '{source1_name}' is an EDGE entity, MERGE does not support EDGE")
-            return False
+            return OperationResult.skipped("merge: precondition not met")
         if source2.entity_kind == EntityKind.EDGE:
             logger.error(f"MERGE failed: entity '{source2_name}' is an EDGE entity, MERGE does not support EDGE")
-            return False
+            return OperationResult.skipped("merge: precondition not met")
 
         # Create new entity with combined properties
         new_entity = EntityType(object_name=[target_name])
@@ -1505,15 +1505,15 @@ class SchemaTransformer:
 
         # Add properties from source1
         for attr in source1.properties:
-            new_attr = Property(attr.attr_name, attr.data_type, attr.is_key, attr.is_optional)
+            new_attr = Property(attr.name, attr.data_type, attr.is_key, attr.is_optional)
             meta_id_map[attr.meta_id] = new_attr.meta_id
             new_entity.add_property(new_attr)
 
         # Add properties from source2 (avoid duplicates)
-        existing_names = {a.attr_name for a in new_entity.properties}
+        existing_names = {a.name for a in new_entity.properties}
         for attr in source2.properties:
-            if attr.attr_name not in existing_names:
-                new_attr = Property(attr.attr_name, attr.data_type, attr.is_key, attr.is_optional)
+            if attr.name not in existing_names:
+                new_attr = Property(attr.name, attr.data_type, attr.is_key, attr.is_optional)
                 meta_id_map[attr.meta_id] = new_attr.meta_id
                 new_entity.add_property(new_attr)
 
@@ -1550,9 +1550,9 @@ class SchemaTransformer:
 
         # Helper to get relationship identifier
         def _rel_id(r):
-            if r.kind == "reference": return ('ref', r.ref_name)
-            if r.kind == "embedded": return ('emb', r.aggr_name)
-            if r.kind == "edge": return ('edge', r.rel_type_name)
+            if isinstance(r, Reference): return ('ref', r.ref_name)
+            if isinstance(r, Embedded): return ('emb', r.aggr_name)
+            if isinstance(r, Edge): return ('edge', r.rel_type_name)
             return ('other', id(r))
 
         # Copy relationships from source1 (Embedded, Reference, etc.)
@@ -1584,7 +1584,7 @@ class SchemaTransformer:
                         rel.refs_to = target_name
                     if hasattr(rel, 'aggregates') and rel.aggregates == old_name:
                         rel.aggregates = target_name
-                    if rel.kind == "edge":
+                    if isinstance(rel, Edge):
                         if rel.source_entity == old_name:
                             rel.source_entity = target_name
                         if rel.target_entity == old_name:
@@ -1599,9 +1599,9 @@ class SchemaTransformer:
 
         self._touch(source1_name, source2_name, target_name)
         self.changes.append(f"MERGE:{source1_name},{source2_name}->{target_name}")
-        return True
+        return OperationResult.ok()
 
-    def _handle_split(self, params: SplitParams) -> bool:
+    def _handle_split(self, params: SplitParams) -> OperationResult:
         """
         SPLIT: Divide one entity into multiple separate entities (vertical partitioning).
 
@@ -1619,12 +1619,12 @@ class SchemaTransformer:
 
         source = self.database.get_entity_type(source_name)
         if not source or not parts:
-            return False
+            return OperationResult.skipped("split: precondition not met")
 
         # EDGE entities cannot be split
         if source.entity_kind == EntityKind.EDGE:
             logger.error(f"SPLIT failed: entity '{source_name}' is an EDGE entity, SPLIT does not support EDGE")
-            return False
+            return OperationResult.skipped("split: precondition not met")
 
         pk = source.get_primary_key()
         created_entities = []
@@ -1655,7 +1655,7 @@ class SchemaTransformer:
                     if attr:
                         # Create new property with is_key preserved from source
                         new_attr = Property(
-                            attr.attr_name, attr.data_type, attr.is_key, attr.is_optional
+                            attr.name, attr.data_type, attr.is_key, attr.is_optional
                         )
                         meta_id_map[attr.meta_id] = new_attr.meta_id
                         new_entity.add_property(new_attr)
@@ -1670,7 +1670,7 @@ class SchemaTransformer:
 
                 for attr in selected_attrs:
                     new_attr = Property(
-                        attr.attr_name, attr.data_type, attr.is_key, attr.is_optional
+                        attr.name, attr.data_type, attr.is_key, attr.is_optional
                     )
                     meta_id_map[attr.meta_id] = new_attr.meta_id
                     new_entity.add_property(new_attr)
@@ -1690,8 +1690,8 @@ class SchemaTransformer:
         # Second pass: modify source in-place (preserves edges, embedded, references)
         if source_part_fields is not None:
             keep_fields = set(source_part_fields)
-            attrs_to_remove = [a.attr_name for a in source.properties
-                               if a.attr_name not in keep_fields]
+            attrs_to_remove = [a.name for a in source.properties
+                               if a.name not in keep_fields]
             for attr_name in attrs_to_remove:
                 source.remove_property(attr_name)
 
@@ -1702,29 +1702,29 @@ class SchemaTransformer:
         parts_str = ",".join(created_entities)
         self._touch(source_name, *created_entities)
         self.changes.append(f"SPLIT:{source_name}->{parts_str}")
-        return True
+        return OperationResult.ok()
 
-    def _handle_cast_property(self, params: CastPropertyParams) -> bool:
+    def _handle_cast_property(self, params: CastPropertyParams) -> OperationResult:
         """CAST_PROPERTY: Change property data type."""
         target = params.target
         new_type_str = (params.data_type or params.type or "STRING").upper()
 
         entity, attr_name = self._resolve_entity_attr(target, "CAST_PROPERTY")
         if not entity:
-            return False
+            return OperationResult.skipped("cast_property: precondition not met")
 
         attr = entity.get_property(attr_name)
         if not attr:
             logger.info(f"CAST_PROPERTY skipped: property '{attr_name}' not found")
-            return False
+            return OperationResult.skipped("cast_property: precondition not met")
 
         new_type = TYPE_STR_MAP.get(new_type_str, PrimitiveType.STRING)
         attr.data_type = PrimitiveDataType(new_type)
         self._touch(entity.name)
         self.changes.append(f"CAST_PROP:{target}->{new_type_str}")
-        return True
+        return OperationResult.ok()
 
-    def _handle_cast_constraint(self, params: CastConstraintParams) -> bool:
+    def _handle_cast_constraint(self, params: CastConstraintParams) -> OperationResult:
         """CAST_CONSTRAINT: Change the type of a constraint.
 
         Reference: Orion "Cast Reference" - change the type of a constraint.
@@ -1736,12 +1736,12 @@ class SchemaTransformer:
 
         entity, attr_name = self._resolve_entity_attr(target)
         if not entity:
-            return False
+            return OperationResult.skipped("cast_constraint: precondition not met")
 
         # Find the property
         attr = entity.get_property(attr_name)
         if not attr:
-            return False
+            return OperationResult.skipped("cast_constraint: precondition not met")
 
         # Find constraint containing this property and modify its type
         for constraint in entity.constraints:
@@ -1767,10 +1767,10 @@ class SchemaTransformer:
                             up.primary_key_type = PKTypeEnum.DOCUMENT_ID
                         self._touch(entity.name)
                         self.changes.append(f"CAST_CONSTRAINT:{target}->{new_type}")
-                        return True
-        return False
+                        return OperationResult.ok()
+        return OperationResult.skipped("cast_constraint: precondition not met")
 
-    def _handle_cast_entity(self, params: CastEntityParams) -> bool:
+    def _handle_cast_entity(self, params: CastEntityParams) -> OperationResult:
         """CAST_ENTITY: Change the entity_kind of an entity type (cross-paradigm type conversion).
 
         Overrides automatic entity_kind normalization for this entity.
@@ -1783,12 +1783,12 @@ class SchemaTransformer:
 
         entity = self._get_entity(target, "CAST_ENTITY")
         if not entity:
-            return False
+            return OperationResult.skipped("cast_entity: precondition not met")
 
         # EDGE entities must use TRANSFORM, not CAST_ENTITY
         if entity.entity_kind == EntityKind.EDGE:
             logger.error(f"CAST_ENTITY failed: entity '{target}' is an EDGE entity, use TRANSFORM INTO ENTITY first")
-            return False
+            return OperationResult.skipped("cast_entity: precondition not met")
 
         kind_map = {
             "RELATIONAL": EntityKind.TABLE,
@@ -1799,12 +1799,12 @@ class SchemaTransformer:
 
         new_kind = kind_map.get(entity_kind_str)
         if not new_kind:
-            return False
+            return OperationResult.skipped("cast_entity: precondition not met")
         entity.entity_kind = new_kind
         entity.kind_locked = True   # tell _normalize_entity_kinds() to skip
         self._touch(target)
         self.changes.append(f"CAST_ENTITY:{target}->{entity_kind_str}")
-        return True
+        return OperationResult.ok()
 
     def _sync_edge_cardinality(self, edge_name: str, new_cardinality: Cardinality) -> None:
         """Keep the cardinality of an EDGE consistent across its two storage sites.
@@ -1822,11 +1822,11 @@ class SchemaTransformer:
             source_ent = self.database.get_entity_type(edge_entity.source_entity)
             if source_ent:
                 for rel in source_ent.relationships:
-                    if rel.kind == "edge" and rel.rel_type_name == edge_name:
+                    if isinstance(rel, Edge) and rel.rel_type_name == edge_name:
                         rel.cardinality = new_cardinality
                         break
 
-    def _handle_recard(self, params: RecardParams) -> bool:
+    def _handle_recard(self, params: RecardParams) -> OperationResult:
         """RECARD: Change the multiplicity/cardinality of a reference.
 
         Reference: Orion "Mult Reference" - change the multiplicity of a reference.
@@ -1837,30 +1837,30 @@ class SchemaTransformer:
 
         entity, ref_name = self._resolve_entity_attr(target)
         if not entity:
-            return False
+            return OperationResult.skipped("recard: precondition not met")
 
         new_cardinality = CARDINALITY_MAP.get(new_cardinality_str, None)
         if not new_cardinality:
-            return False
+            return OperationResult.skipped("recard: precondition not met")
 
         # Find the reference relationship and update its cardinality
         for rel in entity.relationships:
-            if rel.kind == "reference" and rel.ref_name == ref_name:
+            if isinstance(rel, Reference) and rel.ref_name == ref_name:
                 rel.cardinality = new_cardinality
                 self._touch(entity.name)
                 self.changes.append(f"RECARD:{target}->{new_cardinality_str}")
-                return True
-            elif rel.kind == "edge" and rel.rel_type_name == ref_name:
+                return OperationResult.ok()
+            elif isinstance(rel, Edge) and rel.rel_type_name == ref_name:
                 # Edge cardinality is duplicated on the EDGE entity and on the
                 # Edge relationship object; sync both via helper so they
                 # cannot drift apart.
                 self._sync_edge_cardinality(ref_name, new_cardinality)
                 self._touch(entity.name, ref_name)
                 self.changes.append(f"RECARD:{target}->{new_cardinality_str}")
-                return True
-        return False
+                return OperationResult.ok()
+        return OperationResult.skipped("recard: precondition not met")
 
-    def _handle_transform(self, params: TransformParams) -> bool:
+    def _handle_transform(self, params: TransformParams) -> OperationResult:
         """TRANSFORM: Convert between entity (node) and relationship type (edge).
 
         Based on Hausler et al. - nodeToRel / relToNode graph evolution operations.
@@ -1882,7 +1882,7 @@ class SchemaTransformer:
 
             entity = self._get_entity(name, "TRANSFORM")
             if not entity:
-                return False
+                return OperationResult.skipped("transform: precondition not met")
 
             # Resolve cardinality (default: ZERO_TO_MANY)
             cardinality = Cardinality.ZERO_TO_MANY
@@ -1899,7 +1899,7 @@ class SchemaTransformer:
             source_ent = self.database.get_entity_type(source_entity_name)
             if source_ent:
                 existing_edge = any(
-                    r.kind == "edge" and r.rel_type_name == name
+                    isinstance(r, Edge) and r.rel_type_name == name
                     for r in source_ent.relationships
                 )
                 if not existing_edge:
@@ -1912,12 +1912,12 @@ class SchemaTransformer:
                     source_ent.add_relationship(edge)
 
             self.changes.append(f"TRANSFORM:{name}->RELATIONSHIP({source_entity_name},{target_entity_name})")
-            return True
+            return OperationResult.ok()
 
         elif target_type == "ENTITY":
             edge_entity = self._get_entity(name, "TRANSFORM")
             if not edge_entity or edge_entity.entity_kind != EntityKind.EDGE:
-                return False
+                return OperationResult.skipped("transform: precondition not met")
 
             # Remove Edge from source entity's relationships
             if edge_entity.source_entity:
@@ -1932,8 +1932,8 @@ class SchemaTransformer:
             edge_entity.edge_cardinality = None
 
             self.changes.append(f"TRANSFORM:{name}->ENTITY")
-            return True
-        return False
+            return OperationResult.ok()
+        return OperationResult.skipped("transform: precondition not met")
 
 
 
@@ -1965,7 +1965,7 @@ def _serialize_entity(name: str, entity) -> Dict[str, Any]:
             pk_types = []
             for up in c.unique_properties:
                 attr = entity.get_property_by_id(up.property_id)
-                pk_attr_names.append(attr.attr_name if attr else up.property_id)
+                pk_attr_names.append(attr.name if attr else up.property_id)
                 pk_types.append(up.primary_key_type.value)
             constraint_dict = {
                 "type": "PRIMARY_KEY" if c.is_primary_key else "UNIQUE",
@@ -1978,11 +1978,11 @@ def _serialize_entity(name: str, entity) -> Dict[str, Any]:
         elif c.kind == "foreign_key":
             for fkp in c.foreign_key_properties:
                 attr = entity.get_property_by_id(fkp.property_id)
-                col_name = attr.attr_name if attr else fkp.property_id
+                col_name = attr.name if attr else fkp.property_id
                 # Resolve target entity from Reference relationships matching this FK column
                 ref_target = ""
                 for rel in entity.relationships:
-                    if rel.kind == "reference" and rel.ref_name == col_name:
+                    if isinstance(rel, Reference) and rel.ref_name == col_name:
                         ref_target = rel.get_target_entity_name()
                         break
                 constraints.append({
@@ -1998,7 +1998,7 @@ def _serialize_entity(name: str, entity) -> Dict[str, Any]:
         if c.kind == "unique" and c.is_primary_key:
             for up in c.unique_properties:
                 attr = entity.get_property_by_id(up.property_id)
-                attr_name = attr.attr_name if attr else up.property_id
+                attr_name = attr.name if attr else up.property_id
                 pk_val = up.primary_key_type.value
                 if pk_val != "simple":
                     pk_type_map[attr_name] = pk_val
@@ -2007,13 +2007,13 @@ def _serialize_entity(name: str, entity) -> Dict[str, Any]:
     serialized_attrs = []
     for a in entity.properties:
         attr_dict = {
-            "name": a.attr_name,
+            "name": a.name,
             "type": _get_type_str(a.data_type),
             "is_key": a.is_key,
             "is_optional": a.is_optional,
         }
-        if a.attr_name in pk_type_map:
-            attr_dict["key_type"] = pk_type_map[a.attr_name]
+        if a.name in pk_type_map:
+            attr_dict["key_type"] = pk_type_map[a.name]
         serialized_attrs.append(attr_dict)
 
     return {
@@ -2027,11 +2027,11 @@ def _serialize_entity(name: str, entity) -> Dict[str, Any]:
                 "target": r.get_target_entity_name(),
                 "cardinality": r.cardinality.value if hasattr(r, 'cardinality') else '1..1',
                 **({"edge_properties": [
-                    {"name": a.attr_name, "type": _get_type_str(a.data_type)}
+                    {"name": a.name, "type": _get_type_str(a.data_type)}
                     for a in r.edge_properties
                 ]} if r.edge_properties else {})
             }
-            for r in entity.relationships if r.kind == "reference"
+            for r in entity.relationships if isinstance(r, Reference)
         ],
         "embedded": [
             {
@@ -2039,7 +2039,7 @@ def _serialize_entity(name: str, entity) -> Dict[str, Any]:
                 "target": r.get_target_entity_name(),
                 "cardinality": r.cardinality.value
             }
-            for r in entity.relationships if r.kind == "embedded"
+            for r in entity.relationships if isinstance(r, Embedded)
         ],
         "edges": [
             {
@@ -2048,7 +2048,7 @@ def _serialize_entity(name: str, entity) -> Dict[str, Any]:
                 "source": r.source_entity,
                 "cardinality": r.cardinality.value
             }
-            for r in entity.relationships if r.kind == "edge"
+            for r in entity.relationships if isinstance(r, Edge)
         ],
         "labels": getattr(entity, 'labels', [])
     }
@@ -2065,7 +2065,7 @@ def _serialize_relationship_types(db: Database) -> Dict[str, Any]:
             "source_entity": e.source_entity or "",
             "target_entity": e.target_entity or "",
             "properties": [
-                {"name": a.attr_name, "type": _get_type_str(a.data_type)}
+                {"name": a.name, "type": _get_type_str(a.data_type)}
                 for a in e.properties
             ],
             "cardinality": (e.edge_cardinality or Cardinality.ZERO_TO_MANY).value
@@ -2679,7 +2679,7 @@ def _normalize_entity_kinds(db: Database, target_type: str, source_type: str = "
     if target_type == SOURCE_TYPE_DOCUMENT and source_type != SOURCE_TYPE_DOCUMENT:
         for entity in db.entity_types.values():
             for rel in entity.relationships:
-                if rel.kind == "embedded":
+                if isinstance(rel, Embedded):
                     if rel.cardinality == Cardinality.ZERO_TO_ONE:
                         rel.cardinality = Cardinality.ONE_TO_ONE
                     elif rel.cardinality == Cardinality.ZERO_TO_MANY:
@@ -2746,22 +2746,26 @@ def run_apply(transformer: 'SchemaTransformer', operations) -> tuple:
         transformer._touched = []           # reset per-op hint
 
         handler = transformer._handlers.get(op.op_type)
+        reason = None
         if handler:
             try:
-                success = handler(op.params)
-                if success:
+                result = handler(op.params)
+                if result:
                     status = "success"
                     success_count += 1
                 else:
                     status = "skipped"
                     skipped_count += 1
+                    reason = result.reason if hasattr(result, "reason") else None
             except Exception as e:
                 logger.error(f"Step {i+1}: Operation {op.op_type.name} failed: {e}")
                 status = "error"
+                reason = f"{type(e).__name__}: {e}"
                 skipped_count += 1
         else:
             logger.info(f"Unknown operation type: {op.op_type.name}")
             status = "skipped"
+            reason = f"unknown op_type: {op.op_type.name}"
             skipped_count += 1
 
         new_count = len(transformer.database.entity_types)
@@ -2771,7 +2775,7 @@ def run_apply(transformer: 'SchemaTransformer', operations) -> tuple:
         hint = list(transformer._touched) if transformer._touched else None
         changes_detail = _calculate_changes(prev_snapshot, after_snapshot, op, hint)
 
-        operations_detail.append({
+        detail = {
             "step": i + 1,
             "type": op.op_type.name,
             "original_keyword": op.original_keyword if op.original_keyword else op.op_type.name,
@@ -2779,8 +2783,11 @@ def run_apply(transformer: 'SchemaTransformer', operations) -> tuple:
             "entity_count_before": prev_count,
             "entity_count_after": new_count,
             "changes": changes_detail,
-            "status": status
-        })
+            "status": status,
+        }
+        if reason:
+            detail["reason"] = reason
+        operations_detail.append(detail)
         # roll forward — current "after" becomes next "before"
         prev_snapshot = after_snapshot
 
@@ -2824,10 +2831,10 @@ def run_migration(direction: str) -> Dict[str, Any]:
         return {"error": f"Unknown direction: {direction}. Available: {list(MIGRATION_CONFIGS.keys())}"}
 
     config = MIGRATION_CONFIGS[direction]
-    source_file = config["source_file"]
-    smile_file = config["smile_file"]
-    source_type = config["source_type"]
-    target_type = config["target_type"]
+    source_file = config.source_file
+    smile_file = config.smile_file
+    source_type = config.source_type
+    target_type = config.target_type
 
     for f in [source_file, smile_file]:
         if not f.exists():

@@ -187,7 +187,7 @@ class Neo4jAdapter:
             data_type = self._parse_data_type(prop_type)
 
             attr = Property(
-                attr_name=prop_name,
+                name=prop_name,
                 data_type=data_type,
                 is_key=is_key,
                 is_optional=not is_key
@@ -244,7 +244,7 @@ class Neo4jAdapter:
             data_type = self._parse_data_type(prop_type)
 
             attr = Property(
-                attr_name=prop_name,
+                name=prop_name,
                 data_type=data_type,
                 is_key=False,
                 is_optional=True
@@ -542,7 +542,7 @@ class Neo4jAdapter:
             for up in pk_constraint.unique_properties:
                 pk_attr = entity.get_property_by_id(up.property_id)
                 if pk_attr:
-                    pk_attrs.append(pk_attr.attr_name)
+                    pk_attrs.append(pk_attr.name)
             if len(pk_attrs) == 1:
                 constraint_name = f"{label.lower()}_{pk_attrs[0]}_unique"
                 lines.append(
@@ -564,7 +564,7 @@ class Neo4jAdapter:
                 type_str = cls.REVERSE_TYPE_MAP.get(
                     attr.data_type.primitive_type, "string"
                 ) if isinstance(attr.data_type, PrimitiveDataType) else "string"
-                prop_strs.append(f"{attr.attr_name} ({type_str})")
+                prop_strs.append(f"{attr.name} ({type_str})")
             lines.append(f"// Properties: {', '.join(prop_strs)}")
 
         return lines
@@ -592,7 +592,7 @@ class Neo4jAdapter:
                 type_str = cls.REVERSE_TYPE_MAP.get(
                     attr.data_type.primitive_type, "string"
                 ) if isinstance(attr.data_type, PrimitiveDataType) else "string"
-                prop_strs.append(f"{attr.attr_name} ({type_str})")
+                prop_strs.append(f"{attr.name} ({type_str})")
             lines.append(f"// Properties: {', '.join(prop_strs)}")
 
         # Cardinality comment

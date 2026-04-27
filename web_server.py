@@ -429,10 +429,10 @@ def _build_dropdown_options() -> str:
     for key, cfg in MIGRATION_CONFIGS.items():
         if not key.startswith("northwind_"):
             continue
-        display = cfg["display_name"]
+        display = cfg.display_name
         selected = ' selected' if key == "northwind_r2d_generalized" else ''
         tag = f'<option value="{key}"{selected}>{display}</option>'
-        if cfg["source_type"] == cfg["target_type"]:
+        if cfg.source_type == cfg.target_type:
             nw_evo.append(tag)
         else:
             nw_cross.append(tag)

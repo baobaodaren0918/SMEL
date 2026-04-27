@@ -163,7 +163,7 @@ class MongoDBAdapter:
                     #   -> Property("tags", ListDataType(element_type=PrimitiveDataType(STRING)))
                     element_type = self._parse_primitive_type(items_type, items)
                     attr = Property(
-                        attr_name=prop_name_lower,
+                        name=prop_name_lower,
                         data_type=ListDataType(element_type=element_type),
                         is_key=False,
                         is_optional=not is_required
@@ -174,7 +174,7 @@ class MongoDBAdapter:
                 # Primitive type
                 is_key = prop_name == '_id'
                 attr = Property(
-                    attr_name=prop_name_lower,
+                    name=prop_name_lower,
                     data_type=self._parse_primitive_type(bson_type, prop_schema),
                     is_key=is_key,
                     is_optional=not is_required and not is_key
@@ -258,7 +258,7 @@ class MongoDBAdapter:
                     "cardinality": rt.cardinality.value if rt.cardinality else "0..n"
                 }
                 if rt.properties:
-                    rt_dict["properties"] = [attr.attr_name for attr in rt.properties]
+                    rt_dict["properties"] = [attr.name for attr in rt.properties]
                 rel_types_meta[rt_name] = rt_dict
             schema["_relationship_types"] = rel_types_meta
 
@@ -273,18 +273,18 @@ class MongoDBAdapter:
         embedded_entities = set()
         for entity in database.entity_types.values():
             for rel in entity.relationships:
-                if rel.kind == "embedded":
+                if isinstance(rel, Embedded):
                     embedded_entities.add(rel.get_target_entity_name())
 
         # Root = entity that has Embedded relationships but is not embedded by anyone
         for name, entity in database.entity_types.items():
-            has_embedded = any(r.kind == "embedded" for r in entity.relationships)
+            has_embedded = any(isinstance(r, Embedded) for r in entity.relationships)
             if has_embedded and name not in embedded_entities:
                 return name
 
         # Fallback: first entity with embedded relationships
         for name, entity in database.entity_types.items():
-            if any(r.kind == "embedded" for r in entity.relationships):
+            if any(isinstance(r, Embedded) for r in entity.relationships):
                 return name
 
         # Last fallback: first entity (or None if empty)
@@ -308,7 +308,7 @@ class MongoDBAdapter:
 
         # Process properties
         for attr in entity.properties:
-            prop_name = attr.attr_name
+            prop_name = attr.name
             # Convert _id for root document
             if is_root and attr.is_key and prop_name != '_id':
                 prop_name = '_id'
@@ -321,7 +321,7 @@ class MongoDBAdapter:
 
         # Process embedded relationships
         for rel in entity.relationships:
-            if rel.kind == "embedded":
+            if isinstance(rel, Embedded):
                 embedded_entity = database.get_entity_type(rel.get_target_entity_name())
                 if not embedded_entity:
                     continue

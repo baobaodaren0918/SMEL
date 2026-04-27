@@ -543,22 +543,18 @@ class TupleDataType(DataType):
 
 @dataclass
 class Property:
-    attr_name: str
+    name: str
     data_type: DataType
     is_key: bool = False
     is_optional: bool = True
     description: Optional[str] = None
     meta_id: str = field(default_factory=_uid)
 
-    @property
-    def name(self) -> str:
-        return self.attr_name
-
     def to_dict(self) -> Dict[str, Any]:
         d = {
             "kind": "property",
             "meta_id": self.meta_id,
-            "attr_name": self.attr_name,
+            "name": self.name,
             "data_type": self.data_type.to_dict(),
             "is_key": self.is_key,
             "is_optional": self.is_optional
@@ -571,7 +567,7 @@ class Property:
     def from_dict(cls, data: Dict[str, Any]) -> 'Property':
         dt = DataType.from_dict(data.get("data_type", {"kind": "primitive", "type": "string"}))
         return cls(
-            attr_name=data.get("attr_name", ""),
+            name=data.get("name", data.get("attr_name", "")),
             data_type=dt,
             is_key=data.get("is_key", False),
             is_optional=data.get("is_optional", True),
@@ -718,13 +714,12 @@ class ForeignKeyConstraint(Constraint):
 class Relationship(ABC):
     """Base for Reference / Embedded / Edge.
 
-    Each concrete subclass sets a ``kind`` class-level constant
-    ('reference' / 'embedded' / 'edge'), so callers can write
-    ``rel.kind == 'reference'`` instead of ``rel.kind == "reference"`` —
-    cheaper and decoupled from the Python class hierarchy.
+    Discrimination between the three flavours is done via ``isinstance``
+    against the concrete subclass — there is no string discriminator on
+    the in-memory object. JSON serialization still emits a ``"kind"`` field
+    (handled per-subclass in ``to_dict``) so external consumers and the
+    ``from_dict`` factory keep working.
     """
-    kind: ClassVar[str] = "abstract"
-
     cardinality: Cardinality = Cardinality.ONE_TO_ONE
     is_optional: bool = True
     description: Optional[str] = None
@@ -761,7 +756,6 @@ class Relationship(ABC):
 
 @dataclass
 class Reference(Relationship):
-    kind: ClassVar[str] = "reference"
     ref_name: str = ""
     refs_to: str = ""  # Entity name (string only, not object reference)
     edge_properties: List[Property] = field(default_factory=list)
@@ -801,7 +795,6 @@ class Reference(Relationship):
 @dataclass
 class Embedded(Relationship):
     """Embedded/Aggregate relationship for nested documents (MongoDB style)."""
-    kind: ClassVar[str] = "embedded"
     aggr_name: str = ""
     aggregates: str = ""  # Entity name (string only, not object reference)
 
@@ -842,7 +835,6 @@ class Edge(Relationship):
     """Graph edge relationship (from Andre Conrad's paper Figure 2).
     References a RelationshipType by name, linking source to target entity.
     """
-    kind: ClassVar[str] = "edge"
     rel_type_name: str = ""    # Name of the RelationshipType (e.g. "ACTED_IN")
     source_entity: str = ""    # Source entity name
     target_entity: str = ""    # Target entity name
@@ -952,7 +944,7 @@ class EntityType:
         self.properties.append(attr)
 
     def get_property(self, name: str) -> Optional[Property]:
-        return next((a for a in self.properties if a.attr_name == name), None)
+        return next((a for a in self.properties if a.name == name), None)
 
     def get_property_by_id(self, meta_id: str) -> Optional[Property]:
         """Get property by its meta_id (used for constraint property_id lookup)."""
@@ -960,7 +952,7 @@ class EntityType:
 
     def remove_property(self, name: str) -> Optional[Property]:
         for i, a in enumerate(self.properties):
-            if a.attr_name == name:
+            if a.name == name:
                 return self.properties.pop(i)
         return None
 
@@ -969,11 +961,11 @@ class EntityType:
         self.relationships.append(rel)
 
     def get_references(self) -> List[Reference]:
-        return [r for r in self.relationships if r.kind == "reference"]
+        return [r for r in self.relationships if isinstance(r, Reference)]
 
     def get_embedded(self) -> List[Embedded]:
         """Get all embedded relationships."""
-        return [r for r in self.relationships if r.kind == "embedded"]
+        return [r for r in self.relationships if isinstance(r, Embedded)]
 
     # Backward compatibility alias
     def get_aggregates(self) -> List[Embedded]:
@@ -981,15 +973,15 @@ class EntityType:
 
     def get_edges(self) -> List['Edge']:
         """Get all edge relationships (graph database)."""
-        return [r for r in self.relationships if r.kind == "edge"]
+        return [r for r in self.relationships if isinstance(r, Edge)]
 
     def remove_relationship(self, name: str) -> Optional[Relationship]:
         for i, r in enumerate(self.relationships):
-            if r.kind == "reference":
+            if isinstance(r, Reference):
                 rel_name = r.ref_name
-            elif r.kind == "embedded":
+            elif isinstance(r, Embedded):
                 rel_name = r.aggr_name
-            elif r.kind == "edge":
+            elif isinstance(r, Edge):
                 rel_name = r.rel_type_name
             else:
                 continue

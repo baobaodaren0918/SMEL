@@ -342,13 +342,13 @@ import pytest
 _northwind_same_keys = sorted(
     k for k in MIGRATION_CONFIGS
     if k.startswith("northwind_") and
-    MIGRATION_CONFIGS[k]["source_type"] == MIGRATION_CONFIGS[k]["target_type"]
+    MIGRATION_CONFIGS[k].source_type == MIGRATION_CONFIGS[k].target_type
 )
 
 _northwind_cross_keys = sorted(
     k for k in MIGRATION_CONFIGS
     if k.startswith("northwind_") and
-    MIGRATION_CONFIGS[k]["source_type"] != MIGRATION_CONFIGS[k]["target_type"]
+    MIGRATION_CONFIGS[k].source_type != MIGRATION_CONFIGS[k].target_type
 )
 
 
@@ -416,9 +416,9 @@ def main():
 
     categories = {
         "Northwind Same": [k for k in all_results if k.startswith("northwind_") and
-                           MIGRATION_CONFIGS[k]["source_type"] == MIGRATION_CONFIGS[k]["target_type"]],
+                           MIGRATION_CONFIGS[k].source_type == MIGRATION_CONFIGS[k].target_type],
         "Northwind Cross": [k for k in all_results if k.startswith("northwind_") and
-                            MIGRATION_CONFIGS[k]["source_type"] != MIGRATION_CONFIGS[k]["target_type"]],
+                            MIGRATION_CONFIGS[k].source_type != MIGRATION_CONFIGS[k].target_type],
     }
 
     grand_total = 0

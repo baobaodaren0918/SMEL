@@ -204,13 +204,13 @@ def main():
     # Auto-generate menu from MIGRATION_CONFIGS, grouped by direction
     current_direction = None
     for idx, (key, cfg) in enumerate(MIGRATION_CONFIGS.items(), 1):
-        direction_key = f"{cfg['source_type']}->{cfg['target_type']}"
+        direction_key = f"{cfg.source_type}->{cfg.target_type}"
         if direction_key != current_direction:
             current_direction = direction_key
-            src = DB_TYPE_DISPLAY_NAME.get(cfg["source_type"], cfg["source_type"])
-            tgt = DB_TYPE_DISPLAY_NAME.get(cfg["target_type"], cfg["target_type"])
+            src = DB_TYPE_DISPLAY_NAME.get(cfg.source_type, cfg.source_type)
+            tgt = DB_TYPE_DISPLAY_NAME.get(cfg.target_type, cfg.target_type)
             print(f"\n  {CYAN}{src} -> {tgt}:{RESET}")
-        print(f"  [{idx}] {cfg['display_name']}")
+        print(f"  [{idx}] {cfg.display_name}")
     print("\n  [0] Exit")
 
     try:
@@ -227,12 +227,12 @@ def main():
         return 1
 
     config = MIGRATION_CONFIGS[direction]
-    source_type = config["source_type"]
-    target_type = config["target_type"]
-    smile_file = config["smile_file"]
+    source_type = config.source_type
+    target_type = config.target_type
+    smile_file = config.smile_file
 
     # Check files exist
-    for f in [config["source_file"], config["smile_file"]]:
+    for f in [config.source_file, config.smile_file]:
         if not f.exists():
             print(f"{RED}[ERROR] File not found: {f}{RESET}")
             return 1

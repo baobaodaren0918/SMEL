@@ -127,8 +127,8 @@ def _build_smile_template(db_type: str) -> str:
         f"",
         f"-- Your operations here, for example:",
         f"-- RENAME_ENTITY old_name AS new_name",
-        f"-- ADD_PROPERTY entity(attr_name Type)",
-        f"-- DELETE_PROPERTY entity(attr_name)",
+        f"-- ADD_PROPERTY entity(prop_name Type)",
+        f"-- DELETE_PROPERTY entity(prop_name)",
         f"-- NEST entity1, entity2 AS nested_name WITH ref_name",
         f"-- FLATTEN entity(nested_name)",
     ]

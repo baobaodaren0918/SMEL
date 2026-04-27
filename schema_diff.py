@@ -89,8 +89,8 @@ def _name_similarity(a: str, b: str) -> float:
 
 def _property_set_similarity(a: List[Property], b: List[Property]) -> float:
     """Jaccard similarity over property names."""
-    sa = {p.attr_name.lower() for p in a}
-    sb = {p.attr_name.lower() for p in b}
+    sa = {p.name.lower() for p in a}
+    sb = {p.name.lower() for p in b}
     if not sa and not sb:
         return 1.0
     if not sa or not sb:
@@ -145,9 +145,9 @@ def _match_property_renames(
     pairs: List[Tuple[str, str, float]] = []
     for s in src_props:
         for t in tgt_props:
-            sim = _name_similarity(s.attr_name, t.attr_name)
+            sim = _name_similarity(s.name, t.name)
             if sim >= threshold:
-                pairs.append((s.attr_name, t.attr_name, sim))
+                pairs.append((s.name, t.name, sim))
     pairs.sort(key=lambda x: x[2], reverse=True)
     used_src: Set[str] = set()
     used_tgt: Set[str] = set()
@@ -253,7 +253,7 @@ def _extract_keys(entity: EntityType) -> List[_KeyInfo]:
         for up in c.unique_properties:
             prop = entity.get_property_by_id(up.property_id)
             if prop:
-                column_names.append(prop.attr_name)
+                column_names.append(prop.name)
             if pk_subtype is None:
                 if up.primary_key_type == PKTypeEnum.PARTITION:
                     pk_subtype = "partition"
@@ -297,17 +297,17 @@ def _extract_foreign_keys(entity: EntityType, db: Database) -> List[_FKInfo]:
                     target_entity_name = tgt_e.name
                     tp = tgt_e.get_property_by_id(up.property_id)
                     if tp:
-                        target_column_name = tp.attr_name
+                        target_column_name = tp.name
                     break
             if fk_prop and target_entity_name and target_column_name:
                 fks.append(_FKInfo(
-                    fk_column=fk_prop.attr_name,
+                    fk_column=fk_prop.name,
                     target_entity=target_entity_name,
                     target_column=target_column_name,
                 ))
     # Also pull from References (relationships) that are not declared as FK constraints
     for rel in entity.relationships:
-        if rel.kind == "reference" and rel.refs_to:
+        if isinstance(rel, Reference) and rel.refs_to:
             sig_col = rel.ref_name or f"{rel.refs_to}_id"
             target_pk_col = ""
             tgt = db.get_entity_type(rel.refs_to)
@@ -316,7 +316,7 @@ def _extract_foreign_keys(entity: EntityType, db: Database) -> List[_FKInfo]:
                 if pk and pk.unique_properties:
                     pp = tgt.get_property_by_id(pk.unique_properties[0].property_id)
                     if pp:
-                        target_pk_col = pp.attr_name
+                        target_pk_col = pp.name
             target_pk_col = target_pk_col or "id"
             sig = (sig_col, rel.refs_to, target_pk_col)
             if sig not in {f.signature() for f in fks}:
@@ -387,7 +387,7 @@ def diff_schemas(
             params={
                 "name": ent.name,
                 "properties": [
-                    (p.attr_name, _data_type_to_smile(p.data_type))
+                    (p.name, _data_type_to_smile(p.data_type))
                     for p in ent.properties
                 ],
                 "edge_endpoints": _edge_endpoints(ent),
@@ -444,10 +444,10 @@ def diff_schemas(
             ))
 
         # properties
-        s_props = {p.attr_name: p for p in s_ent.properties
-                   if (src_name, p.attr_name) not in suppressed_src_props}
-        t_props = {p.attr_name: p for p in t_ent.properties
-                   if (tgt_name, p.attr_name) not in suppressed_tgt_props}
+        s_props = {p.name: p for p in s_ent.properties
+                   if (src_name, p.name) not in suppressed_src_props}
+        t_props = {p.name: p for p in t_ent.properties
+                   if (tgt_name, p.name) not in suppressed_tgt_props}
 
         s_only_names = sorted(set(s_props) - set(t_props))
         t_only_names = sorted(set(t_props) - set(s_props))
@@ -474,7 +474,7 @@ def diff_schemas(
             add_prop_records.append(OpRecord(
                 op="ADD_PROPERTY",
                 params={
-                    "name": p.attr_name,
+                    "name": p.name,
                     "entity": eff_name,
                     "data_type": _data_type_to_smile(p.data_type),
                     "not_null": (not p.is_optional),
@@ -553,8 +553,8 @@ def diff_schemas(
             ))
 
         # embedded relationships
-        s_embed = {e.aggr_name: e for e in s_ent.relationships if e.kind == "embedded"}
-        t_embed = {e.aggr_name: e for e in t_ent.relationships if e.kind == "embedded"}
+        s_embed = {e.aggr_name: e for e in s_ent.relationships if isinstance(e, Embedded)}
+        t_embed = {e.aggr_name: e for e in t_ent.relationships if isinstance(e, Embedded)}
         for n, e in t_embed.items():
             if n in s_embed:
                 if s_embed[n].cardinality != e.cardinality:
@@ -597,8 +597,8 @@ def diff_schemas(
             ))
 
         # cardinality changes on References
-        s_refs = {r.ref_name: r for r in s_ent.relationships if r.kind == "reference"}
-        t_refs = {r.ref_name: r for r in t_ent.relationships if r.kind == "reference"}
+        s_refs = {r.ref_name: r for r in s_ent.relationships if isinstance(r, Reference)}
+        t_refs = {r.ref_name: r for r in t_ent.relationships if isinstance(r, Reference)}
         for n, r in t_refs.items():
             if n in s_refs and s_refs[n].cardinality != r.cardinality:
                 new_card = _card_to_smile(r.cardinality)

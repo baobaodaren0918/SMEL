@@ -10,9 +10,75 @@ contract mismatches into static errors instead of silent runtime skips.
 The `clauses` field in a few OpTypes remains a Dict[str, Any]: its nested
 structure is itself recursive (AST-like) and a second layer of typed
 wrappers would be over-engineering at this stage.
+
+Each dataclass also runs `__post_init__` validation that rejects empty
+required identifiers — catching listener/handler contract drift at
+construction time rather than letting it surface as a confusing downstream
+error ("entity 'None' not found").
 """
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any, Dict, List, Optional, Union
+
+
+# ============================================================================
+# Shared discriminators
+# ============================================================================
+
+class KeyType(str, Enum):
+    """Surface-level key discriminator for ADD_KEY / DELETE_KEY ops.
+
+    Inherits from `str` so members compare equal to their string values
+    (`KeyType.PRIMARY == "PRIMARY"`), keeping the existing
+    KEY_TYPE_MAP dict-lookup pattern working without changes.
+    """
+    PRIMARY = "PRIMARY"
+    UNIQUE = "UNIQUE"
+    FOREIGN = "FOREIGN"
+    PARTITION = "PARTITION"
+    CLUSTERING = "CLUSTERING"
+
+
+# ============================================================================
+# Operation result
+# ============================================================================
+
+@dataclass
+class OperationResult:
+    """Outcome of a single _handle_* invocation.
+
+    Replaces the old bool return so callers can distinguish "operation
+    finished successfully" from "operation skipped because <reason>".
+    The ``__bool__`` method makes the value usable in boolean contexts
+    (``if result: ...``) so existing call sites continue to work.
+    """
+    success: bool
+    reason: Optional[str] = None
+
+    def __bool__(self) -> bool:
+        return self.success
+
+    @classmethod
+    def ok(cls) -> "OperationResult":
+        return cls(success=True)
+
+    @classmethod
+    def skipped(cls, reason: str) -> "OperationResult":
+        return cls(success=False, reason=reason)
+
+
+# ============================================================================
+# Validation helper
+# ============================================================================
+
+def _require_nonempty(obj: Any, *names: str) -> None:
+    """Raise ValueError if any named field on `obj` is empty (None, "", [])."""
+    for n in names:
+        v = getattr(obj, n)
+        if v is None or v == "" or v == []:
+            raise ValueError(
+                f"{type(obj).__name__}.{n} must be non-empty"
+            )
 
 
 # ============================================================================
@@ -27,11 +93,11 @@ class NestParams:
     properties: List[str] = field(default_factory=list)
     nested: List[Dict[str, Any]] = field(default_factory=list)
     source_fk: str = ""
-    # Currently unused by _handle_nest: listener collects multi-condition
-    # JOIN state (NEST ... WHERE a AND b AND c) but the handler consumes
-    # only the first condition via source_fk. Kept for future extension.
     join_conditions: List[Dict[str, Any]] = field(default_factory=list)
     target_pk: str = ""
+
+    def __post_init__(self) -> None:
+        _require_nonempty(self, "source", "target", "alias")
 
 
 @dataclass
@@ -41,13 +107,18 @@ class UnnestParams:
     properties: List[str] = field(default_factory=list)
     nested: List[Dict[str, Any]] = field(default_factory=list)
     carry_fields: List[Dict[str, Any]] = field(default_factory=list)
-    # Unused by _handle_unnest; listener-side residue from an older syntax.
     name: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        _require_nonempty(self, "source_path", "target")
 
 
 @dataclass
 class FlattenParams:
     source: str
+
+    def __post_init__(self) -> None:
+        _require_nonempty(self, "source")
 
 
 @dataclass
@@ -56,10 +127,16 @@ class UnflattenParams:
     fields: List[str]
     nested_name: str
 
+    def __post_init__(self) -> None:
+        _require_nonempty(self, "entity", "fields", "nested_name")
+
 
 @dataclass
 class WindParams:
     source: str
+
+    def __post_init__(self) -> None:
+        _require_nonempty(self, "source")
 
 
 @dataclass
@@ -67,6 +144,9 @@ class UnwindParams:
     mode: str  # "create_table" or "expand_in_place"
     source: str
     target: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        _require_nonempty(self, "mode", "source")
 
 
 # ============================================================================
@@ -82,16 +162,25 @@ class AddEntityParams:
     target_entity: Optional[str] = None
     cardinality: Optional[str] = None
 
+    def __post_init__(self) -> None:
+        _require_nonempty(self, "name")
+
 
 @dataclass
 class DeleteEntityParams:
     name: str
+
+    def __post_init__(self) -> None:
+        _require_nonempty(self, "name")
 
 
 @dataclass
 class RenameEntityParams:
     old_name: str
     new_name: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        _require_nonempty(self, "old_name")
 
 
 @dataclass
@@ -100,6 +189,9 @@ class CopyEntityParams:
     target: str
     source_entity: Optional[str] = None
     target_entity: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        _require_nonempty(self, "source", "target")
 
 
 # ============================================================================
@@ -113,10 +205,16 @@ class AddPropertyParams:
     # list of clause dicts (see _parse_property_clauses)
     clauses: List[Dict[str, Any]] = field(default_factory=list)
 
+    def __post_init__(self) -> None:
+        _require_nonempty(self, "name")
+
 
 @dataclass
 class DeletePropertyParams:
     target: str
+
+    def __post_init__(self) -> None:
+        _require_nonempty(self, "target")
 
 
 @dataclass
@@ -125,17 +223,26 @@ class RenamePropertyParams:
     new_name: Optional[str] = None
     entity: Optional[str] = None
 
+    def __post_init__(self) -> None:
+        _require_nonempty(self, "old_name")
+
 
 @dataclass
 class CopyPropertyParams:
     source: str
     target: str
 
+    def __post_init__(self) -> None:
+        _require_nonempty(self, "source", "target")
+
 
 @dataclass
 class MovePropertyParams:
     source: str
     target: str
+
+    def __post_init__(self) -> None:
+        _require_nonempty(self, "source", "target")
 
 
 # ============================================================================
@@ -144,18 +251,29 @@ class MovePropertyParams:
 
 @dataclass
 class AddKeyParams:
-    key_type: str  # "PRIMARY" | "FOREIGN" | "UNIQUE" | "PARTITION" | "CLUSTERING"
+    key_type: KeyType
     key_columns: List[str] = field(default_factory=list)
     entity: Optional[str] = None
     data_type: Optional[str] = None
     clauses: Dict[str, Any] = field(default_factory=dict)
 
+    def __post_init__(self) -> None:
+        # Coerce raw strings produced by older listener code to the enum.
+        if isinstance(self.key_type, str) and not isinstance(self.key_type, KeyType):
+            self.key_type = KeyType(self.key_type)
+        _require_nonempty(self, "key_columns")
+
 
 @dataclass
 class DeleteKeyParams:
-    key_type: str
+    key_type: KeyType
     key_columns: List[str] = field(default_factory=list)
     entity: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        if isinstance(self.key_type, str) and not isinstance(self.key_type, KeyType):
+            self.key_type = KeyType(self.key_type)
+        _require_nonempty(self, "key_columns")
 
 
 @dataclass
@@ -166,10 +284,16 @@ class AddForeignKeyParams:
     entity: Optional[str] = None
     clauses: Dict[str, Any] = field(default_factory=dict)
 
+    def __post_init__(self) -> None:
+        _require_nonempty(self, "field_name", "target_table", "target_column")
+
 
 @dataclass
 class DeleteForeignKeyParams:
     reference: str
+
+    def __post_init__(self) -> None:
+        _require_nonempty(self, "reference")
 
 
 @dataclass
@@ -177,11 +301,17 @@ class CastConstraintParams:
     target: str
     constraint_type: str
 
+    def __post_init__(self) -> None:
+        _require_nonempty(self, "target", "constraint_type")
+
 
 @dataclass
 class CastEntityParams:
     target: str
     entity_kind: str
+
+    def __post_init__(self) -> None:
+        _require_nonempty(self, "target", "entity_kind")
 
 
 # ============================================================================
@@ -195,10 +325,16 @@ class AddEmbeddedParams:
     # list of clause dicts (see _parse_embedded_clauses)
     clauses: List[Dict[str, Any]] = field(default_factory=list)
 
+    def __post_init__(self) -> None:
+        _require_nonempty(self, "name")
+
 
 @dataclass
 class DeleteEmbeddedParams:
     embedded: str
+
+    def __post_init__(self) -> None:
+        _require_nonempty(self, "embedded")
 
 
 # ============================================================================
@@ -210,11 +346,17 @@ class AddLabelParams:
     label: str
     entity: Optional[str] = None
 
+    def __post_init__(self) -> None:
+        _require_nonempty(self, "label")
+
 
 @dataclass
 class DeleteLabelParams:
     label: str
     entity: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        _require_nonempty(self, "label")
 
 
 # ============================================================================
@@ -225,9 +367,10 @@ class DeleteLabelParams:
 class CastPropertyParams:
     target: str
     type: str
-    # Unused: listener never produces this, but the handler historically
-    # reads params.get("data_type", params.get("type", ...)) as a fallback.
     data_type: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        _require_nonempty(self, "target", "type")
 
 
 @dataclass
@@ -235,9 +378,10 @@ class MergeParams:
     source1: str
     source2: str
     target: str
-    # Unused by _handle_merge: grammar accepts MERGE a b INTO c AS alias
-    # but the alias is currently not applied to the resulting entity.
     alias: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        _require_nonempty(self, "source1", "source2", "target")
 
 
 @dataclass
@@ -245,11 +389,17 @@ class SplitParams:
     source: str
     parts: List[Dict[str, Any]] = field(default_factory=list)
 
+    def __post_init__(self) -> None:
+        _require_nonempty(self, "source", "parts")
+
 
 @dataclass
 class RecardParams:
     target: str
     cardinality: str
+
+    def __post_init__(self) -> None:
+        _require_nonempty(self, "target", "cardinality")
 
 
 @dataclass
@@ -259,6 +409,9 @@ class TransformParams:
     source_entity: Optional[str] = None
     target_entity: Optional[str] = None
     cardinality: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        _require_nonempty(self, "name", "target_type")
 
 
 # ============================================================================

@@ -21,7 +21,7 @@ from grammar.specific.SMILE_SpecificParser import SMILE_SpecificParser
 from grammar.generalized.SMILE_GeneralizedListener import SMILE_GeneralizedListener
 from grammar.generalized.SMILE_GeneralizedParser import SMILE_GeneralizedParser
 from operation_params import (
-    OpParams,
+    OpParams, KeyType,
     NestParams, UnnestParams, FlattenParams, UnflattenParams,
     WindParams, UnwindParams,
     AddEntityParams, DeleteEntityParams, RenameEntityParams, CopyEntityParams,
@@ -492,7 +492,7 @@ class SMILESpecificListener(SMILE_SpecificListener, BaseSMILEListener):
         # Entity priority: explicit TO clause > entity from qualifiedName path
         entity_name = ctx.identifier().getText() if ctx.identifier() else entity_from_path
         self.operations.append(Operation(OpType.ADD_KEY, AddKeyParams(
-            key_type="PRIMARY",
+            key_type=KeyType.PRIMARY,
             key_columns=key_columns,
             data_type=data_type,
             entity=entity_name,
@@ -503,7 +503,7 @@ class SMILESpecificListener(SMILE_SpecificListener, BaseSMILEListener):
         key_columns, entity_from_path = self._parse_key_columns(ctx.keyColumns())
         entity_name = ctx.identifier().getText() if ctx.identifier() else entity_from_path
         self.operations.append(Operation(OpType.ADD_KEY, AddKeyParams(
-            key_type="UNIQUE",
+            key_type=KeyType.UNIQUE,
             key_columns=key_columns,
             entity=entity_name,
             clauses=self._parse_key_clauses(ctx.keyClause()),
@@ -513,7 +513,7 @@ class SMILESpecificListener(SMILE_SpecificListener, BaseSMILEListener):
         key_columns, entity_from_path = self._parse_key_columns(ctx.keyColumns())
         entity_name = ctx.identifier().getText() if ctx.identifier() else entity_from_path
         self.operations.append(Operation(OpType.ADD_KEY, AddKeyParams(
-            key_type="PARTITION",
+            key_type=KeyType.PARTITION,
             key_columns=key_columns,
             entity=entity_name,
             clauses=self._parse_key_clauses(ctx.keyClause()),
@@ -523,7 +523,7 @@ class SMILESpecificListener(SMILE_SpecificListener, BaseSMILEListener):
         key_columns, entity_from_path = self._parse_key_columns(ctx.keyColumns())
         entity_name = ctx.identifier().getText() if ctx.identifier() else entity_from_path
         self.operations.append(Operation(OpType.ADD_KEY, AddKeyParams(
-            key_type="CLUSTERING",
+            key_type=KeyType.CLUSTERING,
             key_columns=key_columns,
             entity=entity_name,
             clauses=self._parse_key_clauses(ctx.keyClause()),
@@ -561,7 +561,7 @@ class SMILESpecificListener(SMILE_SpecificListener, BaseSMILEListener):
         key_columns, entity_from_path = self._parse_key_columns(ctx.keyColumns())
         entity_name = ctx.identifier().getText() if ctx.identifier() else entity_from_path
         self.operations.append(Operation(OpType.DELETE_KEY, DeleteKeyParams(
-            key_type="PRIMARY",
+            key_type=KeyType.PRIMARY,
             key_columns=key_columns,
             entity=entity_name,
         )))
@@ -570,7 +570,7 @@ class SMILESpecificListener(SMILE_SpecificListener, BaseSMILEListener):
         key_columns, entity_from_path = self._parse_key_columns(ctx.keyColumns())
         entity_name = ctx.identifier().getText() if ctx.identifier() else entity_from_path
         self.operations.append(Operation(OpType.DELETE_KEY, DeleteKeyParams(
-            key_type="UNIQUE",
+            key_type=KeyType.UNIQUE,
             key_columns=key_columns,
             entity=entity_name,
         )))
@@ -579,7 +579,7 @@ class SMILESpecificListener(SMILE_SpecificListener, BaseSMILEListener):
         key_columns, entity_from_path = self._parse_key_columns(ctx.keyColumns())
         entity_name = ctx.identifier().getText() if ctx.identifier() else entity_from_path
         self.operations.append(Operation(OpType.DELETE_KEY, DeleteKeyParams(
-            key_type="PARTITION",
+            key_type=KeyType.PARTITION,
             key_columns=key_columns,
             entity=entity_name,
         )))
@@ -588,7 +588,7 @@ class SMILESpecificListener(SMILE_SpecificListener, BaseSMILEListener):
         key_columns, entity_from_path = self._parse_key_columns(ctx.keyColumns())
         entity_name = ctx.identifier().getText() if ctx.identifier() else entity_from_path
         self.operations.append(Operation(OpType.DELETE_KEY, DeleteKeyParams(
-            key_type="CLUSTERING",
+            key_type=KeyType.CLUSTERING,
             key_columns=key_columns,
             entity=entity_name,
         )))
