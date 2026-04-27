@@ -956,11 +956,18 @@ class SchemaTransformer:
         entity, attr_name = self._resolve_entity_attr(target)
         if not entity:
             return OperationResult.skipped("delete_property: precondition not met")
-        self._touch(entity.name)
 
-        # Get meta_id before removal for constraint cleanup
+        # Get meta_id before removal for constraint cleanup. Surface a clear
+        # skip reason when the property does not exist on the resolved entity
+        # — silently succeeding would let users believe their script applied.
         attr = entity.get_property(attr_name)
-        attr_meta_id = attr.meta_id if attr else None
+        if not attr:
+            return OperationResult.skipped(
+                f"delete_property: '{attr_name}' not found on {entity.name}"
+            )
+        attr_meta_id = attr.meta_id
+
+        self._touch(entity.name)
 
         entity.remove_property(attr_name)
 
