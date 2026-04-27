@@ -2919,14 +2919,20 @@ def run_migration(direction: str) -> Dict[str, Any]:
         "smile_syntax": SMILE_SYNTAX,
     }
 
-    # Two-layer validation for cross-model Northwind migrations
+    # Unified pipeline validation: Layer 1 + Layer 2 + blame attribution.
+    # Top-level keys validation_meta / validation_export stay for the web UI.
     try:
-        from validate_meta import validate_meta
-        from validate_export import validate_export
-        result_dict["validation_meta"] = validate_meta(result_dict, target_type, direction)
-        result_dict["validation_export"] = validate_export(result_dict, target_type, direction)
+        from validate_pipeline import validate_pipeline
+        v = validate_pipeline(result_dict, target_type, direction)
+        result_dict["validation_meta"] = v["layer1"]
+        result_dict["validation_export"] = v["layer2"]
+        result_dict["validation_blame"] = v["blame"]
+        result_dict["validation_summary"] = v["summary"]
     except Exception as e:
-        result_dict["validation_meta"] = {"passed": None, "summary": f"Error: {e}", "details": {}}
-        result_dict["validation_export"] = {"passed": None, "summary": f"Error: {e}", "details": {}}
+        err = {"passed": None, "summary": f"Error: {e}", "details": {}}
+        result_dict["validation_meta"] = err
+        result_dict["validation_export"] = err
+        result_dict["validation_blame"] = "unverifiable"
+        result_dict["validation_summary"] = f"validation crashed: {e}"
 
     return result_dict

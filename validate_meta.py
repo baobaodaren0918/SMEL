@@ -457,7 +457,10 @@ def _resolve_target_file(config_key: str, target_type: str):
 
     Priority:
     1. MIGRATION_TARGET_FILES: per-direction target (Person, same-model)
-    2. TARGET_SCHEMA_FILES: shared target by type (Northwind cross-model)
+    2. TARGET_SCHEMA_FILES: shared target by type — *only* for Northwind
+       cross-model configs, since the shared Northwind file is meaningful
+       only when the source schema is also Northwind. Other configs
+       (grammar_completeness etc.) get None → validation returns N/A.
     """
     from config import TARGET_SCHEMA_FILES, MIGRATION_TARGET_FILES
 
@@ -467,10 +470,13 @@ def _resolve_target_file(config_key: str, target_type: str):
     if target_file and target_file.exists():
         return target_file
 
-    # Fallback to shared target by type (Northwind cross-model)
-    target_file = TARGET_SCHEMA_FILES.get(target_type)
-    if target_file and target_file.exists():
-        return target_file
+    # Fallback to the shared Northwind cross-model target — only valid when
+    # the source itself is Northwind. Configs like grammar_completeness use
+    # a synthetic schema and have no meaningful expected target.
+    if config_key.startswith("northwind_"):
+        target_file = TARGET_SCHEMA_FILES.get(target_type)
+        if target_file and target_file.exists():
+            return target_file
 
     return None
 

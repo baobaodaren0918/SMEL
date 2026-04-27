@@ -12,7 +12,6 @@ Pipeline position:
                                                      (from native target file)
 """
 from typing import Dict, Any
-import json
 
 from validate_meta import compare_meta_schemas
 
@@ -65,22 +64,9 @@ def validate_export(result_dict: Dict[str, Any], target_type: str,
 
 
 def _parse_exported(exported_text: str, target_type: str, adapter_class) -> Any:
-    """Parse exported target text back into a Database object."""
-    from config import (
-        SOURCE_TYPE_RELATIONAL, SOURCE_TYPE_DOCUMENT,
-        SOURCE_TYPE_GRAPH, SOURCE_TYPE_COLUMNAR,
-    )
+    """Parse exported target text back into a Database object.
 
-    adapter = adapter_class()
-
-    if target_type == SOURCE_TYPE_RELATIONAL:
-        return adapter.parse(exported_text, "roundtrip_validation")
-    elif target_type == SOURCE_TYPE_DOCUMENT:
-        schema = json.loads(exported_text)
-        return adapter.parse(schema, "roundtrip_validation")
-    elif target_type == SOURCE_TYPE_GRAPH:
-        return adapter.parse_cypher(exported_text, "roundtrip_validation")
-    elif target_type == SOURCE_TYPE_COLUMNAR:
-        return adapter.parse(exported_text, "roundtrip_validation")
-    else:
-        raise ValueError(f"Unknown target type: {target_type}")
+    All four adapters share a uniform ``parse(content: str)`` entry via the
+    DatabaseAdapter ABC, so a single dispatch line covers every target type.
+    """
+    return adapter_class().parse(exported_text, "roundtrip_validation")
