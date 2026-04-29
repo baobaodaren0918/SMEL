@@ -75,7 +75,7 @@ operation: add_property | add_foreign_key | add_embedded | add_entity
 
 // ADD_PROPERTY: Add new property to entity
 // Example: ADD_PROPERTY email TO Customer WITH TYPE String NOT NULL
-add_property: ADD_PROPERTY identifier (TO identifier)? propertyClause*;
+add_property: ADD_PROPERTY identifier (TO qualifiedName)? propertyClause*;
 propertyClause: withTypeClause | withDefaultClause | notNullClause;
 withTypeClause: WITH TYPE dataType;
 withDefaultClause: WITH DEFAULT literal;
@@ -88,12 +88,12 @@ notNullClause: NOT_NULL;
 // Composite form ((cols) TO source_entity, target list-of-columns):
 //   Example: ADD_FOREIGN_KEY (tenant_id, item_id) TO sales REFERENCES tenants_items(tenant_id, item_id)
 // Both source and target accept multiple columns; lengths must match in the handler.
-add_foreign_key: ADD_FOREIGN_KEY keyColumns (TO identifier)? REFERENCES identifier LPAREN identifierList RPAREN constraintClause*;
+add_foreign_key: ADD_FOREIGN_KEY keyColumns (TO qualifiedName)? REFERENCES qualifiedName LPAREN identifierList RPAREN constraintClause*;
 constraintClause: withCardinalityClause | usingKeyClause | whereClause;
 
 // ADD_EMBEDDED: Add embedded object relationship (MongoDB style)
 // Example: ADD_EMBEDDED address TO Customer WITH CARDINALITY ONE_TO_ONE
-add_embedded: ADD_EMBEDDED identifier TO identifier embeddedClause*;
+add_embedded: ADD_EMBEDDED identifier TO qualifiedName embeddedClause*;
 embeddedClause: withCardinalityClause | withStructureClause;
 withStructureClause: WITH STRUCTURE LPAREN identifierList RPAREN;
 
@@ -101,7 +101,7 @@ withStructureClause: WITH STRUCTURE LPAREN identifierList RPAREN;
 // Example: ADD_ENTITY Product WITH PROPERTIES (id String, name String)
 // Example: ADD_ENTITY CONTAINS FROM orders TO products WITH PROPERTIES (unitPrice Decimal, quantity Integer)
 // Example: ADD_ENTITY REPORTS_TO FROM employees TO employees WITH CARDINALITY ONE_TO_MANY
-add_entity: ADD_ENTITY identifier (FROM identifier TO identifier)? (WITH CARDINALITY cardinalityType)? entityClause*;
+add_entity: ADD_ENTITY identifier (FROM qualifiedName TO qualifiedName)? (WITH CARDINALITY cardinalityType)? entityClause*;
 entityClause: withPropertiesClause | withKeyClause;
 withKeyClause: WITH KEY identifier;
 
@@ -111,30 +111,30 @@ withKeyClause: WITH KEY identifier;
 // Example: ADD_PRIMARY_KEY id TO Customer WITH TYPE UUID (legacy TO syntax)
 // Note: AS dataType is a simplified alternative to WITH TYPE dataType
 // Note: keyColumns now supports qualifiedName (entity.field) for explicit entity specification
-add_primary_key: ADD_PRIMARY_KEY keyColumns (AS dataType)? (TO identifier)? keyClause*;
+add_primary_key: ADD_PRIMARY_KEY keyColumns (AS dataType)? (TO qualifiedName)? keyClause*;
 
 // ADD_UNIQUE_KEY: Add unique constraint
 // Example: ADD_UNIQUE_KEY email TO Customer
-add_unique_key: ADD_UNIQUE_KEY keyColumns (AS dataType)? (TO identifier)? keyClause*;
+add_unique_key: ADD_UNIQUE_KEY keyColumns (AS dataType)? (TO qualifiedName)? keyClause*;
 
 // ADD_PARTITION_KEY: Add partition key (Cassandra - columnar)
 // Example: ADD_PARTITION_KEY user_id TO UserActivity
-add_partition_key: ADD_PARTITION_KEY keyColumns (AS dataType)? (TO identifier)? keyClause*;
+add_partition_key: ADD_PARTITION_KEY keyColumns (AS dataType)? (TO qualifiedName)? keyClause*;
 
 // ADD_CLUSTERING_KEY: Add clustering key (Cassandra - columnar)
 // Example: ADD_CLUSTERING_KEY timestamp TO UserActivity
-add_clustering_key: ADD_CLUSTERING_KEY keyColumns (AS dataType)? (TO identifier)? keyClause*;
+add_clustering_key: ADD_CLUSTERING_KEY keyColumns (AS dataType)? (TO qualifiedName)? keyClause*;
 
 // ADD_LABEL: Add label to node (graph database)
 // Example: ADD_LABEL Employee TO customers
-add_label: ADD_LABEL identifier TO identifier;
+add_label: ADD_LABEL identifier TO qualifiedName;
 
 // Key columns - qualifiedName (entity.field) or parenthesized list for composite keys
 keyColumns: qualifiedName | LPAREN identifierList RPAREN;
 
 // Key constraint clauses
 keyClause: referencesClause | withColumnsClause | withTypeClause;
-referencesClause: REFERENCES identifier LPAREN identifierList RPAREN;
+referencesClause: REFERENCES qualifiedName LPAREN identifierList RPAREN;
 withColumnsClause: WITH COLUMNS LPAREN identifierList RPAREN;
 
 // ============================================================================
@@ -155,27 +155,27 @@ delete_embedded: DELETE_EMBEDDED qualifiedName;
 
 // DELETE_ENTITY: Remove entire entity/table
 // Example: DELETE_ENTITY Customer
-delete_entity: DELETE_ENTITY identifier;
+delete_entity: DELETE_ENTITY qualifiedName;
 
 // DELETE_PRIMARY_KEY: Delete primary key constraint
 // Example: DELETE_PRIMARY_KEY id FROM Customer
-delete_primary_key: DELETE_PRIMARY_KEY keyColumns (FROM identifier)?;
+delete_primary_key: DELETE_PRIMARY_KEY keyColumns (FROM qualifiedName)?;
 
 // DELETE_UNIQUE_KEY: Delete unique constraint
 // Example: DELETE_UNIQUE_KEY email FROM Customer
-delete_unique_key: DELETE_UNIQUE_KEY keyColumns (FROM identifier)?;
+delete_unique_key: DELETE_UNIQUE_KEY keyColumns (FROM qualifiedName)?;
 
 // DELETE_PARTITION_KEY: Delete partition key
 // Example: DELETE_PARTITION_KEY user_id FROM UserActivity
-delete_partition_key: DELETE_PARTITION_KEY keyColumns (FROM identifier)?;
+delete_partition_key: DELETE_PARTITION_KEY keyColumns (FROM qualifiedName)?;
 
 // DELETE_CLUSTERING_KEY: Delete clustering key
 // Example: DELETE_CLUSTERING_KEY timestamp FROM UserActivity
-delete_clustering_key: DELETE_CLUSTERING_KEY keyColumns (FROM identifier)?;
+delete_clustering_key: DELETE_CLUSTERING_KEY keyColumns (FROM qualifiedName)?;
 
 // DELETE_LABEL: Delete label from node
 // Example: DELETE_LABEL Employee FROM customers
-delete_label: DELETE_LABEL identifier FROM identifier;
+delete_label: DELETE_LABEL identifier FROM qualifiedName;
 
 // ============================================================================
 // RENAME OPERATIONS - Specific keywords for each type
@@ -183,11 +183,11 @@ delete_label: DELETE_LABEL identifier FROM identifier;
 
 // RENAME_PROPERTY: Rename property within an entity
 // Example: RENAME_PROPERTY email TO contact_email IN Customer
-rename_property: RENAME_PROPERTY identifier TO identifier (IN identifier)?;
+rename_property: RENAME_PROPERTY identifier TO identifier (IN qualifiedName)?;
 
 // RENAME_ENTITY: Rename entity/table
 // Example: RENAME_ENTITY Customer TO Client
-rename_entity: RENAME_ENTITY identifier TO identifier;
+rename_entity: RENAME_ENTITY qualifiedName TO qualifiedName;
 
 // ============================================================================
 // STRUCTURE OPERATIONS
@@ -205,7 +205,7 @@ flatten: FLATTEN qualifiedName;
 // Example: UNFLATTEN customers:first_name, last_name AS name
 //   Before: customers { first_name, last_name, age }
 //   After:  customers { name: { first_name, last_name }, age }
-unflatten: UNFLATTEN identifier COLON identifierList AS identifier;
+unflatten: UNFLATTEN qualifiedName COLON identifierList AS identifier;
 
 // UNNEST - Extract nested object to separate table (normalization)
 // Example: UNNEST customers.address:street,city AS address WITH customers.customer_id TO address.customer_id
@@ -253,7 +253,7 @@ wind: WIND qualifiedName;
 //   - 'IN customers.address' specifies target (customers entity, address field)
 //   - WHERE clause specifies join condition
 // Note: source entity is not removed automatically; use DELETE_ENTITY explicitly when desired.
-nest: NEST identifier COLON unnestFieldList IN qualifiedName WHERE condition;
+nest: NEST qualifiedName COLON unnestFieldList IN qualifiedName WHERE condition;
 
 // ============================================================================
 // SIMPLE OPERATIONS
@@ -261,21 +261,21 @@ nest: NEST identifier COLON unnestFieldList IN qualifiedName WHERE condition;
 
 // COPY_PROPERTY: Duplicate a property to another entity (keeps original)
 // Example: COPY_PROPERTY name FROM customers TO other
-copy_property: COPY_PROPERTY identifier FROM identifier TO identifier;
+copy_property: COPY_PROPERTY identifier FROM qualifiedName TO qualifiedName;
 
 // COPY_ENTITY: Duplicate an entire entity with all its structure (properties, keys, constraints)
 // Reference: PRISM "COPY TABLE R INTO S", CoDEL "Addtable(S, R)"
 // Example: COPY_ENTITY customers AS employee
 // Example: COPY_ENTITY works_at AS employed_at FROM customers TO company  (copy EDGE with explicit endpoints)
-copy_entity: COPY_ENTITY identifier AS identifier (FROM identifier TO identifier)?;
+copy_entity: COPY_ENTITY qualifiedName AS identifier (FROM qualifiedName TO qualifiedName)?;
 
 // MOVE_PROPERTY: Relocate a property to another entity (removes original)
 // Example: MOVE_PROPERTY name FROM customers TO other
-move_property: MOVE_PROPERTY identifier FROM identifier TO identifier;
+move_property: MOVE_PROPERTY identifier FROM qualifiedName TO qualifiedName;
 
 // MERGE: Combine two entities into one new entity
 // Example: MERGE A, B INTO C AS alias
-merge: MERGE identifier COMMA identifier INTO identifier (AS identifier)?;
+merge: MERGE qualifiedName COMMA qualifiedName INTO identifier (AS identifier)?;
 
 // SPLIT: Divide one entity into multiple separate entities (vertical partitioning)
 // Reference: André Conrad - "SPLIT Person into Person:id, firstname, lastname AND knows:id, knows"
@@ -284,7 +284,7 @@ merge: MERGE identifier COMMA identifier INTO identifier (AS identifier)?;
 //   After:  customers { customer_id, first_name, last_name, age }
 //          customer_tag { customer_id, tags[] }
 // Note: Fields can be duplicated across parts (e.g., customer_id in both parts)
-split: SPLIT identifier INTO splitPart (SEMICOLON splitPart)+;
+split: SPLIT qualifiedName INTO splitPart (SEMICOLON splitPart)+;
 splitPart: identifier COLON identifierList;
 
 // CAST_PROPERTY: Change the data type of a property
@@ -302,7 +302,7 @@ cast_constraint: CAST_CONSTRAINT qualifiedName TO constraintKeyType;
 // Example: CAST_ENTITY customers TO GRAPH
 // Note: Overrides automatic entity_kind normalization for this entity
 // Note: For VERTEX<->EDGE conversion, use TRANSFORM instead
-cast_entity: CAST_ENTITY identifier TO databaseType;
+cast_entity: CAST_ENTITY qualifiedName TO databaseType;
 
 // RECARD: Change the multiplicity/cardinality of a reference
 // Reference: Orion "Mult Reference" - change the multiplicity of a reference
@@ -314,8 +314,8 @@ recard: RECARD qualifiedName TO cardinalityType;
 // Example: TRANSFORM works_at INTO RELATIONSHIP FROM customers TO company
 // Example: TRANSFORM works_at INTO RELATIONSHIP FROM customers TO company WITH CARDINALITY ZERO_TO_MANY
 // Example: TRANSFORM works_at INTO ENTITY
-transform: TRANSFORM identifier INTO transformTarget;
-transformTarget: RELATIONSHIP FROM identifier TO identifier (WITH CARDINALITY cardinalityType)?   # TransformToRelationship
+transform: TRANSFORM qualifiedName INTO transformTarget;
+transformTarget: RELATIONSHIP FROM qualifiedName TO qualifiedName (WITH CARDINALITY cardinalityType)?   # TransformToRelationship
               | ENTITY                                                                            # TransformToEntity
               ;
 

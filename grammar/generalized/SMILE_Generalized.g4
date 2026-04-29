@@ -79,7 +79,7 @@ add_gen: ADD (propertyAdd | foreignKeyAdd | embeddedAdd | entityAdd
         | keyAdd | labelAdd);
 
 // Add property: ADD PROPERTY email TO Customer WITH TYPE String NOT NULL
-propertyAdd: PROPERTY identifier (TO identifier)? propertyClause*;
+propertyAdd: PROPERTY identifier (TO qualifiedName)? propertyClause*;
 propertyClause: withTypeClause | withDefaultClause | notNullClause;
 withTypeClause: WITH TYPE dataType;
 withDefaultClause: WITH DEFAULT literal;
@@ -91,18 +91,18 @@ notNullClause: NOT_NULL;
 //   Example: ADD FOREIGN KEY orders.customer_id REFERENCES customers(id) WITH CARDINALITY ONE_TO_MANY
 // Composite form ((cols) TO source_entity, target list-of-columns):
 //   Example: ADD FOREIGN KEY (tenant_id, item_id) TO sales REFERENCES tenants_items(tenant_id, item_id)
-foreignKeyAdd: FOREIGN KEY keyColumns (TO identifier)? REFERENCES identifier LPAREN identifierList RPAREN constraintClause*;
+foreignKeyAdd: FOREIGN KEY keyColumns (TO qualifiedName)? REFERENCES qualifiedName LPAREN identifierList RPAREN constraintClause*;
 constraintClause: withCardinalityClause | usingKeyClause | whereClause;
 
 // Add embedded: ADD EMBEDDED address TO Customer WITH CARDINALITY ONE_TO_ONE
-embeddedAdd: EMBEDDED identifier TO identifier embeddedClause*;
+embeddedAdd: EMBEDDED identifier TO qualifiedName embeddedClause*;
 embeddedClause: withCardinalityClause | withStructureClause;
 withStructureClause: WITH STRUCTURE LPAREN identifierList RPAREN;
 
 // Add entity: ADD ENTITY Product WITH PROPERTIES (id String, name String)
 // Add edge:   ADD ENTITY CONTAINS FROM orders TO products WITH PROPERTIES (unitPrice Decimal)
 // Add edge:   ADD ENTITY REPORTS_TO FROM employees TO employees WITH CARDINALITY ONE_TO_MANY
-entityAdd: ENTITY identifier (FROM identifier TO identifier)? (WITH CARDINALITY cardinalityType)? entityClause*;
+entityAdd: ENTITY identifier (FROM qualifiedName TO qualifiedName)? (WITH CARDINALITY cardinalityType)? entityClause*;
 entityClause: withPropertiesClause | withKeyClause;
 withKeyClause: WITH KEY identifier;
 
@@ -110,7 +110,7 @@ withKeyClause: WITH KEY identifier;
 // Or full form: ADD PRIMARY KEY id TO Customer WITH TYPE UUID (legacy TO syntax)
 // Example: ADD KEY address.address_id AS String  (new explicit syntax)
 // Example: ADD PRIMARY KEY (id1, id2) TO Customer (composite key)
-keyAdd: keyType? KEY keyColumns (AS dataType)? (TO identifier)? keyClause*;
+keyAdd: keyType? KEY keyColumns (AS dataType)? (TO qualifiedName)? keyClause*;
 // Note: keyType is optional, defaults to PRIMARY KEY when omitted
 // Note: AS dataType is a simplified alternative to WITH TYPE dataType
 // Note: keyColumns now supports qualifiedName (entity.field) for explicit entity specification
@@ -119,7 +119,7 @@ keyAdd: keyType? KEY keyColumns (AS dataType)? (TO identifier)? keyClause*;
 keyColumns: qualifiedName | LPAREN identifierList RPAREN;
 
 // Add label (Graph): ADD LABEL Employee TO customers
-labelAdd: LABEL identifier TO identifier;
+labelAdd: LABEL identifier TO qualifiedName;
 
 // ============================================================================
 // DELETE - Generalized DELETE operation with type parameter
@@ -148,13 +148,13 @@ foreignKeyDelete: FOREIGN KEY qualifiedName;
 embeddedDelete: EMBEDDED qualifiedName;
 
 // Delete entity: DELETE ENTITY Customer
-entityDelete: ENTITY identifier;
+entityDelete: ENTITY qualifiedName;
 
 // Delete key: DELETE PRIMARY KEY id FROM Customer
-keyDelete: keyType KEY keyColumns (FROM identifier)?;
+keyDelete: keyType KEY keyColumns (FROM qualifiedName)?;
 
 // Delete label: DELETE LABEL Employee FROM customers
-labelDelete: LABEL identifier FROM identifier;
+labelDelete: LABEL identifier FROM qualifiedName;
 
 // ============================================================================
 // RENAME - Generalized RENAME operation with type parameter
@@ -168,10 +168,10 @@ labelDelete: LABEL identifier FROM identifier;
 rename_gen: RENAME (propertyRename | entityRename);
 
 // Rename property: RENAME PROPERTY oldName TO newName IN Entity
-propertyRename: PROPERTY identifier TO identifier (IN identifier)?;
+propertyRename: PROPERTY identifier TO identifier (IN qualifiedName)?;
 
 // Rename entity: RENAME ENTITY OldName TO NewName
-entityRename: ENTITY identifier TO identifier;
+entityRename: ENTITY qualifiedName TO qualifiedName;
 
 // ----------------------------------------------------------------------------
 // KEY TYPES - Constraint types for different database models
@@ -186,7 +186,7 @@ entityRename: ENTITY identifier TO identifier;
 //
 keyType: PRIMARY | UNIQUE | PARTITION | CLUSTERING;
 keyClause: referencesClause | withColumnsClause | withTypeClause;
-referencesClause: REFERENCES identifier LPAREN identifierList RPAREN;
+referencesClause: REFERENCES qualifiedName LPAREN identifierList RPAREN;
 withColumnsClause: WITH COLUMNS LPAREN identifierList RPAREN;
 identifierList: identifier (COMMA identifier)*;
 
@@ -206,7 +206,7 @@ flatten_gen: FLATTEN qualifiedName;
 // Example: UNFLATTEN customers:first_name, last_name AS name
 //   Before: customers { first_name, last_name, age }
 //   After:  customers { name: { first_name, last_name }, age }
-unflatten_gen: UNFLATTEN identifier COLON identifierList AS identifier;
+unflatten_gen: UNFLATTEN qualifiedName COLON identifierList AS identifier;
 
 // UNNEST - Extract nested object to separate table (normalization)
 // Example: UNNEST customers.address:street,city AS address WITH customers.customer_id TO address.customer_id
@@ -254,7 +254,7 @@ wind_gen: WIND qualifiedName;
 //   - 'IN customers.address' specifies target (customers entity, address field)
 //   - WHERE clause specifies join condition
 // Note: source entity is not removed automatically; use DELETE ENTITY explicitly when desired.
-nest_gen: NEST identifier COLON unnestFieldList IN qualifiedName WHERE condition;
+nest_gen: NEST qualifiedName COLON unnestFieldList IN qualifiedName WHERE condition;
 
 // ============================================================================
 // SIMPLE OPERATIONS
@@ -265,16 +265,16 @@ nest_gen: NEST identifier COLON unnestFieldList IN qualifiedName WHERE condition
 // Example: COPY ENTITY customers AS employee
 // Example: COPY ENTITY works_at AS employed_at FROM customers TO company  (copy EDGE with explicit endpoints)
 copy_gen: COPY (entityCopy | propertyCopy);
-propertyCopy: PROPERTY identifier FROM identifier TO identifier;
-entityCopy: ENTITY identifier AS identifier (FROM identifier TO identifier)?;
+propertyCopy: PROPERTY identifier FROM qualifiedName TO qualifiedName;
+entityCopy: ENTITY qualifiedName AS identifier (FROM qualifiedName TO qualifiedName)?;
 
 // MOVE: Relocate a property to another entity (removes original)
 // Example: MOVE PROPERTY email FROM customers TO employee
-move_gen: MOVE PROPERTY identifier FROM identifier TO identifier;
+move_gen: MOVE PROPERTY identifier FROM qualifiedName TO qualifiedName;
 
 // MERGE: Combine two entities into one new entity
 // Example: MERGE A, B INTO C AS alias
-merge_gen: MERGE identifier COMMA identifier INTO identifier (AS identifier)?;
+merge_gen: MERGE qualifiedName COMMA qualifiedName INTO identifier (AS identifier)?;
 
 // SPLIT: Divide one entity into multiple separate entities (vertical partitioning)
 // Reference: André Conrad - "SPLIT Person into Person:id, firstname, lastname AND knows:id, knows"
@@ -283,7 +283,7 @@ merge_gen: MERGE identifier COMMA identifier INTO identifier (AS identifier)?;
 //   After:  customers { customer_id, first_name, last_name, age }
 //          customer_tag { customer_id, tags[] }
 // Note: Fields can be duplicated across parts (e.g., customer_id in both parts)
-split_gen: SPLIT identifier INTO splitPartGen (SEMICOLON splitPartGen)+;
+split_gen: SPLIT qualifiedName INTO splitPartGen (SEMICOLON splitPartGen)+;
 splitPartGen: identifier COLON identifierList;
 
 // CAST: Change the data type of a property, the type of a constraint, or the kind of an entity
@@ -293,7 +293,7 @@ splitPartGen: identifier COLON identifierList;
 cast_gen: CAST (constraintCast | entityCast | propertyCast);
 propertyCast: PROPERTY qualifiedName TO dataType;
 constraintCast: CONSTRAINT qualifiedName TO constraintKeyType;
-entityCast: ENTITY identifier TO databaseType;
+entityCast: ENTITY qualifiedName TO databaseType;
 
 // RECARD: Change the multiplicity/cardinality of a reference
 // Example: RECARD customers.address_id TO ONE_TO_MANY
@@ -304,8 +304,8 @@ recard_gen: RECARD qualifiedName TO cardinalityType;
 // Example: TRANSFORM works_at INTO RELATIONSHIP FROM customers TO company
 // Example: TRANSFORM works_at INTO RELATIONSHIP FROM customers TO company WITH CARDINALITY ZERO_TO_MANY
 // Example: TRANSFORM works_at INTO ENTITY
-transform_gen: TRANSFORM identifier INTO transformTarget;
-transformTarget: RELATIONSHIP FROM identifier TO identifier (WITH CARDINALITY cardinalityType)?   # TransformToRelationship
+transform_gen: TRANSFORM qualifiedName INTO transformTarget;
+transformTarget: RELATIONSHIP FROM qualifiedName TO qualifiedName (WITH CARDINALITY cardinalityType)?   # TransformToRelationship
               | ENTITY                                                                            # TransformToEntity
               ;
 

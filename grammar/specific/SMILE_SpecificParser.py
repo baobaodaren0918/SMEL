@@ -126,7 +126,7 @@ def serializedATN():
         229,1,0,0,0,237,230,1,0,0,0,237,231,1,0,0,0,237,232,1,0,0,0,237,
         233,1,0,0,0,237,234,1,0,0,0,237,235,1,0,0,0,237,236,1,0,0,0,238,
         17,1,0,0,0,239,240,5,37,0,0,240,243,3,152,76,0,241,242,5,5,0,0,242,
-        244,3,152,76,0,243,241,1,0,0,0,243,244,1,0,0,0,244,248,1,0,0,0,245,
+        244,3,148,74,0,243,241,1,0,0,0,243,244,1,0,0,0,244,248,1,0,0,0,245,
         247,3,20,10,0,246,245,1,0,0,0,247,250,1,0,0,0,248,246,1,0,0,0,248,
         249,1,0,0,0,249,19,1,0,0,0,250,248,1,0,0,0,251,255,3,22,11,0,252,
         255,3,24,12,0,253,255,3,26,13,0,254,251,1,0,0,0,254,252,1,0,0,0,
@@ -134,20 +134,20 @@ def serializedATN():
         258,259,3,146,73,0,259,23,1,0,0,0,260,261,5,9,0,0,261,262,5,95,0,
         0,262,263,3,156,78,0,263,25,1,0,0,0,264,265,5,98,0,0,265,27,1,0,
         0,0,266,267,5,41,0,0,267,270,3,54,27,0,268,269,5,5,0,0,269,271,3,
-        152,76,0,270,268,1,0,0,0,270,271,1,0,0,0,271,272,1,0,0,0,272,273,
-        5,73,0,0,273,274,3,152,76,0,274,275,5,106,0,0,275,276,3,140,70,0,
+        148,74,0,270,268,1,0,0,0,270,271,1,0,0,0,271,272,1,0,0,0,272,273,
+        5,73,0,0,273,274,3,148,74,0,274,275,5,106,0,0,275,276,3,140,70,0,
         276,280,5,107,0,0,277,279,3,30,15,0,278,277,1,0,0,0,279,282,1,0,
         0,0,280,278,1,0,0,0,280,281,1,0,0,0,281,29,1,0,0,0,282,280,1,0,0,
         0,283,287,3,128,64,0,284,287,3,130,65,0,285,287,3,132,66,0,286,283,
         1,0,0,0,286,284,1,0,0,0,286,285,1,0,0,0,287,31,1,0,0,0,288,289,5,
-        38,0,0,289,290,3,152,76,0,290,291,5,5,0,0,291,295,3,152,76,0,292,
+        38,0,0,289,290,3,152,76,0,290,291,5,5,0,0,291,295,3,148,74,0,292,
         294,3,34,17,0,293,292,1,0,0,0,294,297,1,0,0,0,295,293,1,0,0,0,295,
         296,1,0,0,0,296,33,1,0,0,0,297,295,1,0,0,0,298,301,3,128,64,0,299,
         301,3,36,18,0,300,298,1,0,0,0,300,299,1,0,0,0,301,35,1,0,0,0,302,
         303,5,9,0,0,303,304,5,58,0,0,304,305,5,106,0,0,305,306,3,140,70,
         0,306,307,5,107,0,0,307,37,1,0,0,0,308,309,5,39,0,0,309,315,3,152,
-        76,0,310,311,5,4,0,0,311,312,3,152,76,0,312,313,5,5,0,0,313,314,
-        3,152,76,0,314,316,1,0,0,0,315,310,1,0,0,0,315,316,1,0,0,0,316,320,
+        76,0,310,311,5,4,0,0,311,312,3,148,74,0,312,313,5,5,0,0,313,314,
+        3,148,74,0,314,316,1,0,0,0,315,310,1,0,0,0,315,316,1,0,0,0,316,320,
         1,0,0,0,317,318,5,9,0,0,318,319,5,75,0,0,319,321,3,142,71,0,320,
         317,1,0,0,0,320,321,1,0,0,0,321,325,1,0,0,0,322,324,3,40,20,0,323,
         322,1,0,0,0,324,327,1,0,0,0,325,323,1,0,0,0,325,326,1,0,0,0,326,
@@ -155,49 +155,49 @@ def serializedATN():
         330,328,1,0,0,0,330,329,1,0,0,0,331,41,1,0,0,0,332,333,5,9,0,0,333,
         334,5,12,0,0,334,335,3,152,76,0,335,43,1,0,0,0,336,337,5,40,0,0,
         337,340,3,54,27,0,338,339,5,7,0,0,339,341,3,146,73,0,340,338,1,0,
-        0,0,340,341,1,0,0,0,341,344,1,0,0,0,342,343,5,5,0,0,343,345,3,152,
-        76,0,344,342,1,0,0,0,344,345,1,0,0,0,345,349,1,0,0,0,346,348,3,56,
+        0,0,340,341,1,0,0,0,341,344,1,0,0,0,342,343,5,5,0,0,343,345,3,148,
+        74,0,344,342,1,0,0,0,344,345,1,0,0,0,345,349,1,0,0,0,346,348,3,56,
         28,0,347,346,1,0,0,0,348,351,1,0,0,0,349,347,1,0,0,0,349,350,1,0,
         0,0,350,45,1,0,0,0,351,349,1,0,0,0,352,353,5,42,0,0,353,356,3,54,
         27,0,354,355,5,7,0,0,355,357,3,146,73,0,356,354,1,0,0,0,356,357,
-        1,0,0,0,357,360,1,0,0,0,358,359,5,5,0,0,359,361,3,152,76,0,360,358,
+        1,0,0,0,357,360,1,0,0,0,358,359,5,5,0,0,359,361,3,148,74,0,360,358,
         1,0,0,0,360,361,1,0,0,0,361,365,1,0,0,0,362,364,3,56,28,0,363,362,
         1,0,0,0,364,367,1,0,0,0,365,363,1,0,0,0,365,366,1,0,0,0,366,47,1,
         0,0,0,367,365,1,0,0,0,368,369,5,43,0,0,369,372,3,54,27,0,370,371,
         5,7,0,0,371,373,3,146,73,0,372,370,1,0,0,0,372,373,1,0,0,0,373,376,
-        1,0,0,0,374,375,5,5,0,0,375,377,3,152,76,0,376,374,1,0,0,0,376,377,
+        1,0,0,0,374,375,5,5,0,0,375,377,3,148,74,0,376,374,1,0,0,0,376,377,
         1,0,0,0,377,381,1,0,0,0,378,380,3,56,28,0,379,378,1,0,0,0,380,383,
         1,0,0,0,381,379,1,0,0,0,381,382,1,0,0,0,382,49,1,0,0,0,383,381,1,
         0,0,0,384,385,5,44,0,0,385,388,3,54,27,0,386,387,5,7,0,0,387,389,
         3,146,73,0,388,386,1,0,0,0,388,389,1,0,0,0,389,392,1,0,0,0,390,391,
-        5,5,0,0,391,393,3,152,76,0,392,390,1,0,0,0,392,393,1,0,0,0,393,397,
+        5,5,0,0,391,393,3,148,74,0,392,390,1,0,0,0,392,393,1,0,0,0,393,397,
         1,0,0,0,394,396,3,56,28,0,395,394,1,0,0,0,396,399,1,0,0,0,397,395,
         1,0,0,0,397,398,1,0,0,0,398,51,1,0,0,0,399,397,1,0,0,0,400,401,5,
-        45,0,0,401,402,3,152,76,0,402,403,5,5,0,0,403,404,3,152,76,0,404,
+        45,0,0,401,402,3,152,76,0,402,403,5,5,0,0,403,404,3,148,74,0,404,
         53,1,0,0,0,405,411,3,148,74,0,406,407,5,106,0,0,407,408,3,140,70,
         0,408,409,5,107,0,0,409,411,1,0,0,0,410,405,1,0,0,0,410,406,1,0,
         0,0,411,55,1,0,0,0,412,416,3,58,29,0,413,416,3,60,30,0,414,416,3,
         22,11,0,415,412,1,0,0,0,415,413,1,0,0,0,415,414,1,0,0,0,416,57,1,
-        0,0,0,417,418,5,73,0,0,418,419,3,152,76,0,419,420,5,106,0,0,420,
+        0,0,0,417,418,5,73,0,0,418,419,3,148,74,0,419,420,5,106,0,0,420,
         421,3,140,70,0,421,422,5,107,0,0,422,59,1,0,0,0,423,424,5,9,0,0,
         424,425,5,74,0,0,425,426,5,106,0,0,426,427,3,140,70,0,427,428,5,
         107,0,0,428,61,1,0,0,0,429,430,5,46,0,0,430,431,3,148,74,0,431,63,
         1,0,0,0,432,433,5,50,0,0,433,434,3,148,74,0,434,65,1,0,0,0,435,436,
         5,47,0,0,436,437,3,148,74,0,437,67,1,0,0,0,438,439,5,48,0,0,439,
-        440,3,152,76,0,440,69,1,0,0,0,441,442,5,49,0,0,442,445,3,54,27,0,
-        443,444,5,4,0,0,444,446,3,152,76,0,445,443,1,0,0,0,445,446,1,0,0,
+        440,3,148,74,0,440,69,1,0,0,0,441,442,5,49,0,0,442,445,3,54,27,0,
+        443,444,5,4,0,0,444,446,3,148,74,0,445,443,1,0,0,0,445,446,1,0,0,
         0,446,71,1,0,0,0,447,448,5,51,0,0,448,451,3,54,27,0,449,450,5,4,
-        0,0,450,452,3,152,76,0,451,449,1,0,0,0,451,452,1,0,0,0,452,73,1,
+        0,0,450,452,3,148,74,0,451,449,1,0,0,0,451,452,1,0,0,0,452,73,1,
         0,0,0,453,454,5,52,0,0,454,457,3,54,27,0,455,456,5,4,0,0,456,458,
-        3,152,76,0,457,455,1,0,0,0,457,458,1,0,0,0,458,75,1,0,0,0,459,460,
-        5,53,0,0,460,463,3,54,27,0,461,462,5,4,0,0,462,464,3,152,76,0,463,
+        3,148,74,0,457,455,1,0,0,0,457,458,1,0,0,0,458,75,1,0,0,0,459,460,
+        5,53,0,0,460,463,3,54,27,0,461,462,5,4,0,0,462,464,3,148,74,0,463,
         461,1,0,0,0,463,464,1,0,0,0,464,77,1,0,0,0,465,466,5,54,0,0,466,
-        467,3,152,76,0,467,468,5,4,0,0,468,469,3,152,76,0,469,79,1,0,0,0,
+        467,3,152,76,0,467,468,5,4,0,0,468,469,3,148,74,0,469,79,1,0,0,0,
         470,471,5,55,0,0,471,472,3,152,76,0,472,473,5,5,0,0,473,476,3,152,
-        76,0,474,475,5,11,0,0,475,477,3,152,76,0,476,474,1,0,0,0,476,477,
-        1,0,0,0,477,81,1,0,0,0,478,479,5,56,0,0,479,480,3,152,76,0,480,481,
-        5,5,0,0,481,482,3,152,76,0,482,83,1,0,0,0,483,484,5,21,0,0,484,485,
-        3,148,74,0,485,85,1,0,0,0,486,487,5,22,0,0,487,488,3,152,76,0,488,
+        76,0,474,475,5,11,0,0,475,477,3,148,74,0,476,474,1,0,0,0,476,477,
+        1,0,0,0,477,81,1,0,0,0,478,479,5,56,0,0,479,480,3,148,74,0,480,481,
+        5,5,0,0,481,482,3,148,74,0,482,83,1,0,0,0,483,484,5,21,0,0,484,485,
+        3,148,74,0,485,85,1,0,0,0,486,487,5,22,0,0,487,488,3,148,74,0,488,
         489,5,102,0,0,489,490,3,140,70,0,490,491,5,7,0,0,491,492,3,152,76,
         0,492,87,1,0,0,0,493,494,5,20,0,0,494,495,3,148,74,0,495,496,5,102,
         0,0,496,497,3,94,47,0,497,498,5,7,0,0,498,501,3,152,76,0,499,500,
@@ -213,31 +213,31 @@ def serializedATN():
         97,1,0,0,0,531,532,5,23,0,0,532,535,3,148,74,0,533,534,5,8,0,0,534,
         536,3,152,76,0,535,533,1,0,0,0,535,536,1,0,0,0,536,99,1,0,0,0,537,
         538,5,24,0,0,538,539,3,148,74,0,539,101,1,0,0,0,540,541,5,19,0,0,
-        541,542,3,152,76,0,542,543,5,102,0,0,543,544,3,94,47,0,544,545,5,
+        541,542,3,148,74,0,542,543,5,102,0,0,543,544,3,94,47,0,544,545,5,
         11,0,0,545,546,3,148,74,0,546,547,5,10,0,0,547,548,3,154,77,0,548,
         103,1,0,0,0,549,550,5,25,0,0,550,551,3,152,76,0,551,552,5,4,0,0,
-        552,553,3,152,76,0,553,554,5,5,0,0,554,555,3,152,76,0,555,105,1,
-        0,0,0,556,557,5,26,0,0,557,558,3,152,76,0,558,559,5,7,0,0,559,565,
-        3,152,76,0,560,561,5,4,0,0,561,562,3,152,76,0,562,563,5,5,0,0,563,
-        564,3,152,76,0,564,566,1,0,0,0,565,560,1,0,0,0,565,566,1,0,0,0,566,
+        552,553,3,148,74,0,553,554,5,5,0,0,554,555,3,148,74,0,555,105,1,
+        0,0,0,556,557,5,26,0,0,557,558,3,148,74,0,558,559,5,7,0,0,559,565,
+        3,152,76,0,560,561,5,4,0,0,561,562,3,148,74,0,562,563,5,5,0,0,563,
+        564,3,148,74,0,564,566,1,0,0,0,565,560,1,0,0,0,565,566,1,0,0,0,566,
         107,1,0,0,0,567,568,5,27,0,0,568,569,3,152,76,0,569,570,5,4,0,0,
-        570,571,3,152,76,0,571,572,5,5,0,0,572,573,3,152,76,0,573,109,1,
-        0,0,0,574,575,5,28,0,0,575,576,3,152,76,0,576,577,5,104,0,0,577,
-        578,3,152,76,0,578,579,5,8,0,0,579,582,3,152,76,0,580,581,5,7,0,
+        570,571,3,148,74,0,571,572,5,5,0,0,572,573,3,148,74,0,573,109,1,
+        0,0,0,574,575,5,28,0,0,575,576,3,148,74,0,576,577,5,104,0,0,577,
+        578,3,148,74,0,578,579,5,8,0,0,579,582,3,152,76,0,580,581,5,7,0,
         0,581,583,3,152,76,0,582,580,1,0,0,0,582,583,1,0,0,0,583,111,1,0,
-        0,0,584,585,5,29,0,0,585,586,3,152,76,0,586,587,5,8,0,0,587,590,
+        0,0,584,585,5,29,0,0,585,586,3,148,74,0,586,587,5,8,0,0,587,590,
         3,114,57,0,588,589,5,103,0,0,589,591,3,114,57,0,590,588,1,0,0,0,
         591,592,1,0,0,0,592,590,1,0,0,0,592,593,1,0,0,0,593,113,1,0,0,0,
         594,595,3,152,76,0,595,596,5,102,0,0,596,597,3,140,70,0,597,115,
         1,0,0,0,598,599,5,30,0,0,599,600,3,148,74,0,600,601,5,5,0,0,601,
         602,3,146,73,0,602,117,1,0,0,0,603,604,5,31,0,0,604,605,3,148,74,
         0,605,606,5,5,0,0,606,607,3,144,72,0,607,119,1,0,0,0,608,609,5,32,
-        0,0,609,610,3,152,76,0,610,611,5,5,0,0,611,612,3,12,6,0,612,121,
+        0,0,609,610,3,148,74,0,610,611,5,5,0,0,611,612,3,12,6,0,612,121,
         1,0,0,0,613,614,5,33,0,0,614,615,3,148,74,0,615,616,5,5,0,0,616,
-        617,3,142,71,0,617,123,1,0,0,0,618,619,5,34,0,0,619,620,3,152,76,
+        617,3,142,71,0,617,123,1,0,0,0,618,619,5,34,0,0,619,620,3,148,74,
         0,620,621,5,8,0,0,621,622,3,126,63,0,622,125,1,0,0,0,623,624,5,35,
-        0,0,624,625,5,4,0,0,625,626,3,152,76,0,626,627,5,5,0,0,627,631,3,
-        152,76,0,628,629,5,9,0,0,629,630,5,75,0,0,630,632,3,142,71,0,631,
+        0,0,624,625,5,4,0,0,625,626,3,148,74,0,626,627,5,5,0,0,627,631,3,
+        148,74,0,628,629,5,9,0,0,629,630,5,75,0,0,630,632,3,142,71,0,631,
         628,1,0,0,0,631,632,1,0,0,0,632,635,1,0,0,0,633,635,5,61,0,0,634,
         623,1,0,0,0,634,633,1,0,0,0,635,127,1,0,0,0,636,637,5,9,0,0,637,
         638,5,75,0,0,638,639,3,142,71,0,639,129,1,0,0,0,640,641,5,6,0,0,
@@ -1498,15 +1498,16 @@ class SMILE_SpecificParser ( Parser ):
         def ADD_PROPERTY(self):
             return self.getToken(SMILE_SpecificParser.ADD_PROPERTY, 0)
 
-        def identifier(self, i:int=None):
-            if i is None:
-                return self.getTypedRuleContexts(SMILE_SpecificParser.IdentifierContext)
-            else:
-                return self.getTypedRuleContext(SMILE_SpecificParser.IdentifierContext,i)
+        def identifier(self):
+            return self.getTypedRuleContext(SMILE_SpecificParser.IdentifierContext,0)
 
 
         def TO(self):
             return self.getToken(SMILE_SpecificParser.TO, 0)
+
+        def qualifiedName(self):
+            return self.getTypedRuleContext(SMILE_SpecificParser.QualifiedNameContext,0)
+
 
         def propertyClause(self, i:int=None):
             if i is None:
@@ -1553,7 +1554,7 @@ class SMILE_SpecificParser ( Parser ):
                 self.state = 241
                 self.match(SMILE_SpecificParser.TO)
                 self.state = 242
-                self.identifier()
+                self.qualifiedName()
 
 
             self.state = 248
@@ -1830,11 +1831,11 @@ class SMILE_SpecificParser ( Parser ):
         def REFERENCES(self):
             return self.getToken(SMILE_SpecificParser.REFERENCES, 0)
 
-        def identifier(self, i:int=None):
+        def qualifiedName(self, i:int=None):
             if i is None:
-                return self.getTypedRuleContexts(SMILE_SpecificParser.IdentifierContext)
+                return self.getTypedRuleContexts(SMILE_SpecificParser.QualifiedNameContext)
             else:
-                return self.getTypedRuleContext(SMILE_SpecificParser.IdentifierContext,i)
+                return self.getTypedRuleContext(SMILE_SpecificParser.QualifiedNameContext,i)
 
 
         def LPAREN(self):
@@ -1895,13 +1896,13 @@ class SMILE_SpecificParser ( Parser ):
                 self.state = 268
                 self.match(SMILE_SpecificParser.TO)
                 self.state = 269
-                self.identifier()
+                self.qualifiedName()
 
 
             self.state = 272
             self.match(SMILE_SpecificParser.REFERENCES)
             self.state = 273
-            self.identifier()
+            self.qualifiedName()
             self.state = 274
             self.match(SMILE_SpecificParser.LPAREN)
             self.state = 275
@@ -2011,15 +2012,16 @@ class SMILE_SpecificParser ( Parser ):
         def ADD_EMBEDDED(self):
             return self.getToken(SMILE_SpecificParser.ADD_EMBEDDED, 0)
 
-        def identifier(self, i:int=None):
-            if i is None:
-                return self.getTypedRuleContexts(SMILE_SpecificParser.IdentifierContext)
-            else:
-                return self.getTypedRuleContext(SMILE_SpecificParser.IdentifierContext,i)
+        def identifier(self):
+            return self.getTypedRuleContext(SMILE_SpecificParser.IdentifierContext,0)
 
 
         def TO(self):
             return self.getToken(SMILE_SpecificParser.TO, 0)
+
+        def qualifiedName(self):
+            return self.getTypedRuleContext(SMILE_SpecificParser.QualifiedNameContext,0)
+
 
         def embeddedClause(self, i:int=None):
             if i is None:
@@ -2062,7 +2064,7 @@ class SMILE_SpecificParser ( Parser ):
             self.state = 290
             self.match(SMILE_SpecificParser.TO)
             self.state = 291
-            self.identifier()
+            self.qualifiedName()
             self.state = 295
             self._errHandler.sync(self)
             _la = self._input.LA(1)
@@ -2225,15 +2227,19 @@ class SMILE_SpecificParser ( Parser ):
         def ADD_ENTITY(self):
             return self.getToken(SMILE_SpecificParser.ADD_ENTITY, 0)
 
-        def identifier(self, i:int=None):
-            if i is None:
-                return self.getTypedRuleContexts(SMILE_SpecificParser.IdentifierContext)
-            else:
-                return self.getTypedRuleContext(SMILE_SpecificParser.IdentifierContext,i)
+        def identifier(self):
+            return self.getTypedRuleContext(SMILE_SpecificParser.IdentifierContext,0)
 
 
         def FROM(self):
             return self.getToken(SMILE_SpecificParser.FROM, 0)
+
+        def qualifiedName(self, i:int=None):
+            if i is None:
+                return self.getTypedRuleContexts(SMILE_SpecificParser.QualifiedNameContext)
+            else:
+                return self.getTypedRuleContext(SMILE_SpecificParser.QualifiedNameContext,i)
+
 
         def TO(self):
             return self.getToken(SMILE_SpecificParser.TO, 0)
@@ -2293,11 +2299,11 @@ class SMILE_SpecificParser ( Parser ):
                 self.state = 310
                 self.match(SMILE_SpecificParser.FROM)
                 self.state = 311
-                self.identifier()
+                self.qualifiedName()
                 self.state = 312
                 self.match(SMILE_SpecificParser.TO)
                 self.state = 313
-                self.identifier()
+                self.qualifiedName()
 
 
             self.state = 320
@@ -2478,8 +2484,8 @@ class SMILE_SpecificParser ( Parser ):
         def TO(self):
             return self.getToken(SMILE_SpecificParser.TO, 0)
 
-        def identifier(self):
-            return self.getTypedRuleContext(SMILE_SpecificParser.IdentifierContext,0)
+        def qualifiedName(self):
+            return self.getTypedRuleContext(SMILE_SpecificParser.QualifiedNameContext,0)
 
 
         def keyClause(self, i:int=None):
@@ -2537,7 +2543,7 @@ class SMILE_SpecificParser ( Parser ):
                 self.state = 342
                 self.match(SMILE_SpecificParser.TO)
                 self.state = 343
-                self.identifier()
+                self.qualifiedName()
 
 
             self.state = 349
@@ -2583,8 +2589,8 @@ class SMILE_SpecificParser ( Parser ):
         def TO(self):
             return self.getToken(SMILE_SpecificParser.TO, 0)
 
-        def identifier(self):
-            return self.getTypedRuleContext(SMILE_SpecificParser.IdentifierContext,0)
+        def qualifiedName(self):
+            return self.getTypedRuleContext(SMILE_SpecificParser.QualifiedNameContext,0)
 
 
         def keyClause(self, i:int=None):
@@ -2642,7 +2648,7 @@ class SMILE_SpecificParser ( Parser ):
                 self.state = 358
                 self.match(SMILE_SpecificParser.TO)
                 self.state = 359
-                self.identifier()
+                self.qualifiedName()
 
 
             self.state = 365
@@ -2688,8 +2694,8 @@ class SMILE_SpecificParser ( Parser ):
         def TO(self):
             return self.getToken(SMILE_SpecificParser.TO, 0)
 
-        def identifier(self):
-            return self.getTypedRuleContext(SMILE_SpecificParser.IdentifierContext,0)
+        def qualifiedName(self):
+            return self.getTypedRuleContext(SMILE_SpecificParser.QualifiedNameContext,0)
 
 
         def keyClause(self, i:int=None):
@@ -2747,7 +2753,7 @@ class SMILE_SpecificParser ( Parser ):
                 self.state = 374
                 self.match(SMILE_SpecificParser.TO)
                 self.state = 375
-                self.identifier()
+                self.qualifiedName()
 
 
             self.state = 381
@@ -2793,8 +2799,8 @@ class SMILE_SpecificParser ( Parser ):
         def TO(self):
             return self.getToken(SMILE_SpecificParser.TO, 0)
 
-        def identifier(self):
-            return self.getTypedRuleContext(SMILE_SpecificParser.IdentifierContext,0)
+        def qualifiedName(self):
+            return self.getTypedRuleContext(SMILE_SpecificParser.QualifiedNameContext,0)
 
 
         def keyClause(self, i:int=None):
@@ -2852,7 +2858,7 @@ class SMILE_SpecificParser ( Parser ):
                 self.state = 390
                 self.match(SMILE_SpecificParser.TO)
                 self.state = 391
-                self.identifier()
+                self.qualifiedName()
 
 
             self.state = 397
@@ -2884,15 +2890,16 @@ class SMILE_SpecificParser ( Parser ):
         def ADD_LABEL(self):
             return self.getToken(SMILE_SpecificParser.ADD_LABEL, 0)
 
-        def identifier(self, i:int=None):
-            if i is None:
-                return self.getTypedRuleContexts(SMILE_SpecificParser.IdentifierContext)
-            else:
-                return self.getTypedRuleContext(SMILE_SpecificParser.IdentifierContext,i)
+        def identifier(self):
+            return self.getTypedRuleContext(SMILE_SpecificParser.IdentifierContext,0)
 
 
         def TO(self):
             return self.getToken(SMILE_SpecificParser.TO, 0)
+
+        def qualifiedName(self):
+            return self.getTypedRuleContext(SMILE_SpecificParser.QualifiedNameContext,0)
+
 
         def getRuleIndex(self):
             return SMILE_SpecificParser.RULE_add_label
@@ -2927,7 +2934,7 @@ class SMILE_SpecificParser ( Parser ):
             self.state = 402
             self.match(SMILE_SpecificParser.TO)
             self.state = 403
-            self.identifier()
+            self.qualifiedName()
         except RecognitionException as re:
             localctx.exception = re
             self._errHandler.reportError(self, re)
@@ -3097,8 +3104,8 @@ class SMILE_SpecificParser ( Parser ):
         def REFERENCES(self):
             return self.getToken(SMILE_SpecificParser.REFERENCES, 0)
 
-        def identifier(self):
-            return self.getTypedRuleContext(SMILE_SpecificParser.IdentifierContext,0)
+        def qualifiedName(self):
+            return self.getTypedRuleContext(SMILE_SpecificParser.QualifiedNameContext,0)
 
 
         def LPAREN(self):
@@ -3140,7 +3147,7 @@ class SMILE_SpecificParser ( Parser ):
             self.state = 417
             self.match(SMILE_SpecificParser.REFERENCES)
             self.state = 418
-            self.identifier()
+            self.qualifiedName()
             self.state = 419
             self.match(SMILE_SpecificParser.LPAREN)
             self.state = 420
@@ -3393,8 +3400,8 @@ class SMILE_SpecificParser ( Parser ):
         def DELETE_ENTITY(self):
             return self.getToken(SMILE_SpecificParser.DELETE_ENTITY, 0)
 
-        def identifier(self):
-            return self.getTypedRuleContext(SMILE_SpecificParser.IdentifierContext,0)
+        def qualifiedName(self):
+            return self.getTypedRuleContext(SMILE_SpecificParser.QualifiedNameContext,0)
 
 
         def getRuleIndex(self):
@@ -3426,7 +3433,7 @@ class SMILE_SpecificParser ( Parser ):
             self.state = 438
             self.match(SMILE_SpecificParser.DELETE_ENTITY)
             self.state = 439
-            self.identifier()
+            self.qualifiedName()
         except RecognitionException as re:
             localctx.exception = re
             self._errHandler.reportError(self, re)
@@ -3453,8 +3460,8 @@ class SMILE_SpecificParser ( Parser ):
         def FROM(self):
             return self.getToken(SMILE_SpecificParser.FROM, 0)
 
-        def identifier(self):
-            return self.getTypedRuleContext(SMILE_SpecificParser.IdentifierContext,0)
+        def qualifiedName(self):
+            return self.getTypedRuleContext(SMILE_SpecificParser.QualifiedNameContext,0)
 
 
         def getRuleIndex(self):
@@ -3495,7 +3502,7 @@ class SMILE_SpecificParser ( Parser ):
                 self.state = 443
                 self.match(SMILE_SpecificParser.FROM)
                 self.state = 444
-                self.identifier()
+                self.qualifiedName()
 
 
         except RecognitionException as re:
@@ -3524,8 +3531,8 @@ class SMILE_SpecificParser ( Parser ):
         def FROM(self):
             return self.getToken(SMILE_SpecificParser.FROM, 0)
 
-        def identifier(self):
-            return self.getTypedRuleContext(SMILE_SpecificParser.IdentifierContext,0)
+        def qualifiedName(self):
+            return self.getTypedRuleContext(SMILE_SpecificParser.QualifiedNameContext,0)
 
 
         def getRuleIndex(self):
@@ -3566,7 +3573,7 @@ class SMILE_SpecificParser ( Parser ):
                 self.state = 449
                 self.match(SMILE_SpecificParser.FROM)
                 self.state = 450
-                self.identifier()
+                self.qualifiedName()
 
 
         except RecognitionException as re:
@@ -3595,8 +3602,8 @@ class SMILE_SpecificParser ( Parser ):
         def FROM(self):
             return self.getToken(SMILE_SpecificParser.FROM, 0)
 
-        def identifier(self):
-            return self.getTypedRuleContext(SMILE_SpecificParser.IdentifierContext,0)
+        def qualifiedName(self):
+            return self.getTypedRuleContext(SMILE_SpecificParser.QualifiedNameContext,0)
 
 
         def getRuleIndex(self):
@@ -3637,7 +3644,7 @@ class SMILE_SpecificParser ( Parser ):
                 self.state = 455
                 self.match(SMILE_SpecificParser.FROM)
                 self.state = 456
-                self.identifier()
+                self.qualifiedName()
 
 
         except RecognitionException as re:
@@ -3666,8 +3673,8 @@ class SMILE_SpecificParser ( Parser ):
         def FROM(self):
             return self.getToken(SMILE_SpecificParser.FROM, 0)
 
-        def identifier(self):
-            return self.getTypedRuleContext(SMILE_SpecificParser.IdentifierContext,0)
+        def qualifiedName(self):
+            return self.getTypedRuleContext(SMILE_SpecificParser.QualifiedNameContext,0)
 
 
         def getRuleIndex(self):
@@ -3708,7 +3715,7 @@ class SMILE_SpecificParser ( Parser ):
                 self.state = 461
                 self.match(SMILE_SpecificParser.FROM)
                 self.state = 462
-                self.identifier()
+                self.qualifiedName()
 
 
         except RecognitionException as re:
@@ -3730,15 +3737,16 @@ class SMILE_SpecificParser ( Parser ):
         def DELETE_LABEL(self):
             return self.getToken(SMILE_SpecificParser.DELETE_LABEL, 0)
 
-        def identifier(self, i:int=None):
-            if i is None:
-                return self.getTypedRuleContexts(SMILE_SpecificParser.IdentifierContext)
-            else:
-                return self.getTypedRuleContext(SMILE_SpecificParser.IdentifierContext,i)
+        def identifier(self):
+            return self.getTypedRuleContext(SMILE_SpecificParser.IdentifierContext,0)
 
 
         def FROM(self):
             return self.getToken(SMILE_SpecificParser.FROM, 0)
+
+        def qualifiedName(self):
+            return self.getTypedRuleContext(SMILE_SpecificParser.QualifiedNameContext,0)
+
 
         def getRuleIndex(self):
             return SMILE_SpecificParser.RULE_delete_label
@@ -3773,7 +3781,7 @@ class SMILE_SpecificParser ( Parser ):
             self.state = 467
             self.match(SMILE_SpecificParser.FROM)
             self.state = 468
-            self.identifier()
+            self.qualifiedName()
         except RecognitionException as re:
             localctx.exception = re
             self._errHandler.reportError(self, re)
@@ -3805,6 +3813,10 @@ class SMILE_SpecificParser ( Parser ):
 
         def IN(self):
             return self.getToken(SMILE_SpecificParser.IN, 0)
+
+        def qualifiedName(self):
+            return self.getTypedRuleContext(SMILE_SpecificParser.QualifiedNameContext,0)
+
 
         def getRuleIndex(self):
             return SMILE_SpecificParser.RULE_rename_property
@@ -3848,7 +3860,7 @@ class SMILE_SpecificParser ( Parser ):
                 self.state = 474
                 self.match(SMILE_SpecificParser.IN)
                 self.state = 475
-                self.identifier()
+                self.qualifiedName()
 
 
         except RecognitionException as re:
@@ -3870,11 +3882,11 @@ class SMILE_SpecificParser ( Parser ):
         def RENAME_ENTITY(self):
             return self.getToken(SMILE_SpecificParser.RENAME_ENTITY, 0)
 
-        def identifier(self, i:int=None):
+        def qualifiedName(self, i:int=None):
             if i is None:
-                return self.getTypedRuleContexts(SMILE_SpecificParser.IdentifierContext)
+                return self.getTypedRuleContexts(SMILE_SpecificParser.QualifiedNameContext)
             else:
-                return self.getTypedRuleContext(SMILE_SpecificParser.IdentifierContext,i)
+                return self.getTypedRuleContext(SMILE_SpecificParser.QualifiedNameContext,i)
 
 
         def TO(self):
@@ -3909,11 +3921,11 @@ class SMILE_SpecificParser ( Parser ):
             self.state = 478
             self.match(SMILE_SpecificParser.RENAME_ENTITY)
             self.state = 479
-            self.identifier()
+            self.qualifiedName()
             self.state = 480
             self.match(SMILE_SpecificParser.TO)
             self.state = 481
-            self.identifier()
+            self.qualifiedName()
         except RecognitionException as re:
             localctx.exception = re
             self._errHandler.reportError(self, re)
@@ -3986,11 +3998,8 @@ class SMILE_SpecificParser ( Parser ):
         def UNFLATTEN(self):
             return self.getToken(SMILE_SpecificParser.UNFLATTEN, 0)
 
-        def identifier(self, i:int=None):
-            if i is None:
-                return self.getTypedRuleContexts(SMILE_SpecificParser.IdentifierContext)
-            else:
-                return self.getTypedRuleContext(SMILE_SpecificParser.IdentifierContext,i)
+        def qualifiedName(self):
+            return self.getTypedRuleContext(SMILE_SpecificParser.QualifiedNameContext,0)
 
 
         def COLON(self):
@@ -4002,6 +4011,10 @@ class SMILE_SpecificParser ( Parser ):
 
         def AS(self):
             return self.getToken(SMILE_SpecificParser.AS, 0)
+
+        def identifier(self):
+            return self.getTypedRuleContext(SMILE_SpecificParser.IdentifierContext,0)
+
 
         def getRuleIndex(self):
             return SMILE_SpecificParser.RULE_unflatten
@@ -4032,7 +4045,7 @@ class SMILE_SpecificParser ( Parser ):
             self.state = 486
             self.match(SMILE_SpecificParser.UNFLATTEN)
             self.state = 487
-            self.identifier()
+            self.qualifiedName()
             self.state = 488
             self.match(SMILE_SpecificParser.COLON)
             self.state = 489
@@ -4588,8 +4601,11 @@ class SMILE_SpecificParser ( Parser ):
         def NEST(self):
             return self.getToken(SMILE_SpecificParser.NEST, 0)
 
-        def identifier(self):
-            return self.getTypedRuleContext(SMILE_SpecificParser.IdentifierContext,0)
+        def qualifiedName(self, i:int=None):
+            if i is None:
+                return self.getTypedRuleContexts(SMILE_SpecificParser.QualifiedNameContext)
+            else:
+                return self.getTypedRuleContext(SMILE_SpecificParser.QualifiedNameContext,i)
 
 
         def COLON(self):
@@ -4601,10 +4617,6 @@ class SMILE_SpecificParser ( Parser ):
 
         def IN(self):
             return self.getToken(SMILE_SpecificParser.IN, 0)
-
-        def qualifiedName(self):
-            return self.getTypedRuleContext(SMILE_SpecificParser.QualifiedNameContext,0)
-
 
         def WHERE(self):
             return self.getToken(SMILE_SpecificParser.WHERE, 0)
@@ -4642,7 +4654,7 @@ class SMILE_SpecificParser ( Parser ):
             self.state = 540
             self.match(SMILE_SpecificParser.NEST)
             self.state = 541
-            self.identifier()
+            self.qualifiedName()
             self.state = 542
             self.match(SMILE_SpecificParser.COLON)
             self.state = 543
@@ -4674,15 +4686,19 @@ class SMILE_SpecificParser ( Parser ):
         def COPY_PROPERTY(self):
             return self.getToken(SMILE_SpecificParser.COPY_PROPERTY, 0)
 
-        def identifier(self, i:int=None):
-            if i is None:
-                return self.getTypedRuleContexts(SMILE_SpecificParser.IdentifierContext)
-            else:
-                return self.getTypedRuleContext(SMILE_SpecificParser.IdentifierContext,i)
+        def identifier(self):
+            return self.getTypedRuleContext(SMILE_SpecificParser.IdentifierContext,0)
 
 
         def FROM(self):
             return self.getToken(SMILE_SpecificParser.FROM, 0)
+
+        def qualifiedName(self, i:int=None):
+            if i is None:
+                return self.getTypedRuleContexts(SMILE_SpecificParser.QualifiedNameContext)
+            else:
+                return self.getTypedRuleContext(SMILE_SpecificParser.QualifiedNameContext,i)
+
 
         def TO(self):
             return self.getToken(SMILE_SpecificParser.TO, 0)
@@ -4720,11 +4736,11 @@ class SMILE_SpecificParser ( Parser ):
             self.state = 551
             self.match(SMILE_SpecificParser.FROM)
             self.state = 552
-            self.identifier()
+            self.qualifiedName()
             self.state = 553
             self.match(SMILE_SpecificParser.TO)
             self.state = 554
-            self.identifier()
+            self.qualifiedName()
         except RecognitionException as re:
             localctx.exception = re
             self._errHandler.reportError(self, re)
@@ -4744,15 +4760,19 @@ class SMILE_SpecificParser ( Parser ):
         def COPY_ENTITY(self):
             return self.getToken(SMILE_SpecificParser.COPY_ENTITY, 0)
 
-        def identifier(self, i:int=None):
+        def qualifiedName(self, i:int=None):
             if i is None:
-                return self.getTypedRuleContexts(SMILE_SpecificParser.IdentifierContext)
+                return self.getTypedRuleContexts(SMILE_SpecificParser.QualifiedNameContext)
             else:
-                return self.getTypedRuleContext(SMILE_SpecificParser.IdentifierContext,i)
+                return self.getTypedRuleContext(SMILE_SpecificParser.QualifiedNameContext,i)
 
 
         def AS(self):
             return self.getToken(SMILE_SpecificParser.AS, 0)
+
+        def identifier(self):
+            return self.getTypedRuleContext(SMILE_SpecificParser.IdentifierContext,0)
+
 
         def FROM(self):
             return self.getToken(SMILE_SpecificParser.FROM, 0)
@@ -4790,7 +4810,7 @@ class SMILE_SpecificParser ( Parser ):
             self.state = 556
             self.match(SMILE_SpecificParser.COPY_ENTITY)
             self.state = 557
-            self.identifier()
+            self.qualifiedName()
             self.state = 558
             self.match(SMILE_SpecificParser.AS)
             self.state = 559
@@ -4802,11 +4822,11 @@ class SMILE_SpecificParser ( Parser ):
                 self.state = 560
                 self.match(SMILE_SpecificParser.FROM)
                 self.state = 561
-                self.identifier()
+                self.qualifiedName()
                 self.state = 562
                 self.match(SMILE_SpecificParser.TO)
                 self.state = 563
-                self.identifier()
+                self.qualifiedName()
 
 
         except RecognitionException as re:
@@ -4828,15 +4848,19 @@ class SMILE_SpecificParser ( Parser ):
         def MOVE_PROPERTY(self):
             return self.getToken(SMILE_SpecificParser.MOVE_PROPERTY, 0)
 
-        def identifier(self, i:int=None):
-            if i is None:
-                return self.getTypedRuleContexts(SMILE_SpecificParser.IdentifierContext)
-            else:
-                return self.getTypedRuleContext(SMILE_SpecificParser.IdentifierContext,i)
+        def identifier(self):
+            return self.getTypedRuleContext(SMILE_SpecificParser.IdentifierContext,0)
 
 
         def FROM(self):
             return self.getToken(SMILE_SpecificParser.FROM, 0)
+
+        def qualifiedName(self, i:int=None):
+            if i is None:
+                return self.getTypedRuleContexts(SMILE_SpecificParser.QualifiedNameContext)
+            else:
+                return self.getTypedRuleContext(SMILE_SpecificParser.QualifiedNameContext,i)
+
 
         def TO(self):
             return self.getToken(SMILE_SpecificParser.TO, 0)
@@ -4874,11 +4898,11 @@ class SMILE_SpecificParser ( Parser ):
             self.state = 569
             self.match(SMILE_SpecificParser.FROM)
             self.state = 570
-            self.identifier()
+            self.qualifiedName()
             self.state = 571
             self.match(SMILE_SpecificParser.TO)
             self.state = 572
-            self.identifier()
+            self.qualifiedName()
         except RecognitionException as re:
             localctx.exception = re
             self._errHandler.reportError(self, re)
@@ -4898,11 +4922,11 @@ class SMILE_SpecificParser ( Parser ):
         def MERGE(self):
             return self.getToken(SMILE_SpecificParser.MERGE, 0)
 
-        def identifier(self, i:int=None):
+        def qualifiedName(self, i:int=None):
             if i is None:
-                return self.getTypedRuleContexts(SMILE_SpecificParser.IdentifierContext)
+                return self.getTypedRuleContexts(SMILE_SpecificParser.QualifiedNameContext)
             else:
-                return self.getTypedRuleContext(SMILE_SpecificParser.IdentifierContext,i)
+                return self.getTypedRuleContext(SMILE_SpecificParser.QualifiedNameContext,i)
 
 
         def COMMA(self):
@@ -4910,6 +4934,13 @@ class SMILE_SpecificParser ( Parser ):
 
         def INTO(self):
             return self.getToken(SMILE_SpecificParser.INTO, 0)
+
+        def identifier(self, i:int=None):
+            if i is None:
+                return self.getTypedRuleContexts(SMILE_SpecificParser.IdentifierContext)
+            else:
+                return self.getTypedRuleContext(SMILE_SpecificParser.IdentifierContext,i)
+
 
         def AS(self):
             return self.getToken(SMILE_SpecificParser.AS, 0)
@@ -4944,11 +4975,11 @@ class SMILE_SpecificParser ( Parser ):
             self.state = 574
             self.match(SMILE_SpecificParser.MERGE)
             self.state = 575
-            self.identifier()
+            self.qualifiedName()
             self.state = 576
             self.match(SMILE_SpecificParser.COMMA)
             self.state = 577
-            self.identifier()
+            self.qualifiedName()
             self.state = 578
             self.match(SMILE_SpecificParser.INTO)
             self.state = 579
@@ -4982,8 +5013,8 @@ class SMILE_SpecificParser ( Parser ):
         def SPLIT(self):
             return self.getToken(SMILE_SpecificParser.SPLIT, 0)
 
-        def identifier(self):
-            return self.getTypedRuleContext(SMILE_SpecificParser.IdentifierContext,0)
+        def qualifiedName(self):
+            return self.getTypedRuleContext(SMILE_SpecificParser.QualifiedNameContext,0)
 
 
         def INTO(self):
@@ -5032,7 +5063,7 @@ class SMILE_SpecificParser ( Parser ):
             self.state = 584
             self.match(SMILE_SpecificParser.SPLIT)
             self.state = 585
-            self.identifier()
+            self.qualifiedName()
             self.state = 586
             self.match(SMILE_SpecificParser.INTO)
             self.state = 587
@@ -5257,8 +5288,8 @@ class SMILE_SpecificParser ( Parser ):
         def CAST_ENTITY(self):
             return self.getToken(SMILE_SpecificParser.CAST_ENTITY, 0)
 
-        def identifier(self):
-            return self.getTypedRuleContext(SMILE_SpecificParser.IdentifierContext,0)
+        def qualifiedName(self):
+            return self.getTypedRuleContext(SMILE_SpecificParser.QualifiedNameContext,0)
 
 
         def TO(self):
@@ -5297,7 +5328,7 @@ class SMILE_SpecificParser ( Parser ):
             self.state = 608
             self.match(SMILE_SpecificParser.CAST_ENTITY)
             self.state = 609
-            self.identifier()
+            self.qualifiedName()
             self.state = 610
             self.match(SMILE_SpecificParser.TO)
             self.state = 611
@@ -5385,8 +5416,8 @@ class SMILE_SpecificParser ( Parser ):
         def TRANSFORM(self):
             return self.getToken(SMILE_SpecificParser.TRANSFORM, 0)
 
-        def identifier(self):
-            return self.getTypedRuleContext(SMILE_SpecificParser.IdentifierContext,0)
+        def qualifiedName(self):
+            return self.getTypedRuleContext(SMILE_SpecificParser.QualifiedNameContext,0)
 
 
         def INTO(self):
@@ -5425,7 +5456,7 @@ class SMILE_SpecificParser ( Parser ):
             self.state = 618
             self.match(SMILE_SpecificParser.TRANSFORM)
             self.state = 619
-            self.identifier()
+            self.qualifiedName()
             self.state = 620
             self.match(SMILE_SpecificParser.INTO)
             self.state = 621
@@ -5466,11 +5497,11 @@ class SMILE_SpecificParser ( Parser ):
             return self.getToken(SMILE_SpecificParser.RELATIONSHIP, 0)
         def FROM(self):
             return self.getToken(SMILE_SpecificParser.FROM, 0)
-        def identifier(self, i:int=None):
+        def qualifiedName(self, i:int=None):
             if i is None:
-                return self.getTypedRuleContexts(SMILE_SpecificParser.IdentifierContext)
+                return self.getTypedRuleContexts(SMILE_SpecificParser.QualifiedNameContext)
             else:
-                return self.getTypedRuleContext(SMILE_SpecificParser.IdentifierContext,i)
+                return self.getTypedRuleContext(SMILE_SpecificParser.QualifiedNameContext,i)
 
         def TO(self):
             return self.getToken(SMILE_SpecificParser.TO, 0)
@@ -5539,11 +5570,11 @@ class SMILE_SpecificParser ( Parser ):
                 self.state = 624
                 self.match(SMILE_SpecificParser.FROM)
                 self.state = 625
-                self.identifier()
+                self.qualifiedName()
                 self.state = 626
                 self.match(SMILE_SpecificParser.TO)
                 self.state = 627
-                self.identifier()
+                self.qualifiedName()
                 self.state = 631
                 self._errHandler.sync(self)
                 _la = self._input.LA(1)

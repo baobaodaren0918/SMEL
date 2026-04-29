@@ -228,7 +228,7 @@ class BaseSMILEListener:
             if hasattr(clause, 'referencesClause') and clause.referencesClause():
                 ref = clause.referencesClause()
                 result['references'] = {
-                    'table': ref.identifier().getText(),
+                    'table': ref.qualifiedName().getText(),
                     'columns': [id.getText() for id in ref.identifierList().identifier()]
                 }
             elif hasattr(clause, 'withColumnsClause') and clause.withColumnsClause():
@@ -324,12 +324,11 @@ class SMILESpecificListener(SMILE_SpecificListener, BaseSMILEListener):
 
     def enterUnflatten(self, ctx):
         # UNFLATTEN - Combine flat fields into nested object (reverse of FLATTEN)
-        # Example: UNFLATTEN customers:first_name, last_name AS name
-        #   Before: customers { first_name, last_name, age }
-        #   After:  customers { name: { first_name, last_name }, age }
-        entity = ctx.identifier(0).getText()  # customers
-        fields = [id.getText() for id in ctx.identifierList().identifier()]  # [first_name, last_name]
-        nested_name = ctx.identifier(1).getText()  # name
+        # New: source accepts qualifiedName so embedded entities (e.g. orders.customer)
+        # can be addressed by full path, not just by leaf name.
+        entity = ctx.qualifiedName().getText()                                   # customers OR orders.customer
+        fields = [id.getText() for id in ctx.identifierList().identifier()]      # [first_name, last_name]
+        nested_name = ctx.identifier().getText()                                 # name (the AS identifier)
         self.operations.append(Operation(OpType.UNFLATTEN, UnflattenParams(
             entity=entity,
             fields=fields,
@@ -364,11 +363,11 @@ class SMILESpecificListener(SMILE_SpecificListener, BaseSMILEListener):
         ), original_keyword="WIND"))
 
     def enterNest(self, ctx):
-        # Syntax: NEST identifier COLON unnestFieldList IN qualifiedName WHERE condition
-        # Example: NEST address:street,city IN customers.address WHERE address.customer_id = customers.customer_id
-        # Example: NEST address:street,city IN customers.address WHERE address.customer_id = customers.customer_id AND address.dept_id = customers.dept_id
-        source_entity = ctx.identifier().getText()  # address
-        target_location = ctx.qualifiedName().getText()  # customers.address (single qualifiedName in rule)
+        # Syntax: NEST qualifiedName COLON unnestFieldList IN qualifiedName WHERE condition
+        # Source now accepts qualifiedName too — supports nesting an embedded entity
+        # like orders.customer into another container.
+        source_entity = ctx.qualifiedName(0).getText()      # address OR orders.customer
+        target_location = ctx.qualifiedName(1).getText()    # customers.address
 
         # Parse WHERE condition(s): supports single or AND-chained conditions
         join_conditions = self._parse_condition_pairs(ctx.condition())
@@ -435,9 +434,10 @@ class SMILESpecificListener(SMILE_SpecificListener, BaseSMILEListener):
 
     # ADD operations - each has its own method
     def enterAdd_property(self, ctx):
+        # Rule: ADD_PROPERTY identifier (TO qualifiedName)? propertyClause*
         self.operations.append(Operation(OpType.ADD_PROPERTY, AddPropertyParams(
-            name=ctx.identifier(0).getText(),
-            entity=ctx.identifier(1).getText() if len(ctx.identifier()) > 1 else None,
+            name=ctx.identifier().getText(),
+            entity=ctx.qualifiedName().getText() if ctx.qualifiedName() else None,
             clauses=self._parse_property_clauses(ctx.propertyClause()),
         )))
 
@@ -461,73 +461,80 @@ class SMILESpecificListener(SMILE_SpecificListener, BaseSMILEListener):
     def _extract_fk_source(self, ctx):
         """Pull (entity_name, [column, ...]) out of an ADD_FOREIGN_KEY ctx.
 
-        ``keyColumns`` admits two shapes — a dotted qualifiedName (single
-        column with implicit entity) or a parenthesised identifierList plus
-        an explicit ``TO entity`` clause (composite). The trailing ``TO``
-        identifier exists in the ctx only in the composite case.
+        Grammar: ``ADD_FOREIGN_KEY keyColumns (TO qualifiedName)? REFERENCES
+        qualifiedName LPAREN identifierList RPAREN constraintClause*;``
+
+        ``keyColumns`` admits two shapes — a dotted qualifiedName inside it
+        (single column with implicit entity) or a parenthesised identifierList
+        plus an explicit ``TO`` clause (composite). The TO and REFERENCES
+        targets both became top-level qualifiedName children, so
+        ``ctx.qualifiedName()`` at this level returns either ``[REFERENCES]``
+        (no TO) or ``[TO, REFERENCES]`` (TO present).
         """
         kc = ctx.keyColumns()
         if kc.qualifiedName():
+            # Single-column form: keyColumns is a dotted qualifiedName (entity.field).
             qualified_name = kc.qualifiedName().getText()
             parts = qualified_name.split(".")
             if len(parts) == 2:
                 return parts[0], [parts[1]]
             return None, [qualified_name]
-        # Composite: (col1, col2, ...) plus a TO identifier for the source entity.
-        # The first identifier child of ctx (outside keyColumns / identifierList)
-        # is the TO target. Resolve it positionally.
+        # Composite form: (col1, col2, ...) plus an explicit TO entity.
         cols = [i.getText() for i in kc.identifierList().identifier()]
-        # The grammar ``add_foreign_key: ADD_FOREIGN_KEY keyColumns (TO identifier)?
-        # REFERENCES identifier LPAREN identifierList RPAREN constraintClause*;``
-        # places the (optional) TO identifier as the FIRST top-level identifier
-        # before REFERENCES. ctx.identifier() returns all top-level identifiers
-        # in order; the REFERENCES target is always present, so the entity name
-        # is at index 0 only when len > 1.
-        top_ids = ctx.identifier()
-        if len(top_ids) >= 2:
-            return top_ids[0].getText(), cols
+        top_qns = ctx.qualifiedName()
+        if len(top_qns) >= 2:
+            # [TO, REFERENCES] — first qualifiedName is the source entity (path-capable).
+            return top_qns[0].getText(), cols
         # No TO clause but composite source — fall back to None and let the
         # handler skip with a clear reason.
         return None, cols
 
     def _extract_fk_target(self, ctx):
-        """Return (target_table, [target_column, ...]) from the REFERENCES side."""
-        top_ids = ctx.identifier()
-        # Last top-level identifier is the REFERENCES target table; all the
-        # entries inside the trailing parenthesised identifierList are the
-        # referenced columns.
-        target_table = top_ids[-1].getText()
+        """Return (target_table, [target_column, ...]) from the REFERENCES side.
+
+        REFERENCES qualifiedName is always the LAST top-level qualifiedName in
+        the rule; the columns come from the trailing parenthesised identifierList.
+        """
+        top_qns = ctx.qualifiedName()
+        target_table = top_qns[-1].getText()
         target_columns = [i.getText() for i in ctx.identifierList().identifier()]
         return target_table, target_columns
 
     def enterAdd_embedded(self, ctx):
+        # Rule: ADD_EMBEDDED identifier TO qualifiedName embeddedClause*
         self.operations.append(Operation(OpType.ADD_EMBEDDED, AddEmbeddedParams(
-            name=ctx.identifier(0).getText(),
-            entity=ctx.identifier(1).getText(),
+            name=ctx.identifier().getText(),
+            entity=ctx.qualifiedName().getText(),
             clauses=self._parse_embedded_clauses(ctx.embeddedClause()),
         )))
 
     def enterAdd_entity(self, ctx):
-        identifiers = ctx.identifier()
+        # Rule: ADD_ENTITY identifier (FROM qualifiedName TO qualifiedName)? ...
+        # Edge endpoints are now qualifiedName so they can target nested entities.
         params = AddEntityParams(
-            name=identifiers[0].getText(),
+            name=ctx.identifier().getText(),
             clauses=self._parse_entity_clauses(ctx.entityClause()),
         )
-        # FROM source TO target (EDGE entity / relationship type)
-        if len(identifiers) >= 3:
-            params.source_entity = identifiers[1].getText()
-            params.target_entity = identifiers[2].getText()
-        # WITH CARDINALITY
+        edge_qns = ctx.qualifiedName()
+        if len(edge_qns) >= 2:
+            params.source_entity = edge_qns[0].getText()
+            params.target_entity = edge_qns[1].getText()
         if ctx.cardinalityType():
             params.cardinality = ctx.cardinalityType().getText()
         self.operations.append(Operation(OpType.ADD_ENTITY, params))
 
+    def _resolve_add_key_entity(self, ctx, entity_from_path):
+        """TO qualifiedName at top level, falling back to the entity inferred
+        from a dotted keyColumns. Shared by all four add_*_key handlers."""
+        if ctx.qualifiedName():
+            return ctx.qualifiedName().getText()
+        return entity_from_path
+
     def enterAdd_primary_key(self, ctx):
-        # New syntax supports: ADD_PRIMARY_KEY address.address_id AS String
+        # Rule: ADD_PRIMARY_KEY keyColumns (AS dataType)? (TO qualifiedName)? keyClause*
         data_type = ctx.dataType().getText() if ctx.dataType() else None
         key_columns, entity_from_path = self._parse_key_columns(ctx.keyColumns())
-        # Entity priority: explicit TO clause > entity from qualifiedName path
-        entity_name = ctx.identifier().getText() if ctx.identifier() else entity_from_path
+        entity_name = self._resolve_add_key_entity(ctx, entity_from_path)
         self.operations.append(Operation(OpType.ADD_KEY, AddKeyParams(
             key_type=KeyType.PRIMARY,
             key_columns=key_columns,
@@ -538,7 +545,7 @@ class SMILESpecificListener(SMILE_SpecificListener, BaseSMILEListener):
 
     def enterAdd_unique_key(self, ctx):
         key_columns, entity_from_path = self._parse_key_columns(ctx.keyColumns())
-        entity_name = ctx.identifier().getText() if ctx.identifier() else entity_from_path
+        entity_name = self._resolve_add_key_entity(ctx, entity_from_path)
         self.operations.append(Operation(OpType.ADD_KEY, AddKeyParams(
             key_type=KeyType.UNIQUE,
             key_columns=key_columns,
@@ -548,7 +555,7 @@ class SMILESpecificListener(SMILE_SpecificListener, BaseSMILEListener):
 
     def enterAdd_partition_key(self, ctx):
         key_columns, entity_from_path = self._parse_key_columns(ctx.keyColumns())
-        entity_name = ctx.identifier().getText() if ctx.identifier() else entity_from_path
+        entity_name = self._resolve_add_key_entity(ctx, entity_from_path)
         self.operations.append(Operation(OpType.ADD_KEY, AddKeyParams(
             key_type=KeyType.PARTITION,
             key_columns=key_columns,
@@ -558,7 +565,7 @@ class SMILESpecificListener(SMILE_SpecificListener, BaseSMILEListener):
 
     def enterAdd_clustering_key(self, ctx):
         key_columns, entity_from_path = self._parse_key_columns(ctx.keyColumns())
-        entity_name = ctx.identifier().getText() if ctx.identifier() else entity_from_path
+        entity_name = self._resolve_add_key_entity(ctx, entity_from_path)
         self.operations.append(Operation(OpType.ADD_KEY, AddKeyParams(
             key_type=KeyType.CLUSTERING,
             key_columns=key_columns,
@@ -567,10 +574,10 @@ class SMILESpecificListener(SMILE_SpecificListener, BaseSMILEListener):
         )))
 
     def enterAdd_label(self, ctx):
-        identifiers = ctx.identifier() if isinstance(ctx.identifier(), list) else [ctx.identifier()]
+        # Rule: ADD_LABEL identifier TO qualifiedName
         self.operations.append(Operation(OpType.ADD_LABEL, AddLabelParams(
-            label=identifiers[0].getText(),
-            entity=identifiers[1].getText() if len(identifiers) > 1 else None,
+            label=ctx.identifier().getText(),
+            entity=ctx.qualifiedName().getText(),
         )))
 
     # DELETE operations
@@ -590,13 +597,22 @@ class SMILESpecificListener(SMILE_SpecificListener, BaseSMILEListener):
         )))
 
     def enterDelete_entity(self, ctx):
+        # Rule: DELETE_ENTITY qualifiedName
         self.operations.append(Operation(OpType.DELETE_ENTITY, DeleteEntityParams(
-            name=ctx.identifier().getText(),
+            name=ctx.qualifiedName().getText(),
         )))
 
+    def _resolve_delete_key_entity(self, ctx, entity_from_path):
+        """FROM qualifiedName at top level, falling back to entity from
+        dotted keyColumns. Shared by all four delete_*_key handlers."""
+        if ctx.qualifiedName():
+            return ctx.qualifiedName().getText()
+        return entity_from_path
+
     def enterDelete_primary_key(self, ctx):
+        # Rule: DELETE_PRIMARY_KEY keyColumns (FROM qualifiedName)?
         key_columns, entity_from_path = self._parse_key_columns(ctx.keyColumns())
-        entity_name = ctx.identifier().getText() if ctx.identifier() else entity_from_path
+        entity_name = self._resolve_delete_key_entity(ctx, entity_from_path)
         self.operations.append(Operation(OpType.DELETE_KEY, DeleteKeyParams(
             key_type=KeyType.PRIMARY,
             key_columns=key_columns,
@@ -605,7 +621,7 @@ class SMILESpecificListener(SMILE_SpecificListener, BaseSMILEListener):
 
     def enterDelete_unique_key(self, ctx):
         key_columns, entity_from_path = self._parse_key_columns(ctx.keyColumns())
-        entity_name = ctx.identifier().getText() if ctx.identifier() else entity_from_path
+        entity_name = self._resolve_delete_key_entity(ctx, entity_from_path)
         self.operations.append(Operation(OpType.DELETE_KEY, DeleteKeyParams(
             key_type=KeyType.UNIQUE,
             key_columns=key_columns,
@@ -614,7 +630,7 @@ class SMILESpecificListener(SMILE_SpecificListener, BaseSMILEListener):
 
     def enterDelete_partition_key(self, ctx):
         key_columns, entity_from_path = self._parse_key_columns(ctx.keyColumns())
-        entity_name = ctx.identifier().getText() if ctx.identifier() else entity_from_path
+        entity_name = self._resolve_delete_key_entity(ctx, entity_from_path)
         self.operations.append(Operation(OpType.DELETE_KEY, DeleteKeyParams(
             key_type=KeyType.PARTITION,
             key_columns=key_columns,
@@ -623,7 +639,7 @@ class SMILESpecificListener(SMILE_SpecificListener, BaseSMILEListener):
 
     def enterDelete_clustering_key(self, ctx):
         key_columns, entity_from_path = self._parse_key_columns(ctx.keyColumns())
-        entity_name = ctx.identifier().getText() if ctx.identifier() else entity_from_path
+        entity_name = self._resolve_delete_key_entity(ctx, entity_from_path)
         self.operations.append(Operation(OpType.DELETE_KEY, DeleteKeyParams(
             key_type=KeyType.CLUSTERING,
             key_columns=key_columns,
@@ -631,76 +647,80 @@ class SMILESpecificListener(SMILE_SpecificListener, BaseSMILEListener):
         )))
 
     def enterDelete_label(self, ctx):
-        identifiers = ctx.identifier() if isinstance(ctx.identifier(), list) else [ctx.identifier()]
+        # Rule: DELETE_LABEL identifier FROM qualifiedName
         self.operations.append(Operation(OpType.DELETE_LABEL, DeleteLabelParams(
-            label=identifiers[0].getText(),
-            entity=identifiers[1].getText() if len(identifiers) > 1 else None,
+            label=ctx.identifier().getText(),
+            entity=ctx.qualifiedName().getText(),
         )))
 
     # RENAME operations
     def enterRename_property(self, ctx):
-        identifiers = ctx.identifier() if isinstance(ctx.identifier(), list) else [ctx.identifier()]
+        # Rule: RENAME_PROPERTY identifier TO identifier (IN qualifiedName)?
+        identifiers = ctx.identifier()
         self.operations.append(Operation(OpType.RENAME_PROPERTY, RenamePropertyParams(
             old_name=identifiers[0].getText(),
             new_name=identifiers[1].getText() if len(identifiers) > 1 else None,
-            entity=identifiers[2].getText() if len(identifiers) > 2 else None,
+            entity=ctx.qualifiedName().getText() if ctx.qualifiedName() else None,
         ), original_keyword="RENAME_PROPERTY"))
 
     def enterRename_entity(self, ctx):
-        identifiers = ctx.identifier() if isinstance(ctx.identifier(), list) else [ctx.identifier()]
+        # Rule: RENAME_ENTITY qualifiedName TO qualifiedName
+        qns = ctx.qualifiedName()
         self.operations.append(Operation(OpType.RENAME_ENTITY, RenameEntityParams(
-            old_name=identifiers[0].getText(),
-            new_name=identifiers[1].getText() if len(identifiers) > 1 else None,
+            old_name=qns[0].getText(),
+            new_name=qns[1].getText() if len(qns) > 1 else None,
         )))
 
     # Simple operations
     def enterCopy_property(self, ctx):
-        identifiers = ctx.identifier()
-        property_name = identifiers[0].getText()
-        source_entity = identifiers[1].getText()
-        target_entity = identifiers[2].getText()
+        # Rule: COPY_PROPERTY identifier FROM qualifiedName TO qualifiedName
+        property_name = ctx.identifier().getText()
+        qns = ctx.qualifiedName()
+        source_entity = qns[0].getText()
+        target_entity = qns[1].getText()
         self.operations.append(Operation(OpType.COPY_PROPERTY, CopyPropertyParams(
             source=f"{source_entity}.{property_name}",
             target=f"{target_entity}.{property_name}",
         ), original_keyword="COPY_PROPERTY"))
 
     def enterCopy_entity(self, ctx):
-        identifiers = ctx.identifier()
+        # Rule: COPY_ENTITY qualifiedName AS identifier (FROM qualifiedName TO qualifiedName)?
+        qns = ctx.qualifiedName()
         params = CopyEntityParams(
-            source=identifiers[0].getText(),
-            target=identifiers[1].getText(),
+            source=qns[0].getText(),
+            target=ctx.identifier().getText(),
         )
-        if len(identifiers) >= 4:
-            params.source_entity = identifiers[2].getText()
-            params.target_entity = identifiers[3].getText()
+        if len(qns) >= 3:
+            params.source_entity = qns[1].getText()
+            params.target_entity = qns[2].getText()
         self.operations.append(Operation(OpType.COPY_ENTITY, params, original_keyword="COPY_ENTITY"))
 
     def enterMove_property(self, ctx):
-        identifiers = ctx.identifier()
-        property_name = identifiers[0].getText()
-        source_entity = identifiers[1].getText()
-        target_entity = identifiers[2].getText()
+        # Rule: MOVE_PROPERTY identifier FROM qualifiedName TO qualifiedName
+        property_name = ctx.identifier().getText()
+        qns = ctx.qualifiedName()
+        source_entity = qns[0].getText()
+        target_entity = qns[1].getText()
         self.operations.append(Operation(OpType.MOVE_PROPERTY, MovePropertyParams(
             source=f"{source_entity}.{property_name}",
             target=f"{target_entity}.{property_name}",
         ), original_keyword="MOVE_PROPERTY"))
 
     def enterMerge(self, ctx):
+        # Rule: MERGE qualifiedName COMMA qualifiedName INTO identifier (AS identifier)?
+        qns = ctx.qualifiedName()
+        ids = ctx.identifier()
         self.operations.append(Operation(OpType.MERGE, MergeParams(
-            source1=ctx.identifier(0).getText(),
-            source2=ctx.identifier(1).getText(),
-            target=ctx.identifier(2).getText(),
-            alias=ctx.identifier(3).getText() if len(ctx.identifier()) > 3 else None,
+            source1=qns[0].getText(),
+            source2=qns[1].getText(),
+            target=ids[0].getText(),
+            alias=ids[1].getText() if len(ids) > 1 else None,
         )))
 
     def enterSplit(self, ctx):
-        # New syntax: SPLIT identifier INTO splitPart (SEMICOLON splitPart)+
-        # Vertical partitioning - divides one entity into multiple separate entities
-        # Example: SPLIT customers INTO customers:customer_id, first_name, last_name, age; customer_tag:customer_id, tags
-        #   Before: customers { customer_id, first_name, last_name, age, tags[] }
-        #   After:  customers { customer_id, first_name, last_name, age }
-        #          customer_tag { customer_id, tags[] }
-        source_entity = ctx.identifier().getText()
+        # Rule: SPLIT qualifiedName INTO splitPart (SEMICOLON splitPart)+
+        # source accepts a fully-qualified path so an embedded entity can be split.
+        source_entity = ctx.qualifiedName().getText()
         split_parts = ctx.splitPart() if isinstance(ctx.splitPart(), list) else [ctx.splitPart()]
 
         parts = []
@@ -745,8 +765,9 @@ class SMILESpecificListener(SMILE_SpecificListener, BaseSMILEListener):
         ), original_keyword="CAST_CONSTRAINT"))
 
     def enterCast_entity(self, ctx):
+        # Rule: CAST_ENTITY qualifiedName TO databaseType
         self.operations.append(Operation(OpType.CAST_ENTITY, CastEntityParams(
-            target=ctx.identifier().getText(),
+            target=ctx.qualifiedName().getText(),
             entity_kind=ctx.databaseType().getText().upper(),
         ), original_keyword="CAST_ENTITY"))
 
@@ -757,15 +778,18 @@ class SMILESpecificListener(SMILE_SpecificListener, BaseSMILEListener):
         ), original_keyword="RECARD"))
 
     def enterTransform(self, ctx):
-        name = ctx.identifier().getText()
+        # Rule: TRANSFORM qualifiedName INTO transformTarget
+        # transformTarget RELATIONSHIP variant: FROM qualifiedName TO qualifiedName ...
+        name = ctx.qualifiedName().getText()
         target_ctx = ctx.transformTarget()
 
         if isinstance(target_ctx, SMILE_SpecificParser.TransformToRelationshipContext):
+            qns = target_ctx.qualifiedName()
             params = TransformParams(
                 name=name,
                 target_type="RELATIONSHIP",
-                source_entity=target_ctx.identifier(0).getText(),
-                target_entity=target_ctx.identifier(1).getText(),
+                source_entity=qns[0].getText(),
+                target_entity=qns[1].getText(),
             )
             if target_ctx.cardinalityType():
                 params.cardinality = target_ctx.cardinalityType().getText()
@@ -827,13 +851,10 @@ class SMILEGeneralizedListener(SMILE_GeneralizedListener, BaseSMILEListener):
         ), original_keyword="FLATTEN"))
 
     def enterUnflatten_gen(self, ctx):
-        # UNFLATTEN - Combine flat fields into nested object (reverse of FLATTEN)
-        # Example: UNFLATTEN customers:first_name, last_name AS name
-        #   Before: customers { first_name, last_name, age }
-        #   After:  customers { name: { first_name, last_name }, age }
-        entity = ctx.identifier(0).getText()  # customers
-        fields = [id.getText() for id in ctx.identifierList().identifier()]  # [first_name, last_name]
-        nested_name = ctx.identifier(1).getText()  # name
+        # Rule: UNFLATTEN qualifiedName COLON identifierList AS identifier
+        entity = ctx.qualifiedName().getText()                                   # customers OR orders.customer
+        fields = [id.getText() for id in ctx.identifierList().identifier()]      # [first_name, last_name]
+        nested_name = ctx.identifier().getText()                                 # name (the AS identifier)
         self.operations.append(Operation(OpType.UNFLATTEN, UnflattenParams(
             entity=entity,
             fields=fields,
@@ -868,11 +889,9 @@ class SMILEGeneralizedListener(SMILE_GeneralizedListener, BaseSMILEListener):
         ), original_keyword="WIND"))
 
     def enterNest_gen(self, ctx):
-        # Syntax: NEST identifier COLON unnestFieldList IN qualifiedName WHERE condition
-        # Example: NEST address:street,city IN customers.address WHERE address.customer_id = customers.customer_id
-        # Example: NEST address:street,city IN customers.address WHERE address.customer_id = customers.customer_id AND address.dept_id = customers.dept_id
-        source_entity = ctx.identifier().getText()  # address
-        target_location = ctx.qualifiedName().getText()  # customers.address (single qualifiedName in rule)
+        # Rule: NEST qualifiedName COLON unnestFieldList IN qualifiedName WHERE condition
+        source_entity = ctx.qualifiedName(0).getText()      # address OR orders.customer
+        target_location = ctx.qualifiedName(1).getText()    # customers.address
 
         # Parse WHERE condition(s): supports single or AND-chained conditions
         join_conditions = self._parse_condition_pairs(ctx.condition())
@@ -939,9 +958,10 @@ class SMILEGeneralizedListener(SMILE_GeneralizedListener, BaseSMILEListener):
 
     # ADD operations - same internal structure as original SMILE
     def enterPropertyAdd(self, ctx):
+        # Rule: PROPERTY identifier (TO qualifiedName)? propertyClause*
         self.operations.append(Operation(OpType.ADD_PROPERTY, AddPropertyParams(
-            name=ctx.identifier(0).getText(),
-            entity=ctx.identifier(1).getText() if len(ctx.identifier()) > 1 else None,
+            name=ctx.identifier().getText(),
+            entity=ctx.qualifiedName().getText() if ctx.qualifiedName() else None,
             clauses=self._parse_property_clauses(ctx.propertyClause()),
         )))
 
@@ -961,36 +981,37 @@ class SMILEGeneralizedListener(SMILE_GeneralizedListener, BaseSMILEListener):
         ), original_keyword="ADD FOREIGN KEY"))
 
     def enterEmbeddedAdd(self, ctx):
+        # Rule: EMBEDDED identifier TO qualifiedName embeddedClause*
         self.operations.append(Operation(OpType.ADD_EMBEDDED, AddEmbeddedParams(
-            name=ctx.identifier(0).getText(),
-            entity=ctx.identifier(1).getText(),
+            name=ctx.identifier().getText(),
+            entity=ctx.qualifiedName().getText(),
             clauses=self._parse_embedded_clauses(ctx.embeddedClause()),
         )))
 
     def enterEntityAdd(self, ctx):
-        identifiers = ctx.identifier()
+        # Rule: ENTITY identifier (FROM qualifiedName TO qualifiedName)? ...
         params = AddEntityParams(
-            name=identifiers[0].getText(),
+            name=ctx.identifier().getText(),
             clauses=self._parse_entity_clauses(ctx.entityClause()),
         )
-        # FROM source TO target (EDGE entity / relationship type)
-        if len(identifiers) >= 3:
-            params.source_entity = identifiers[1].getText()
-            params.target_entity = identifiers[2].getText()
-        # WITH CARDINALITY
+        edge_qns = ctx.qualifiedName()
+        if len(edge_qns) >= 2:
+            params.source_entity = edge_qns[0].getText()
+            params.target_entity = edge_qns[1].getText()
         if ctx.cardinalityType():
             params.cardinality = ctx.cardinalityType().getText()
         self.operations.append(Operation(OpType.ADD_ENTITY, params))
 
     def enterKeyAdd(self, ctx):
-        # New syntax: keyType? KEY qualifiedName (AS dataType)? (TO identifier)?
-        # Supports explicit entity.field syntax: ADD KEY address.address_id AS String
-        key_type = ctx.keyType().getText() if ctx.keyType() else "PRIMARY"  # Default to PRIMARY
+        # Rule: keyType? KEY keyColumns (AS dataType)? (TO qualifiedName)? keyClause*
+        key_type = ctx.keyType().getText() if ctx.keyType() else "PRIMARY"
         data_type = ctx.dataType().getText() if ctx.dataType() else None
         key_columns, entity_from_path = self._parse_key_columns(ctx.keyColumns())
-        # Entity priority: explicit TO clause > entity from qualifiedName path
-        entity_name = ctx.identifier().getText() if ctx.identifier() else entity_from_path
-        # Build original keyword: ADD [keyType] KEY
+        # Entity priority: explicit TO qualifiedName > entity from dotted keyColumns
+        if ctx.qualifiedName():
+            entity_name = ctx.qualifiedName().getText()
+        else:
+            entity_name = entity_from_path
         original_kw = "ADD " + (key_type + " " if key_type != "PRIMARY" else "") + "KEY"
         self.operations.append(Operation(OpType.ADD_KEY, AddKeyParams(
             key_type=key_type,
@@ -1001,10 +1022,10 @@ class SMILEGeneralizedListener(SMILE_GeneralizedListener, BaseSMILEListener):
         ), original_keyword=original_kw))
 
     def enterLabelAdd(self, ctx):
-        identifiers = ctx.identifier() if isinstance(ctx.identifier(), list) else [ctx.identifier()]
+        # Rule: LABEL identifier TO qualifiedName
         self.operations.append(Operation(OpType.ADD_LABEL, AddLabelParams(
-            label=identifiers[0].getText(),
-            entity=identifiers[1].getText() if len(identifiers) > 1 else None,
+            label=ctx.identifier().getText(),
+            entity=ctx.qualifiedName().getText(),
         )))
 
     # DELETE operations
@@ -1024,13 +1045,18 @@ class SMILEGeneralizedListener(SMILE_GeneralizedListener, BaseSMILEListener):
         )))
 
     def enterEntityDelete(self, ctx):
+        # Rule: ENTITY qualifiedName
         self.operations.append(Operation(OpType.DELETE_ENTITY, DeleteEntityParams(
-            name=ctx.identifier().getText(),
+            name=ctx.qualifiedName().getText(),
         )))
 
     def enterKeyDelete(self, ctx):
+        # Rule: keyType KEY keyColumns (FROM qualifiedName)?
         key_columns, entity_from_path = self._parse_key_columns(ctx.keyColumns())
-        entity_name = ctx.identifier().getText() if ctx.identifier() else entity_from_path
+        if ctx.qualifiedName():
+            entity_name = ctx.qualifiedName().getText()
+        else:
+            entity_name = entity_from_path
         self.operations.append(Operation(OpType.DELETE_KEY, DeleteKeyParams(
             key_type=ctx.keyType().getText(),
             key_columns=key_columns,
@@ -1038,78 +1064,81 @@ class SMILEGeneralizedListener(SMILE_GeneralizedListener, BaseSMILEListener):
         )))
 
     def enterLabelDelete(self, ctx):
-        identifiers = ctx.identifier() if isinstance(ctx.identifier(), list) else [ctx.identifier()]
+        # Rule: LABEL identifier FROM qualifiedName
         self.operations.append(Operation(OpType.DELETE_LABEL, DeleteLabelParams(
-            label=identifiers[0].getText(),
-            entity=identifiers[1].getText() if len(identifiers) > 1 else None,
+            label=ctx.identifier().getText(),
+            entity=ctx.qualifiedName().getText(),
         )))
 
     # RENAME operations
     def enterPropertyRename(self, ctx):
-        identifiers = ctx.identifier() if isinstance(ctx.identifier(), list) else [ctx.identifier()]
+        # Rule: PROPERTY identifier TO identifier (IN qualifiedName)?
+        identifiers = ctx.identifier()
         self.operations.append(Operation(OpType.RENAME_PROPERTY, RenamePropertyParams(
             old_name=identifiers[0].getText(),
             new_name=identifiers[1].getText() if len(identifiers) > 1 else None,
-            entity=identifiers[2].getText() if len(identifiers) > 2 else None,
+            entity=ctx.qualifiedName().getText() if ctx.qualifiedName() else None,
         ), original_keyword="RENAME PROPERTY"))
 
     def enterEntityRename(self, ctx):
-        identifiers = ctx.identifier() if isinstance(ctx.identifier(), list) else [ctx.identifier()]
+        # Rule: ENTITY qualifiedName TO qualifiedName
+        qns = ctx.qualifiedName()
         self.operations.append(Operation(OpType.RENAME_ENTITY, RenameEntityParams(
-            old_name=identifiers[0].getText(),
-            new_name=identifiers[1].getText() if len(identifiers) > 1 else None,
+            old_name=qns[0].getText(),
+            new_name=qns[1].getText() if len(qns) > 1 else None,
         )))
 
     # Simple operations
     def enterCopy_gen(self, ctx):
         if ctx.entityCopy():
+            # Rule: ENTITY qualifiedName AS identifier (FROM qualifiedName TO qualifiedName)?
             ec = ctx.entityCopy()
-            identifiers = ec.identifier()
+            qns = ec.qualifiedName()
             params = CopyEntityParams(
-                source=identifiers[0].getText(),
-                target=identifiers[1].getText(),
+                source=qns[0].getText(),
+                target=ec.identifier().getText(),
             )
-            if len(identifiers) >= 4:
-                params.source_entity = identifiers[2].getText()
-                params.target_entity = identifiers[3].getText()
+            if len(qns) >= 3:
+                params.source_entity = qns[1].getText()
+                params.target_entity = qns[2].getText()
             self.operations.append(Operation(OpType.COPY_ENTITY, params, original_keyword="COPY ENTITY"))
         else:
+            # Rule: PROPERTY identifier FROM qualifiedName TO qualifiedName
             pc = ctx.propertyCopy()
-            identifiers = pc.identifier()
-            property_name = identifiers[0].getText()
-            source_entity = identifiers[1].getText()
-            target_entity = identifiers[2].getText()
+            property_name = pc.identifier().getText()
+            qns = pc.qualifiedName()
+            source_entity = qns[0].getText()
+            target_entity = qns[1].getText()
             self.operations.append(Operation(OpType.COPY_PROPERTY, CopyPropertyParams(
                 source=f"{source_entity}.{property_name}",
                 target=f"{target_entity}.{property_name}",
             ), original_keyword="COPY PROPERTY"))
 
     def enterMove_gen(self, ctx):
-        identifiers = ctx.identifier()
-        property_name = identifiers[0].getText()
-        source_entity = identifiers[1].getText()
-        target_entity = identifiers[2].getText()
+        # Rule: MOVE PROPERTY identifier FROM qualifiedName TO qualifiedName
+        property_name = ctx.identifier().getText()
+        qns = ctx.qualifiedName()
+        source_entity = qns[0].getText()
+        target_entity = qns[1].getText()
         self.operations.append(Operation(OpType.MOVE_PROPERTY, MovePropertyParams(
             source=f"{source_entity}.{property_name}",
             target=f"{target_entity}.{property_name}",
         ), original_keyword="MOVE PROPERTY"))
 
     def enterMerge_gen(self, ctx):
+        # Rule: MERGE qualifiedName COMMA qualifiedName INTO identifier (AS identifier)?
+        qns = ctx.qualifiedName()
+        ids = ctx.identifier()
         self.operations.append(Operation(OpType.MERGE, MergeParams(
-            source1=ctx.identifier(0).getText(),
-            source2=ctx.identifier(1).getText(),
-            target=ctx.identifier(2).getText(),
-            alias=ctx.identifier(3).getText() if len(ctx.identifier()) > 3 else None,
+            source1=qns[0].getText(),
+            source2=qns[1].getText(),
+            target=ids[0].getText(),
+            alias=ids[1].getText() if len(ids) > 1 else None,
         )))
 
     def enterSplit_gen(self, ctx):
-        # New syntax: SPLIT identifier INTO splitPartGen (SEMICOLON splitPartGen)+
-        # Vertical partitioning - divides one entity into multiple separate entities
-        # Example: SPLIT customers INTO customers:customer_id, first_name, last_name, age; customer_tag:customer_id, tags
-        #   Before: customers { customer_id, first_name, last_name, age, tags[] }
-        #   After:  customers { customer_id, first_name, last_name, age }
-        #          customer_tag { customer_id, tags[] }
-        source_entity = ctx.identifier().getText()
+        # Rule: SPLIT qualifiedName INTO splitPartGen (SEMICOLON splitPartGen)+
+        source_entity = ctx.qualifiedName().getText()
         split_parts = ctx.splitPartGen() if isinstance(ctx.splitPartGen(), list) else [ctx.splitPartGen()]
 
         parts = []
@@ -1150,8 +1179,9 @@ class SMILEGeneralizedListener(SMILE_GeneralizedListener, BaseSMILEListener):
             ), original_keyword="CAST CONSTRAINT"))
         elif ctx.entityCast():
             ec = ctx.entityCast()
+            # Rule: ENTITY qualifiedName TO databaseType
             self.operations.append(Operation(OpType.CAST_ENTITY, CastEntityParams(
-                target=ec.identifier().getText(),
+                target=ec.qualifiedName().getText(),
                 entity_kind=ec.databaseType().getText().upper(),
             ), original_keyword="CAST ENTITY"))
         else:
@@ -1168,15 +1198,17 @@ class SMILEGeneralizedListener(SMILE_GeneralizedListener, BaseSMILEListener):
         ), original_keyword="RECARD"))
 
     def enterTransform_gen(self, ctx):
-        name = ctx.identifier().getText()
+        # Rule: TRANSFORM qualifiedName INTO transformTarget
+        name = ctx.qualifiedName().getText()
         target_ctx = ctx.transformTarget()
 
         if isinstance(target_ctx, SMILE_GeneralizedParser.TransformToRelationshipContext):
+            qns = target_ctx.qualifiedName()
             params = TransformParams(
                 name=name,
                 target_type="RELATIONSHIP",
-                source_entity=target_ctx.identifier(0).getText(),
-                target_entity=target_ctx.identifier(1).getText(),
+                source_entity=qns[0].getText(),
+                target_entity=qns[1].getText(),
             )
             if target_ctx.cardinalityType():
                 params.cardinality = target_ctx.cardinalityType().getText()
