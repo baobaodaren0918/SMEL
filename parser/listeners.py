@@ -439,7 +439,7 @@ class SMILESpecificListener(SMILE_SpecificListener, BaseSMILEListener):
             name=ctx.identifier().getText(),
             entity=ctx.qualifiedName().getText() if ctx.qualifiedName() else None,
             clauses=self._parse_property_clauses(ctx.propertyClause()),
-        )))
+        ), original_keyword="ADD_PROPERTY"))
 
     def enterAdd_foreign_key(self, ctx):
         # Two grammar shapes share this rule:
@@ -506,7 +506,7 @@ class SMILESpecificListener(SMILE_SpecificListener, BaseSMILEListener):
             name=ctx.identifier().getText(),
             entity=ctx.qualifiedName().getText(),
             clauses=self._parse_embedded_clauses(ctx.embeddedClause()),
-        )))
+        ), original_keyword="ADD_EMBEDDED"))
 
     def enterAdd_entity(self, ctx):
         # Rule: ADD_ENTITY identifier (FROM qualifiedName TO qualifiedName)? ...
@@ -521,7 +521,7 @@ class SMILESpecificListener(SMILE_SpecificListener, BaseSMILEListener):
             params.target_entity = edge_qns[1].getText()
         if ctx.cardinalityType():
             params.cardinality = ctx.cardinalityType().getText()
-        self.operations.append(Operation(OpType.ADD_ENTITY, params))
+        self.operations.append(Operation(OpType.ADD_ENTITY, params, original_keyword="ADD_ENTITY"))
 
     def _resolve_add_key_entity(self, ctx, entity_from_path):
         """TO qualifiedName at top level, falling back to the entity inferred
@@ -551,7 +551,7 @@ class SMILESpecificListener(SMILE_SpecificListener, BaseSMILEListener):
             key_columns=key_columns,
             entity=entity_name,
             clauses=self._parse_key_clauses(ctx.keyClause()),
-        )))
+        ), original_keyword="ADD_UNIQUE_KEY"))
 
     def enterAdd_partition_key(self, ctx):
         key_columns, entity_from_path = self._parse_key_columns(ctx.keyColumns())
@@ -561,7 +561,7 @@ class SMILESpecificListener(SMILE_SpecificListener, BaseSMILEListener):
             key_columns=key_columns,
             entity=entity_name,
             clauses=self._parse_key_clauses(ctx.keyClause()),
-        )))
+        ), original_keyword="ADD_PARTITION_KEY"))
 
     def enterAdd_clustering_key(self, ctx):
         key_columns, entity_from_path = self._parse_key_columns(ctx.keyColumns())
@@ -571,20 +571,20 @@ class SMILESpecificListener(SMILE_SpecificListener, BaseSMILEListener):
             key_columns=key_columns,
             entity=entity_name,
             clauses=self._parse_key_clauses(ctx.keyClause()),
-        )))
+        ), original_keyword="ADD_CLUSTERING_KEY"))
 
     def enterAdd_label(self, ctx):
         # Rule: ADD_LABEL identifier TO qualifiedName
         self.operations.append(Operation(OpType.ADD_LABEL, AddLabelParams(
             label=ctx.identifier().getText(),
             entity=ctx.qualifiedName().getText(),
-        )))
+        ), original_keyword="ADD_LABEL"))
 
     # DELETE operations
     def enterDelete_property(self, ctx):
         self.operations.append(Operation(OpType.DELETE_PROPERTY, DeletePropertyParams(
             target=ctx.qualifiedName().getText(),
-        )))
+        ), original_keyword="DELETE_PROPERTY"))
 
     def enterDelete_foreign_key(self, ctx):
         self.operations.append(Operation(OpType.DELETE_FOREIGN_KEY, DeleteForeignKeyParams(
@@ -594,13 +594,13 @@ class SMILESpecificListener(SMILE_SpecificListener, BaseSMILEListener):
     def enterDelete_embedded(self, ctx):
         self.operations.append(Operation(OpType.DELETE_EMBEDDED, DeleteEmbeddedParams(
             embedded=ctx.qualifiedName().getText(),
-        )))
+        ), original_keyword="DELETE_EMBEDDED"))
 
     def enterDelete_entity(self, ctx):
         # Rule: DELETE_ENTITY qualifiedName
         self.operations.append(Operation(OpType.DELETE_ENTITY, DeleteEntityParams(
             name=ctx.qualifiedName().getText(),
-        )))
+        ), original_keyword="DELETE_ENTITY"))
 
     def _resolve_delete_key_entity(self, ctx, entity_from_path):
         """FROM qualifiedName at top level, falling back to entity from
@@ -617,7 +617,7 @@ class SMILESpecificListener(SMILE_SpecificListener, BaseSMILEListener):
             key_type=KeyType.PRIMARY,
             key_columns=key_columns,
             entity=entity_name,
-        )))
+        ), original_keyword="DELETE_PRIMARY_KEY"))
 
     def enterDelete_unique_key(self, ctx):
         key_columns, entity_from_path = self._parse_key_columns(ctx.keyColumns())
@@ -626,7 +626,7 @@ class SMILESpecificListener(SMILE_SpecificListener, BaseSMILEListener):
             key_type=KeyType.UNIQUE,
             key_columns=key_columns,
             entity=entity_name,
-        )))
+        ), original_keyword="DELETE_UNIQUE_KEY"))
 
     def enterDelete_partition_key(self, ctx):
         key_columns, entity_from_path = self._parse_key_columns(ctx.keyColumns())
@@ -635,7 +635,7 @@ class SMILESpecificListener(SMILE_SpecificListener, BaseSMILEListener):
             key_type=KeyType.PARTITION,
             key_columns=key_columns,
             entity=entity_name,
-        )))
+        ), original_keyword="DELETE_PARTITION_KEY"))
 
     def enterDelete_clustering_key(self, ctx):
         key_columns, entity_from_path = self._parse_key_columns(ctx.keyColumns())
@@ -644,14 +644,14 @@ class SMILESpecificListener(SMILE_SpecificListener, BaseSMILEListener):
             key_type=KeyType.CLUSTERING,
             key_columns=key_columns,
             entity=entity_name,
-        )))
+        ), original_keyword="DELETE_CLUSTERING_KEY"))
 
     def enterDelete_label(self, ctx):
         # Rule: DELETE_LABEL identifier FROM qualifiedName
         self.operations.append(Operation(OpType.DELETE_LABEL, DeleteLabelParams(
             label=ctx.identifier().getText(),
             entity=ctx.qualifiedName().getText(),
-        )))
+        ), original_keyword="DELETE_LABEL"))
 
     # RENAME operations
     def enterRename_property(self, ctx):
@@ -669,7 +669,7 @@ class SMILESpecificListener(SMILE_SpecificListener, BaseSMILEListener):
         self.operations.append(Operation(OpType.RENAME_ENTITY, RenameEntityParams(
             old_name=qns[0].getText(),
             new_name=qns[1].getText() if len(qns) > 1 else None,
-        )))
+        ), original_keyword="RENAME_ENTITY"))
 
     # Simple operations
     def enterCopy_property(self, ctx):
@@ -715,7 +715,7 @@ class SMILESpecificListener(SMILE_SpecificListener, BaseSMILEListener):
             source2=qns[1].getText(),
             target=ids[0].getText(),
             alias=ids[1].getText() if len(ids) > 1 else None,
-        )))
+        ), original_keyword="MERGE"))
 
     def enterSplit(self, ctx):
         # Rule: SPLIT qualifiedName INTO splitPart (SEMICOLON splitPart)+
@@ -963,7 +963,7 @@ class SMILEGeneralizedListener(SMILE_GeneralizedListener, BaseSMILEListener):
             name=ctx.identifier().getText(),
             entity=ctx.qualifiedName().getText() if ctx.qualifiedName() else None,
             clauses=self._parse_property_clauses(ctx.propertyClause()),
-        )))
+        ), original_keyword="ADD PROPERTY"))
 
     def enterForeignKeyAdd(self, ctx):
         # Generalized variant of ADD_FOREIGN_KEY — same two grammar shapes
@@ -986,7 +986,7 @@ class SMILEGeneralizedListener(SMILE_GeneralizedListener, BaseSMILEListener):
             name=ctx.identifier().getText(),
             entity=ctx.qualifiedName().getText(),
             clauses=self._parse_embedded_clauses(ctx.embeddedClause()),
-        )))
+        ), original_keyword="ADD EMBEDDED"))
 
     def enterEntityAdd(self, ctx):
         # Rule: ENTITY identifier (FROM qualifiedName TO qualifiedName)? ...
@@ -1000,7 +1000,7 @@ class SMILEGeneralizedListener(SMILE_GeneralizedListener, BaseSMILEListener):
             params.target_entity = edge_qns[1].getText()
         if ctx.cardinalityType():
             params.cardinality = ctx.cardinalityType().getText()
-        self.operations.append(Operation(OpType.ADD_ENTITY, params))
+        self.operations.append(Operation(OpType.ADD_ENTITY, params, original_keyword="ADD ENTITY"))
 
     def enterKeyAdd(self, ctx):
         # Rule: keyType? KEY keyColumns (AS dataType)? (TO qualifiedName)? keyClause*
@@ -1026,13 +1026,13 @@ class SMILEGeneralizedListener(SMILE_GeneralizedListener, BaseSMILEListener):
         self.operations.append(Operation(OpType.ADD_LABEL, AddLabelParams(
             label=ctx.identifier().getText(),
             entity=ctx.qualifiedName().getText(),
-        )))
+        ), original_keyword="ADD LABEL"))
 
     # DELETE operations
     def enterPropertyDelete(self, ctx):
         self.operations.append(Operation(OpType.DELETE_PROPERTY, DeletePropertyParams(
             target=ctx.qualifiedName().getText(),
-        )))
+        ), original_keyword="DELETE PROPERTY"))
 
     def enterForeignKeyDelete(self, ctx):
         self.operations.append(Operation(OpType.DELETE_FOREIGN_KEY, DeleteForeignKeyParams(
@@ -1042,13 +1042,13 @@ class SMILEGeneralizedListener(SMILE_GeneralizedListener, BaseSMILEListener):
     def enterEmbeddedDelete(self, ctx):
         self.operations.append(Operation(OpType.DELETE_EMBEDDED, DeleteEmbeddedParams(
             embedded=ctx.qualifiedName().getText(),
-        )))
+        ), original_keyword="DELETE EMBEDDED"))
 
     def enterEntityDelete(self, ctx):
         # Rule: ENTITY qualifiedName
         self.operations.append(Operation(OpType.DELETE_ENTITY, DeleteEntityParams(
             name=ctx.qualifiedName().getText(),
-        )))
+        ), original_keyword="DELETE ENTITY"))
 
     def enterKeyDelete(self, ctx):
         # Rule: keyType KEY keyColumns (FROM qualifiedName)?
@@ -1057,18 +1057,19 @@ class SMILEGeneralizedListener(SMILE_GeneralizedListener, BaseSMILEListener):
             entity_name = ctx.qualifiedName().getText()
         else:
             entity_name = entity_from_path
+        key_type = ctx.keyType().getText()
         self.operations.append(Operation(OpType.DELETE_KEY, DeleteKeyParams(
-            key_type=ctx.keyType().getText(),
+            key_type=key_type,
             key_columns=key_columns,
             entity=entity_name,
-        )))
+        ), original_keyword="DELETE " + key_type + " KEY"))
 
     def enterLabelDelete(self, ctx):
         # Rule: LABEL identifier FROM qualifiedName
         self.operations.append(Operation(OpType.DELETE_LABEL, DeleteLabelParams(
             label=ctx.identifier().getText(),
             entity=ctx.qualifiedName().getText(),
-        )))
+        ), original_keyword="DELETE LABEL"))
 
     # RENAME operations
     def enterPropertyRename(self, ctx):
@@ -1086,7 +1087,7 @@ class SMILEGeneralizedListener(SMILE_GeneralizedListener, BaseSMILEListener):
         self.operations.append(Operation(OpType.RENAME_ENTITY, RenameEntityParams(
             old_name=qns[0].getText(),
             new_name=qns[1].getText() if len(qns) > 1 else None,
-        )))
+        ), original_keyword="RENAME ENTITY"))
 
     # Simple operations
     def enterCopy_gen(self, ctx):
@@ -1134,7 +1135,7 @@ class SMILEGeneralizedListener(SMILE_GeneralizedListener, BaseSMILEListener):
             source2=qns[1].getText(),
             target=ids[0].getText(),
             alias=ids[1].getText() if len(ids) > 1 else None,
-        )))
+        ), original_keyword="MERGE"))
 
     def enterSplit_gen(self, ctx):
         # Rule: SPLIT qualifiedName INTO splitPartGen (SEMICOLON splitPartGen)+
