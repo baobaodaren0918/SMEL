@@ -13,8 +13,11 @@ import webbrowser
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from core import run_migration
-from config import MIGRATION_CONFIGS, DB_TYPE_EXPORT_LABEL, NORTHWIND_SCHEMA_FILES
+from core import run_migration, db_to_dict
+from config import (
+    MIGRATION_CONFIGS, DB_TYPE_EXPORT_LABEL, NORTHWIND_SCHEMA_FILES,
+    PRODUCT_TO_SOURCE_TYPE,
+)
 from schema_inspector import inspect_schema, _resolve_db_type
 from Schema.adapters import ADAPTER_REGISTRY
 
@@ -56,12 +59,26 @@ class SMILEHandler(SimpleHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(data)
             elif self.path.startswith('/api/schemas'):
-                result = {}
+                # Returns the raw text of each native schema file PLUS the
+                # parsed Meta V1 dict for each one, so the Source Schemas
+                # tab can render its subtitles + structures dynamically and
+                # never disagree with the actual schema files on disk.
+                result = {"parsed": {}}
                 for key, fpath in NORTHWIND_SCHEMA_FILES.items():
                     try:
                         result[key] = fpath.read_text(encoding='utf-8')
                     except Exception as e:
                         result[key] = f'Error reading {fpath}: {e}'
+                        continue
+                    src_type = PRODUCT_TO_SOURCE_TYPE.get(key)
+                    adapter_cls = ADAPTER_REGISTRY.get(src_type) if src_type else None
+                    if adapter_cls is None:
+                        continue
+                    try:
+                        db = adapter_cls().load_from_file(str(fpath), key)
+                        result["parsed"][key] = db_to_dict(db)
+                    except Exception as e:
+                        result["parsed"][key] = {"__error": f'parse failed: {e}'}
 
                 self.send_response(200)
                 self.send_header('Content-type', 'application/json')

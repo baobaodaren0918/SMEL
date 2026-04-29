@@ -1,5 +1,5 @@
 -- PostgreSQL Schema: Northwind V2 (R2R Evolution Target)
--- 10 tables: 8 original - categories(MERGE) + customer_contacts(SPLIT) + region + territories + employee_territories
+-- 11 tables: 8 original - categories(MERGE) + customer_contacts(SPLIT) + sales_region + territories + employee_territories
 
 CREATE TABLE suppliers (
     supplier_id VARCHAR(255) PRIMARY KEY,

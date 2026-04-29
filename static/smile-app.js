@@ -1483,12 +1483,24 @@
 
         function renderSourceSchemas(data) {
             const container = document.getElementById('tab-schemas');
+            const parsed = (data && data.parsed) || {};
+            // Counts derived from the parsed Meta V1 structures the server
+            // attaches to /api/schemas. The subtitle text never disagrees
+            // with the actual schema files because nothing in this page is
+            // a hardcoded constant any more.
+            const pgStats   = computeSchemaStats(parsed.postgresql, 'relational');
+            const mongoStats = computeSchemaStats(parsed.mongodb,   'document');
+            const neoStats  = computeSchemaStats(parsed.neo4j,      'graph');
+            const cassStats = computeSchemaStats(parsed.cassandra,  'columnar');
             let html = '<div class="source-schemas-page">';
 
             // ── Section 1: PostgreSQL ──
             html += '<div class="schema-section">';
             html += '<div class="schema-section-header"><h2>PostgreSQL</h2><span class="schema-badge relational">Relational</span></div>';
-            html += '<div class="schema-section-subtitle">8 Tables, 8 Foreign Keys, 69 Fields — Normalized 3NF Design</div>';
+            html += '<div class="schema-section-subtitle">'
+                  + pgStats.entities + ' Tables, '
+                  + pgStats.foreign_keys + ' Foreign Keys, '
+                  + pgStats.fields + ' Fields — Normalized 3NF Design</div>';
             html += '<div class="vis-and-code">';
             html += '<div class="vis-block"><div class="section-title">ER Diagram</div>';
             html += '<div class="er-diagram">' + getStaticERDiagram() + '</div></div>';
@@ -1499,10 +1511,13 @@
             // ── Section 2: MongoDB ──
             html += '<div class="schema-section">';
             html += '<div class="schema-section-header"><h2>MongoDB</h2><span class="schema-badge document">Document</span></div>';
-            html += '<div class="schema-section-subtitle">2 Root Collections (orders + customers), 3-Level Max Nesting — Cross-collection ObjectId reference</div>';
+            html += '<div class="schema-section-subtitle">'
+                  + mongoStats.roots + ' Root Collection' + (mongoStats.roots === 1 ? '' : 's')
+                  + ' (' + mongoStats.root_names.join(' + ') + '), '
+                  + mongoStats.max_depth + '-Level Max Nesting — Cross-collection ObjectId reference</div>';
             html += '<div class="vis-and-code">';
             html += '<div class="vis-block"><div class="section-title">Document Structure</div>';
-            html += '<div class="document-tree">' + renderMongoDocTree() + '</div></div>';
+            html += '<div class="document-tree">' + renderMongoDocTree(parsed.mongodb) + '</div></div>';
             html += '<div class="code-block-wrapper"><div class="section-title">JSON Schema</div>';
             html += '<div class="sql-code-view"><pre>' + syntaxHighlightJSON(data.mongodb) + '</pre></div></div>';
             html += '</div></div>';
@@ -1510,10 +1525,13 @@
             // ── Section 3: Neo4j ──
             html += '<div class="schema-section">';
             html += '<div class="schema-section-header"><h2>Neo4j</h2><span class="schema-badge graph">Graph</span></div>';
-            html += '<div class="schema-section-subtitle">7 Nodes, 7 Relationships, 61 Properties — Property Graph Model</div>';
+            html += '<div class="schema-section-subtitle">'
+                  + neoStats.nodes + ' Nodes, '
+                  + neoStats.relationships + ' Relationships, '
+                  + neoStats.fields + ' Properties — Property Graph Model</div>';
             html += '<div class="vis-and-code">';
             html += '<div class="vis-block"><div class="section-title">Graph Diagram</div>';
-            html += '<div class="er-diagram">' + getStaticGraphDiagram() + '</div></div>';
+            html += '<div class="er-diagram">' + getStaticGraphDiagram(neoStats) + '</div></div>';
             html += '<div class="code-block-wrapper"><div class="section-title">Cypher Schema</div>';
             html += '<div class="sql-code-view"><pre>' + escapeHtml(data.neo4j) + '</pre></div></div>';
             html += '</div></div>';
@@ -1521,7 +1539,9 @@
             // ── Section 4: Cassandra ──
             html += '<div class="schema-section">';
             html += '<div class="schema-section-header"><h2>Cassandra</h2><span class="schema-badge columnar">Columnar</span></div>';
-            html += '<div class="schema-section-subtitle">8 Tables, Query-Driven Design, 69 Fields — Denormalized Wide-Column</div>';
+            html += '<div class="schema-section-subtitle">'
+                  + cassStats.entities + ' Tables, Query-Driven Design, '
+                  + cassStats.fields + ' Fields — Denormalized Wide-Column</div>';
             html += '<div class="vis-and-code">';
             html += '<div class="vis-block"><div class="section-title">Chebotko Diagram</div>';
             html += getStaticChebotkoDiagram();
@@ -1536,13 +1556,55 @@
             setTimeout(() => flushDotRenders(), 50);
         }
 
+        // Counts every Source-Schemas subtitle needs. Walks the parsed
+        // Meta V1 dict that /api/schemas attaches per paradigm. Returns 0s
+        // when the parse failed (so the page still renders without crashing
+        // — counts of 0 are visibly wrong and call out the parse error).
+        function computeSchemaStats(parsed, paradigm) {
+            const z = { entities: 0, fields: 0, foreign_keys: 0,
+                        nodes: 0, relationships: 0,
+                        roots: 0, root_names: [], max_depth: 0 };
+            if (!parsed || parsed.__error) return z;
+            const names = Object.keys(parsed).filter(k => !k.startsWith('__'));
+            z.entities = names.length;
+            z.fields = names.reduce((n, k) => n + (parsed[k].properties || []).length, 0);
+
+            if (paradigm === 'relational' || paradigm === 'columnar') {
+                z.foreign_keys = names.reduce((n, k) =>
+                    n + (parsed[k].constraints || []).filter(c => c.type === 'FOREIGN_KEY').length, 0);
+            }
+            if (paradigm === 'graph') {
+                z.nodes = names.filter(k => parsed[k].entity_kind === 'vertex').length;
+                // Edges are stored on each vertex's outgoing 'edges' list.
+                z.relationships = names.reduce((n, k) =>
+                    n + (parsed[k].edges || []).length, 0);
+            }
+            if (paradigm === 'document') {
+                // A root collection is any entity that is not the embedding
+                // target of another entity. Same algorithm as the Layer 1
+                // _normalize_to_paths normalizer in validation/meta.py.
+                const embTargets = new Set();
+                names.forEach(k =>
+                    (parsed[k].embedded || []).forEach(e => embTargets.add(e.target || '')));
+                const roots = names.filter(k => !embTargets.has(k));
+                z.roots = roots.length;
+                z.root_names = roots.slice().sort();
+                // Nesting depth: root = 0, "orders.shipper" = 1,
+                // "orders.details.product.category" = 3. This matches the
+                // ``Level N`` annotations the dynamic tree walker emits and
+                // the historical "N-Level Max Nesting" copy.
+                z.max_depth = names.reduce((m, k) => Math.max(m, k.split('.').length - 1), 0);
+            }
+            return z;
+        }
+
         // ── Static ER Diagram (PostgreSQL Northwind) ──
-        // SCHEMA-DRIFT WARNING: this diagram is hand-built and not generated
-        // from tests/northwind_postgresql.sql. If you edit that .sql file,
-        // remember to update the entity boxes / FK arrows below to match,
-        // otherwise the Source-Schemas tab will lie about what's actually
-        // loaded. The schema-section-subtitle on line ~1491 also lists
-        // hardcoded counts ("8 Tables, 8 Foreign Keys, 69 Fields") — keep in sync.
+        // The DOT graph below is hand-laid for visual rank-grouping
+        // (orders centred, lookups around it). schema-section-subtitle
+        // counts are now derived from the parsed schema in
+        // computeSchemaStats(), so the surface drift risk is only in the
+        // entity-box LIST itself: adding/removing a table in the .sql
+        // file would not be reflected without editing this DOT string.
         function getStaticERDiagram() {
             const containerId = 'er-dot-' + (erDiagramCounter++);
             const dot = `digraph ER {
@@ -1812,11 +1874,14 @@
         });
 
         // ── Static Graph Diagram (Neo4j Northwind) ──
-        // SCHEMA-DRIFT WARNING: nodes / relationships below are hand-built and
-        // not generated from tests/northwind_neo4j.cypher. Keep the node list,
-        // edge list, and the schema-section-subtitle counts ("7 Nodes, 7
-        // Relationships, 61 Properties") in sync if the .cypher file changes.
-        function getStaticGraphDiagram() {
+        // The graph layout below is hand-laid for visual clarity (orders +
+        // products as twin "hub" nodes with satellites around them); the
+        // schema-section-subtitle is generated dynamically from the parsed
+        // Meta V1, so the only drift risk left is when the .cypher file
+        // gains/loses an entity that the static layout would not visualise.
+        // Pass the parsed counts in via ``stats`` so the legend annotation
+        // at the bottom of the SVG mirrors reality.
+        function getStaticGraphDiagram(stats) {
             const W = 960, H = 700;
             const nodes = [
                 { name: 'orders', x: W*0.28, y: H*0.45, hub: true, theme: 0 },
@@ -1884,20 +1949,86 @@
                 }
             });
 
-            svg += '<text x="'+(W/2)+'" y="'+(H-12)+'" text-anchor="middle" font-size="11" fill="#94A3B8" font-weight="500">7 Nodes, 7 Relationships — Click node or relationship to view properties</text>';
+            const annN = (stats && stats.nodes != null) ? stats.nodes : nodes.length;
+            const annR = (stats && stats.relationships != null) ? stats.relationships : edges.length;
+            svg += '<text x="'+(W/2)+'" y="'+(H-12)+'" text-anchor="middle" font-size="11" fill="#94A3B8" font-weight="500">'
+                 + annN + ' Nodes, ' + annR + ' Relationships — Click node or relationship to view properties</text>';
             svg += '</svg></div></div>';
             return svg;
         }
 
         // ── MongoDB Document Tree ──
-        // Renders the 2-collection northwind Mongo schema (orders + customers).
-        // Kept as a hand-built ASCII tree on purpose — easier to scan visually
-        // than auto-generated DOM nodes for a fixed reference schema.
-        // SCHEMA-DRIFT WARNING: this is NOT generated from
-        // tests/northwind_mongodb.json. If you edit that file (add/remove
-        // collections, change nesting), update the tree below AND the
-        // schema-section-subtitle on line ~1502 in sync.
-        function renderMongoDocTree() {
+        // Renders the parsed Mongo schema as an ASCII tree. Walks the
+        // ``parsed`` Meta V1 dict the server attaches to /api/schemas, so
+        // adding or restructuring collections in tests/northwind_mongodb.json
+        // is reflected here automatically — no hand-edit required. The
+        // legacy hardcoded version below is kept as a fallback (used only
+        // when the server can't supply ``parsed`` data).
+        function renderMongoDocTree(parsedMongo) {
+            if (parsedMongo && !parsedMongo.__error) {
+                return renderMongoTreeFromParsed(parsedMongo);
+            }
+            return renderMongoTreeFallback();
+        }
+
+        // Walk the parsed Meta V1 dict and emit the same |-- / +-- ASCII tree
+        // shape the legacy hand-built version produced. Pure function over
+        // the parsed dict; if the schema changes shape the rendering
+        // changes automatically.
+        function renderMongoTreeFromParsed(parsed) {
+            const names = Object.keys(parsed).filter(k => !k.startsWith('__'));
+            const embTargets = new Set();
+            names.forEach(k => (parsed[k].embedded || [])
+                              .forEach(e => embTargets.add(e.target || '')));
+            const roots = names.filter(k => !embTargets.has(k)).sort();
+            return roots.map((root, i) =>
+                walkEntity(parsed, root, true, '', i + 1, roots.length)
+            ).join('\n\n');
+        }
+
+        function walkEntity(parsed, fullPath, isRoot, prefix, rootIdx, rootTotal) {
+            const entity = parsed[fullPath];
+            if (!entity) return '';
+            const leafName = entity.name || fullPath.split('.').pop();
+            const lines = [];
+            if (isRoot) {
+                lines.push('<span class="dt-key">' + escapeHtml(leafName) + '</span>'
+                         + ' <span class="dt-comment">(root collection #' + rootIdx
+                         + (rootTotal > 1 ? ' of ' + rootTotal : '') + ')</span>');
+            }
+            const props = (entity.properties || []).map(p => ({kind:'prop', data:p}));
+            const embeds = (entity.embedded || []).map(e => ({kind:'emb', data:e}));
+            const items = props.concat(embeds);
+            items.forEach((item, idx) => {
+                const isLast = idx === items.length - 1;
+                const branch = isLast ? '+--' : '|--';
+                const childPrefix = prefix + (isLast ? '    ' : '|   ');
+                if (item.kind === 'prop') {
+                    const p = item.data;
+                    const keyTag = p.is_key
+                        ? ' <span class="dt-comment">(' + (leafName === 'orders' ? 'order_id' : leafName === 'customers' ? 'customer_id' : 'key') + ', primary key)</span>'
+                        : '';
+                    lines.push('<span class="dt-key">' + prefix + branch + ' ' + escapeHtml(p.name) + '</span>'
+                             + ': <span class="dt-type">' + escapeHtml(p.type || '?') + '</span>' + keyTag);
+                } else {
+                    const e = item.data;
+                    const card = e.cardinality || '1..1';
+                    const isArray = card.endsWith('..n') || card.endsWith('..*');
+                    const tag = isArray ? '<span class="dt-arr">[array]</span>'
+                                        : '<span class="dt-obj">{object}</span>';
+                    const childPath = e.target || (fullPath + '.' + e.name);
+                    const depth = childPath.split('.').length - 1;
+                    lines.push('<span class="dt-key">' + prefix + branch + ' ' + escapeHtml(e.name) + '</span>'
+                             + ': ' + tag + ' <span class="dt-comment">Level ' + depth + '</span>');
+                    const childTree = walkEntity(parsed, childPath, false, childPrefix, 0, 0);
+                    if (childTree) lines.push(childTree);
+                }
+            });
+            return lines.join('\n');
+        }
+
+        // Fallback (used only when /api/schemas couldn't provide parsed data).
+        function renderMongoTreeFallback() {
             const ordersTree =
                   '<span class="dt-key">orders</span> <span class="dt-comment">(root collection #1)</span>\n'
                 + '<span class="dt-key">|-- _id</span>: <span class="dt-type">string</span> <span class="dt-comment">(order_id, primary key)</span>\n'
@@ -1980,10 +2111,10 @@
         }
 
         // ── Static Chebotko Diagram (Cassandra Northwind) ──
-        // SCHEMA-DRIFT WARNING: tables/columns/keys below are hand-built and
-        // not generated from tests/northwind_cassandra.cql. Keep the column
-        // list and the schema-section-subtitle counts ("8 Tables, ..., 69
-        // Fields") in sync if the .cql file changes.
+        // schema-section-subtitle is now dynamic via computeSchemaStats.
+        // The table-cell layout below is still hand-laid for column/key
+        // colouring; if the .cql file gains a table, it won't appear here
+        // until added explicitly.
         function getStaticChebotkoDiagram() {
             const tables = [
                 { name: 'categories', cols: [

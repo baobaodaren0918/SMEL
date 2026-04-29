@@ -372,7 +372,14 @@ _RAW_CONFIGS = {
         "smile_file":  TESTS_DIR / "grammar_completeness" / "test_all_unused.smile",
         "source_type": SOURCE_TYPE_RELATIONAL,
         "target_type": SOURCE_TYPE_RELATIONAL,
-        "display_name": "Grammar completeness: 9 unused ops",
+        "display_name": "Grammar completeness: every otherwise-untested op (specific)",
+    },
+    "grammar_completeness_generalized": {
+        "source_file": TESTS_DIR / "grammar_completeness" / "source.sql",
+        "smile_file":  TESTS_DIR / "grammar_completeness" / "test_all_unused.smile_gen",
+        "source_type": SOURCE_TYPE_RELATIONAL,
+        "target_type": SOURCE_TYPE_RELATIONAL,
+        "display_name": "Grammar completeness: every otherwise-untested op (generalized)",
     },
 }
 

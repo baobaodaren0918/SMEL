@@ -1,4 +1,4 @@
--- Grammar completeness test: exercise the 9 SMILE operations that no other
+-- Grammar completeness test: exercise every SMILE operation that no other
 -- test in tests/specific or tests/generalized invokes.
 --
 -- Goal: prove every operation declared in the grammar reaches its handler
@@ -37,3 +37,12 @@ DELETE_EMBEDDED customers.address
 -- [9 → DELETE_LABEL] requires a label to exist first → ADD then DELETE
 ADD_LABEL Premium TO customers
 DELETE_LABEL Premium FROM customers
+
+-- [10 → CAST_PROPERTY] change orders.amount data type Decimal → Integer
+CAST_PROPERTY orders.amount TO Integer
+
+-- [11 → WIND] convert customers.full_name scalar into an array
+WIND customers.full_name
+
+-- [12 → UNWIND] expand the (now-array) customers.full_name back out (in-place mode)
+UNWIND customers.full_name

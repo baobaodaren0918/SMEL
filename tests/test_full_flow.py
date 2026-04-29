@@ -372,6 +372,40 @@ def test_northwind_cross_model(direction):
     assert result["passed"], f"{direction} failed"
 
 
+_grammar_completeness_keys = sorted(
+    k for k in MIGRATION_CONFIGS if k.startswith("grammar_completeness_")
+)
+
+
+@pytest.mark.parametrize("direction", _grammar_completeness_keys)
+def test_grammar_completeness_handlers_execute(direction):
+    """Smoke-test the otherwise-untested operations.
+
+    The Northwind suite never invokes WIND, UNWIND, CAST_PROPERTY, RECARD,
+    COPY_ENTITY, etc. Without this test those handlers ship with zero
+    execution coverage — they could regress and the rest of the suite
+    would not notice. ``test_all_unused.{smile,smile_gen}`` exercises every
+    such op end-to-end against a synthetic 3-table source schema.
+
+    Validation is N/A here (no native target file to compare against), so
+    we don't assert blame; we assert no handler raised and no op was
+    silently skipped.
+    """
+    from core import run_migration
+    r = run_migration(direction)
+    assert "error" not in r, f"{direction} crashed: {r.get('error')}"
+    stats = r.get("execution_stats") or {}
+    assert stats.get("error", 0) == 0, (
+        f"{direction}: {stats.get('error')} handler exception(s) — "
+        f"see operations_detail for traceback context"
+    )
+    assert stats.get("skipped", 0) == 0, (
+        f"{direction}: {stats.get('skipped')} op(s) skipped — every op in "
+        f"test_all_unused must reach its handler successfully"
+    )
+    assert stats.get("success", 0) == stats.get("total", 0)
+
+
 # =============================================================================
 # Standalone execution (python tests/test_full_flow.py)
 # =============================================================================

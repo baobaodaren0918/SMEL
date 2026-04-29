@@ -1,0 +1,48 @@
+-- Grammar completeness test (generalized variant) — same 12 ops as the
+-- specific .smile counterpart, just rewritten with the verb-object syntax.
+-- Without this file the generalized grammar's rare branches (WIND, UNWIND,
+-- CAST PROPERTY, ADD UNIQUE KEY, DELETE UNIQUE KEY, COPY PROPERTY, MOVE
+-- PROPERTY, COPY ENTITY, RECARD, CAST ENTITY, ADD EMBEDDED, DELETE EMBEDDED,
+-- ADD LABEL, DELETE LABEL) would never get parsed by the test suite.
+
+EVOLUTION grammar_completeness:1.0
+FROM RELATIONAL TO RELATIONAL
+USING grammar_completeness_schema VERSION 1.0 TO 2.0
+
+-- [1 → ADD UNIQUE KEY]
+ADD UNIQUE KEY customers.email
+
+-- [2 → DELETE UNIQUE KEY]
+DELETE UNIQUE KEY email FROM customers
+
+-- [3 → COPY PROPERTY]
+COPY PROPERTY email FROM customers TO orders
+
+-- [4 → MOVE PROPERTY]
+MOVE PROPERTY sku FROM products TO customers
+
+-- [5 → COPY ENTITY]
+COPY ENTITY customers AS customers_archive
+
+-- [6 → RECARD]
+RECARD orders.customer_id TO ZERO_TO_MANY
+
+-- [7 → CAST ENTITY]
+CAST ENTITY products TO DOCUMENT
+
+-- [8 → DELETE EMBEDDED]
+ADD EMBEDDED address TO customers
+DELETE EMBEDDED customers.address
+
+-- [9 → DELETE LABEL]
+ADD LABEL Premium TO customers
+DELETE LABEL Premium FROM customers
+
+-- [10 → CAST PROPERTY]
+CAST PROPERTY orders.amount TO Integer
+
+-- [11 → WIND]
+WIND customers.full_name
+
+-- [12 → UNWIND]
+UNWIND customers.full_name
