@@ -13,7 +13,7 @@ Pipeline position:
 """
 from typing import Dict, Any
 
-from validate_meta import compare_meta_schemas
+from validation.meta import compare_meta_schemas
 
 
 def validate_export(result_dict: Dict[str, Any], target_type: str,
@@ -31,7 +31,7 @@ def validate_export(result_dict: Dict[str, Any], target_type: str,
     """
     from Schema.adapters import ADAPTER_REGISTRY
     from core import db_to_dict
-    from validate_meta import _resolve_target_file
+    from validation.meta import _resolve_target_file
 
     exported_target = result_dict.get("exported_target", "")
     if not exported_target:

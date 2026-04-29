@@ -25,7 +25,7 @@ from grammar.generalized.SMILE_GeneralizedParser import SMILE_GeneralizedParser
 from grammar.generalized.SMILE_GeneralizedListener import SMILE_GeneralizedListener
 
 # Import custom listeners
-from smile_listeners import SMILESpecificListener, SMILEGeneralizedListener
+from parser.listeners import SMILESpecificListener, SMILEGeneralizedListener
 
 
 class SyntaxErrorListener(ErrorListener):

@@ -19,7 +19,7 @@ from grammar.specific.SMILE_SpecificListener import SMILE_SpecificListener
 from grammar.specific.SMILE_SpecificParser import SMILE_SpecificParser
 from grammar.generalized.SMILE_GeneralizedListener import SMILE_GeneralizedListener
 from grammar.generalized.SMILE_GeneralizedParser import SMILE_GeneralizedParser
-from operation_params import (
+from parser.params import (
     OpParams, KeyType,
     NestParams, UnnestParams, FlattenParams, UnflattenParams,
     WindParams, UnwindParams,
@@ -442,25 +442,63 @@ class SMILESpecificListener(SMILE_SpecificListener, BaseSMILEListener):
         )))
 
     def enterAdd_foreign_key(self, ctx):
-        # ADD_FOREIGN_KEY entity.field REFERENCES table(column)
-        # Supports explicit entity.field syntax: ADD_FOREIGN_KEY address.customer_id REFERENCES customers(customer_id)
-        qualified_name = ctx.qualifiedName().getText()
-        parts = qualified_name.split(".")
-        if len(parts) == 2:
-            entity_name = parts[0]
-            field_name = parts[1]
-        else:
-            entity_name = None
-            field_name = qualified_name
-
-        identifiers = ctx.identifier()
+        # Two grammar shapes share this rule:
+        #   single-column: ADD_FOREIGN_KEY orders.customer_id REFERENCES customers(customer_id)
+        #     -> keyColumns is a qualifiedName, target list has one identifier
+        #   composite:     ADD_FOREIGN_KEY (a, b) TO sales REFERENCES tenants_items(a, b)
+        #     -> keyColumns is "(identifierList)", explicit TO names the source entity,
+        #        target identifierList has the matching columns.
+        entity_name, field_names = self._extract_fk_source(ctx)
+        target_table, target_columns = self._extract_fk_target(ctx)
         self.operations.append(Operation(OpType.ADD_FOREIGN_KEY, AddForeignKeyParams(
             entity=entity_name,
-            field_name=field_name,
-            target_table=identifiers[0].getText(),
-            target_column=identifiers[1].getText(),
+            field_names=field_names,
+            target_table=target_table,
+            target_columns=target_columns,
             clauses=self._parse_reference_clauses(ctx.constraintClause()),
         ), original_keyword="ADD_FOREIGN_KEY"))
+
+    def _extract_fk_source(self, ctx):
+        """Pull (entity_name, [column, ...]) out of an ADD_FOREIGN_KEY ctx.
+
+        ``keyColumns`` admits two shapes — a dotted qualifiedName (single
+        column with implicit entity) or a parenthesised identifierList plus
+        an explicit ``TO entity`` clause (composite). The trailing ``TO``
+        identifier exists in the ctx only in the composite case.
+        """
+        kc = ctx.keyColumns()
+        if kc.qualifiedName():
+            qualified_name = kc.qualifiedName().getText()
+            parts = qualified_name.split(".")
+            if len(parts) == 2:
+                return parts[0], [parts[1]]
+            return None, [qualified_name]
+        # Composite: (col1, col2, ...) plus a TO identifier for the source entity.
+        # The first identifier child of ctx (outside keyColumns / identifierList)
+        # is the TO target. Resolve it positionally.
+        cols = [i.getText() for i in kc.identifierList().identifier()]
+        # The grammar ``add_foreign_key: ADD_FOREIGN_KEY keyColumns (TO identifier)?
+        # REFERENCES identifier LPAREN identifierList RPAREN constraintClause*;``
+        # places the (optional) TO identifier as the FIRST top-level identifier
+        # before REFERENCES. ctx.identifier() returns all top-level identifiers
+        # in order; the REFERENCES target is always present, so the entity name
+        # is at index 0 only when len > 1.
+        top_ids = ctx.identifier()
+        if len(top_ids) >= 2:
+            return top_ids[0].getText(), cols
+        # No TO clause but composite source — fall back to None and let the
+        # handler skip with a clear reason.
+        return None, cols
+
+    def _extract_fk_target(self, ctx):
+        """Return (target_table, [target_column, ...]) from the REFERENCES side."""
+        top_ids = ctx.identifier()
+        # Last top-level identifier is the REFERENCES target table; all the
+        # entries inside the trailing parenthesised identifierList are the
+        # referenced columns.
+        target_table = top_ids[-1].getText()
+        target_columns = [i.getText() for i in ctx.identifierList().identifier()]
+        return target_table, target_columns
 
     def enterAdd_embedded(self, ctx):
         self.operations.append(Operation(OpType.ADD_EMBEDDED, AddEmbeddedParams(
@@ -908,23 +946,17 @@ class SMILEGeneralizedListener(SMILE_GeneralizedListener, BaseSMILEListener):
         )))
 
     def enterForeignKeyAdd(self, ctx):
-        # ADD FOREIGN KEY entity.field REFERENCES table(column)
-        # Supports explicit entity.field syntax: ADD FOREIGN KEY address.customer_id REFERENCES customers(customer_id)
-        qualified_name = ctx.qualifiedName().getText()
-        parts = qualified_name.split(".")
-        if len(parts) == 2:
-            entity_name = parts[0]
-            field_name = parts[1]
-        else:
-            entity_name = None
-            field_name = qualified_name
-
-        identifiers = ctx.identifier()
+        # Generalized variant of ADD_FOREIGN_KEY — same two grammar shapes
+        # (single-column qualifiedName vs composite "(cols) TO entity") share
+        # this rule. The Specific listener defines the shape-extraction
+        # helpers; reuse them so both grammars normalise to the same params.
+        entity_name, field_names = SMILESpecificListener._extract_fk_source(self, ctx)
+        target_table, target_columns = SMILESpecificListener._extract_fk_target(self, ctx)
         self.operations.append(Operation(OpType.ADD_FOREIGN_KEY, AddForeignKeyParams(
             entity=entity_name,
-            field_name=field_name,
-            target_table=identifiers[0].getText(),
-            target_column=identifiers[1].getText(),
+            field_names=field_names,
+            target_table=target_table,
+            target_columns=target_columns,
             clauses=self._parse_reference_clauses(ctx.constraintClause()),
         ), original_keyword="ADD FOREIGN KEY"))
 

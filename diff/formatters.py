@@ -15,7 +15,7 @@ all structural diffing happens once in ``database_diff.compute_diff``.
 from dataclasses import asdict
 from typing import Any, Dict, List
 
-from database_diff import DatabaseDiff, EntityDiff, ConstraintDiff
+from diff.engine import DatabaseDiff, EntityDiff, ConstraintDiff
 
 
 # ============================================================================

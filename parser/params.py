@@ -278,14 +278,34 @@ class DeleteKeyParams:
 
 @dataclass
 class AddForeignKeyParams:
-    field_name: str
+    """Foreign-key parameters supporting both single-column and composite FKs.
+
+    The lists ``field_names`` (source columns on this entity) and
+    ``target_columns`` (referenced columns on the target table) must have the
+    same length and pair up positionally — index ``i`` of ``field_names``
+    references index ``i`` of ``target_columns``. A length of one expresses
+    the common single-column case; lengths of two or more express a true
+    composite FK such as ``(tenant_id, item_id) -> tenants_items(tenant_id,
+    item_id)``.
+    """
+    field_names: List[str]
     target_table: str
-    target_column: str
+    target_columns: List[str]
     entity: Optional[str] = None
     clauses: Dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
-        _require_nonempty(self, "field_name", "target_table", "target_column")
+        _require_nonempty(self, "target_table")
+        if not self.field_names:
+            raise ValueError("AddForeignKeyParams.field_names must be non-empty")
+        if not self.target_columns:
+            raise ValueError("AddForeignKeyParams.target_columns must be non-empty")
+        if len(self.field_names) != len(self.target_columns):
+            raise ValueError(
+                f"AddForeignKeyParams: field_names ({len(self.field_names)}) "
+                f"and target_columns ({len(self.target_columns)}) must have "
+                f"the same length"
+            )
 
 
 @dataclass

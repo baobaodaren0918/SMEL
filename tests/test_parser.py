@@ -10,7 +10,7 @@ from pathlib import Path
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from parser_factory import parse_smile_auto, get_grammar_info
+from parser.factory import parse_smile_auto, get_grammar_info
 
 
 def parse_smile_file(filepath: str, verbose: bool = True) -> tuple:

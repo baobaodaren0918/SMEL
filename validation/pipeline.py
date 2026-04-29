@@ -16,8 +16,8 @@ populated for backward compatibility with the web UI; the new
 """
 from typing import Dict, Any
 
-from validate_meta import validate_meta
-from validate_export import validate_export
+from validation.meta import validate_meta
+from validation.export import validate_export
 
 
 def validate_pipeline(result_dict: Dict[str, Any], target_type: str,

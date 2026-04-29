@@ -23,7 +23,7 @@ import pytest
 # Make the project root importable when pytest runs from this dir.
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from operation_params import (
+from parser.params import (
     AddPropertyParams, DeletePropertyParams, NestParams, UnnestParams,
     AddKeyParams, KeyType, OperationResult,
 )
@@ -140,7 +140,7 @@ class TestPipelineContinuesAfterFailure:
 
     def test_bad_op_then_good_op_both_recorded(self):
         from core import SchemaTransformer, run_apply
-        from smile_listeners import Operation, OpType
+        from parser.listeners import Operation, OpType
         db = _make_one_entity_db()
         transformer = SchemaTransformer(db)
 
@@ -152,11 +152,12 @@ class TestPipelineContinuesAfterFailure:
             Operation(OpType.ADD_PROPERTY,
                       AddPropertyParams(name="email", entity="users")),
         ]
-        details, success_count, skipped_count = run_apply(transformer, ops)
+        details, success_count, skipped_count, error_count = run_apply(transformer, ops)
 
         assert len(details) == 2, "every op must be recorded, even when skipped"
         assert success_count == 1
         assert skipped_count == 1
+        assert error_count == 0, "no handler bugs expected for valid input"
         assert details[0]["status"] == "skipped"
         assert details[0].get("reason"), "skipped op must surface a reason"
         assert details[1]["status"] == "success"
@@ -169,8 +170,8 @@ class TestPipelineContinuesAfterFailure:
         property to it. The pipeline must finish and report the second op
         as skipped — not raise."""
         from core import SchemaTransformer, run_apply
-        from smile_listeners import Operation, OpType
-        from operation_params import DeleteEntityParams
+        from parser.listeners import Operation, OpType
+        from parser.params import DeleteEntityParams
         db = _make_one_entity_db()
         transformer = SchemaTransformer(db)
         ops = [
@@ -178,8 +179,9 @@ class TestPipelineContinuesAfterFailure:
             Operation(OpType.ADD_PROPERTY,
                       AddPropertyParams(name="email", entity="users")),
         ]
-        details, success, skipped = run_apply(transformer, ops)
+        details, success, skipped, errors = run_apply(transformer, ops)
         assert len(details) == 2
+        assert errors == 0, "no handler bugs expected for valid input"
         # First op succeeds (deletes users), second op now sees no entity.
         assert details[0]["status"] == "success"
         assert details[1]["status"] == "skipped"
@@ -203,7 +205,7 @@ class TestMalformedSmileScript:
         return f.name
 
     def test_garbage_script_reports_errors(self):
-        from parser_factory import parse_smile_auto
+        from parser.factory import parse_smile_auto
         path = self._write_temp("THIS IS NOT VALID SMILE @@@ ###")
         try:
             ctx, ops, errors = parse_smile_auto(path)
@@ -214,7 +216,7 @@ class TestMalformedSmileScript:
             Path(path).unlink(missing_ok=True)
 
     def test_empty_script_does_not_crash(self):
-        from parser_factory import parse_smile_auto
+        from parser.factory import parse_smile_auto
         path = self._write_temp("")
         try:
             ctx, ops, errors = parse_smile_auto(path)
@@ -233,7 +235,7 @@ class TestMalformedSmileScript:
             "\n"
             "ADD_PROPERTY\n"   # truncated — missing name
         )
-        from parser_factory import parse_smile_auto
+        from parser.factory import parse_smile_auto
         path = self._write_temp(script)
         try:
             ctx, ops, errors = parse_smile_auto(path)
@@ -307,7 +309,7 @@ class TestValidationBlame:
     def test_smile_script_blame_on_layer1_failure(self):
         """Simulate a broken Meta V2 (script error) and confirm blame=smile_script."""
         from core import run_migration
-        from validate_pipeline import validate_pipeline
+        from validation.pipeline import validate_pipeline
         r = run_migration("northwind_r2d_specific")
         # Surgically wreck the Meta V2 to force Layer 1 to fail.
         r["result"] = {}

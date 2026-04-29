@@ -112,8 +112,8 @@ def compare_meta_schemas(actual: Dict[str, Any], expected: Dict[str, Any]) -> Di
         actual: Migration result meta schema dict
         expected: Expected target meta schema dict (from parsing native file)
     """
-    from database_diff import compute_diff
-    from database_diff_formatters import to_validation_report
+    from diff.engine import compute_diff
+    from diff.formatters import to_validation_report
     diff = compute_diff(actual, expected)
     return to_validation_report(diff, actual, expected)
 
