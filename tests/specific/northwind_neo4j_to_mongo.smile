@@ -1,214 +1,104 @@
 -- SMILE Northwind: Neo4j -> MongoDB (Specific Operations Version)
--- Graph (Nodes + Relationships) -> Document (Embedded 4-level nesting)
--- Direction: Graph (Nodes + Edges) -> Denormalized (Embedded)
---
--- Pipeline: Source Neo4j -> Reverse Engineering -> Meta V1 (Graph)
---           -> SMILE Operations (this script) -> Meta V2 (Document)
---           -> Forward Engineering -> Target MongoDB
+-- 7 Graph Nodes + 7 Relationships -> 2 Document Collections (orders + customers, max L3)
 --
 -- Operation Semantics:
 --   TRANSFORM:        Convert relationship to entity (or vice versa)
 --   RENAME_ENTITY:    Rename an entity
---   ADD_PROPERTY:    Add new attribute to entity
---   DELETE_ENTITY:    Remove relationship type
 --   UNFLATTEN:        Combine flat fields into nested object
 --   NEST:             Embed separate entity into parent as nested object
---   RENAME_PROPERTY: Rename a field within an entity
--- Note: Neo4j source already uses lowercase entity names (categories, suppliers, etc.)
 
 MIGRATION northwind_neo4j_to_mongo:1.0
 FROM GRAPH TO DOCUMENT
 USING adapted_northwind_schema VERSION 1
 
 -- ============================================
--- Source: Neo4j Graph (7 nodes, 7 relationships)
+-- Source: 7 nodes + 7 relationships — see northwind_neo4j.cypher
+-- Target: 2 collections (orders + customers, max L3)
+--   Root 1: orders { _id, ..., customer_id (REF), employee{address{}}, shipper{}, ship_destination{},
+--                    details[]{ product{ category{}, supplier{flat addr} } } }
+--   Root 2: customers { _id, company_name, address{} }
 -- ============================================
--- Nodes:
---   categories (category_id, category_name, description)
---   suppliers (supplier_id, company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country)
---   shippers (shipper_id, company_name, phone)
---   employees (employee_id, last_name, first_name, title, birth_date, hire_date, phone, notes, street, city, region, postal_code, country)
---   customers (customer_id, company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country)
---   products (product_id, product_name, unit_price, units_in_stock, discontinued, quantity_per_unit)
---   orders (order_id, order_date, required_date, shipped_date, freight, ship_name, ship_address, ship_city, ship_region, ship_postal_code, ship_country)
--- Relationships:
---   SUPPLIES (suppliers -> products), PART_OF (products -> categories)
---   PURCHASED (customers -> orders), SOLD (employees -> orders), SHIPPED_VIA (orders -> shippers)
---   REPORTS_TO (employees -> employees)
---   CONTAINS (orders -> products) with properties: unit_price, quantity, discount
 
 -- ============================================
--- Target: MongoDB Orders Document
+-- Step 1: TRANSFORM CONTAINS edge -> order_details entity
 -- ============================================
--- {
---   _id: "ORD001",
---   order_date, required_date, shipped_date, freight, ship_name,
---   ship_destination: { ship_address, ship_city, ship_region, ship_postal_code, ship_country },
---   customer: { company_name, contact_name, contact_title, phone, fax,
---               address: { street, city, region, postal_code, country } },
---   employee: { last_name, first_name, title, birth_date, hire_date, phone, notes, reports_to,
---               address: { street, city, region, postal_code, country } },
---   shipper: { company_name, phone },
---   details: [
---     { unit_price, quantity, discount,
---       product: { product_name, unit_price, units_in_stock, discontinued, quantity_per_unit,
---                  category: { category_name, description },
---                  supplier: { company_name, contact_name, contact_title, phone, fax,
---                              address: { street, city, region, postal_code, country } } } }
---   ]
--- }
-
--- ============================================
--- Step 1: TRANSFORM CONTAINS relationship -> order_details entity
--- ============================================
--- CONTAINS (orders -> products) with { unit_price, quantity, discount } becomes entity
--- Then rename from relationship name to table name, add FK columns.
 TRANSFORM CONTAINS INTO ENTITY
 RENAME_ENTITY CONTAINS TO order_details
 ADD_PROPERTY order_id TO order_details WITH TYPE String
 ADD_PROPERTY product_id TO order_details WITH TYPE String
--- Result:
--- order_details: { order_id, product_id, unit_price, quantity, discount }
 
 -- ============================================
--- Step 2: Delete all relationships and add FK-like attributes
+-- Step 2: Drop other edges, materialize FK columns
 -- ============================================
--- REPORTS_TO -> add reports_to field to employees (self-reference)
 DELETE_ENTITY REPORTS_TO
 ADD_PROPERTY reports_to TO employees WITH TYPE String
--- SUPPLIES -> add supplier_id to products
 DELETE_ENTITY SUPPLIES
 ADD_PROPERTY supplier_id TO products WITH TYPE String
--- PART_OF -> add category_id to products
 DELETE_ENTITY PART_OF
 ADD_PROPERTY category_id TO products WITH TYPE String
--- PURCHASED -> add customer_id to orders
 DELETE_ENTITY PURCHASED
 ADD_PROPERTY customer_id TO orders WITH TYPE String
--- SOLD -> add employee_id to orders
 DELETE_ENTITY SOLD
 ADD_PROPERTY employee_id TO orders WITH TYPE String
--- SHIPPED_VIA -> add shipper_id to orders
 DELETE_ENTITY SHIPPED_VIA
 ADD_PROPERTY shipper_id TO orders WITH TYPE String
--- Result:
--- employees: { ..., reports_to }
--- products: { ..., supplier_id, category_id }
--- orders: { ..., customer_id, employee_id, shipper_id }
 
 -- ============================================
--- Step 3: UNFLATTEN address fields (4 entities have flat address -> sub-objects)
+-- Step 3: UNFLATTEN address sub-objects only where the target nests them
+--   - customers (Root 2: nested address)
+--   - employees (will be embedded in orders.employee, address at L2)
+--   - orders ship_* fields -> ship_destination L1 sub-object
+-- NOT suppliers (target keeps supplier address flat at L3)
 -- ============================================
-UNFLATTEN suppliers:street, city, region, postal_code, country AS address
 UNFLATTEN customers:street, city, region, postal_code, country AS address
 UNFLATTEN employees:street, city, region, postal_code, country AS address
 UNFLATTEN orders:ship_address, ship_city, ship_region, ship_postal_code, ship_country AS ship_destination
--- Result:
--- suppliers: { supplier_id, company_name, contact_name, contact_title, phone, fax, address{street, city, region, postal_code, country} }
--- customers: { customer_id, company_name, contact_name, contact_title, phone, fax, address{street, city, region, postal_code, country} }
--- employees: { employee_id, last_name, first_name, title, birth_date, hire_date, phone, notes, reports_to, address{street, city, region, postal_code, country} }
 
 -- ============================================
--- Step 4: NEST categories into products (deepest first -- Level 3)
+-- Step 4: NEST categories into products (L3 leaf)
 -- ============================================
 NEST categories:category_name, description IN products.category WHERE products.category_id = categories.category_id
 DELETE_ENTITY categories
--- Result:
--- products: { product_id, product_name, unit_price, units_in_stock, discontinued, quantity_per_unit, supplier_id,
---             category{category_name, description} }
 
 -- ============================================
--- Step 5: NEST suppliers into products (Level 3 -- with nested address)
+-- Step 5: NEST suppliers into products (L3 leaf, supplier keeps flat address)
 -- ============================================
-NEST suppliers:company_name, contact_name, contact_title, phone, fax, address{street, city, region, postal_code, country} IN products.supplier WHERE products.supplier_id = suppliers.supplier_id
+NEST suppliers:company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country IN products.supplier WHERE products.supplier_id = suppliers.supplier_id
 DELETE_ENTITY suppliers
--- Result:
--- products: { product_id, product_name, unit_price, units_in_stock, discontinued, quantity_per_unit,
---             category{category_name, description},
---             supplier{company_name, contact_name, contact_title, phone, fax, address{street, city, region, postal_code, country}} }
 
 -- ============================================
--- Step 6: NEST products into order_details (Level 2)
+-- Step 6: NEST products into order_details (L2)
 -- ============================================
-NEST products:product_name, unit_price, units_in_stock, discontinued, quantity_per_unit, category{category_name, description}, supplier{company_name, contact_name, contact_title, phone, fax, address{street, city, region, postal_code, country}} IN order_details.product WHERE order_details.product_id = products.product_id
+NEST products:product_name, unit_price, units_in_stock, discontinued, quantity_per_unit, category{category_name, description}, supplier{company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country} IN order_details.product WHERE order_details.product_id = products.product_id
 DELETE_ENTITY products
--- Result:
--- order_details: { order_id, unit_price, quantity, discount,
---                  product{product_name, unit_price, units_in_stock, discontinued, quantity_per_unit,
---                          category{category_name, description},
---                          supplier{company_name, contact_name, contact_title, phone, fax, address{...}}} }
 
 -- ============================================
--- Step 7: NEST shippers into orders (Level 1)
+-- Step 7: NEST shippers into orders (L1)
 -- ============================================
 NEST shippers:company_name, phone IN orders.shipper WHERE orders.shipper_id = shippers.shipper_id
 DELETE_ENTITY shippers
--- Result:
--- orders: { order_id, order_date, required_date, shipped_date, freight, ship_name,
---   ship_destination: { ship_address, ship_city, ship_region, ship_postal_code, ship_country },
---           customer_id, employee_id, shipper{company_name, phone} }
 
 -- ============================================
--- Step 8: NEST employees into orders (Level 1 -- with address + self-ref)
+-- Step 8: NEST employees into orders (L1, with nested address at L2)
 -- ============================================
 NEST employees:last_name, first_name, title, birth_date, hire_date, phone, notes, reports_to, address{street, city, region, postal_code, country} IN orders.employee WHERE orders.employee_id = employees.employee_id
 DELETE_ENTITY employees
--- Result:
--- orders: { order_id, order_date, required_date, shipped_date, freight, ship_name,
---   ship_destination: { ship_address, ship_city, ship_region, ship_postal_code, ship_country },
---           customer_id, shipper{...},
---           employee{last_name, first_name, title, birth_date, hire_date, phone, notes, reports_to, address{...}} }
 
 -- ============================================
--- Step 9: NEST customers into orders (Level 1 -- with address)
+-- Step 9: NEST order_details into orders.details[] (L1 array)
+-- (customers stays as Root 2 — not NESTed; orders.customer_id holds the reference)
 -- ============================================
-NEST customers:company_name, contact_name, contact_title, phone, fax, address{street, city, region, postal_code, country} IN orders.customer WHERE orders.customer_id = customers.customer_id
-DELETE_ENTITY customers
--- Result:
--- orders: { order_id, order_date, required_date, shipped_date, freight, ship_name,
---   ship_destination: { ship_address, ship_city, ship_region, ship_postal_code, ship_country },
---           shipper{...}, employee{...},
---           customer{company_name, contact_name, contact_title, phone, fax, address{street, city, region, postal_code, country}} }
-
--- ============================================
--- Step 10: NEST order_details into orders (Level 1 -- as array)
--- ============================================
-NEST order_details:unit_price, quantity, discount, product{product_name, unit_price, units_in_stock, discontinued, quantity_per_unit, category{category_name, description}, supplier{company_name, contact_name, contact_title, phone, fax, address{street, city, region, postal_code, country}}} IN orders.details WHERE order_details.order_id = orders.order_id
+NEST order_details:unit_price, quantity, discount, product{product_name, unit_price, units_in_stock, discontinued, quantity_per_unit, category{category_name, description}, supplier{company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country}} IN orders.details WHERE order_details.order_id = orders.order_id
 DELETE_ENTITY order_details
--- Result:
--- orders: { order_id, order_date, required_date, shipped_date, freight, ship_name,
---   ship_destination: { ship_address, ship_city, ship_region, ship_postal_code, ship_country },
---           customer{...}, employee{...}, shipper{...},
---           details[{unit_price, quantity, discount, product{...}}] }
 
 -- ============================================
--- Step 11: Rename PK for MongoDB convention
+-- Step 10: Promote PKs to MongoDB _id
 -- ============================================
 RENAME_PROPERTY order_id TO _id IN orders
 CAST_CONSTRAINT orders._id TO DOCUMENT_ID
--- Final Result:
--- orders: {
---   _id,
---   order_date, required_date, shipped_date, freight, ship_name,
---   ship_destination: { ship_address, ship_city, ship_region, ship_postal_code, ship_country },
---   customer: { company_name, contact_name, contact_title, phone, fax,
---               address: { street, city, region, postal_code, country } },
---   employee: { last_name, first_name, title, birth_date, hire_date, phone, notes, reports_to,
---               address: { street, city, region, postal_code, country } },
---   shipper: { company_name, phone },
---   details: [
---     { unit_price, quantity, discount,
---       product: { product_name, unit_price, units_in_stock, discontinued, quantity_per_unit,
---                  category: { category_name, description },
---                  supplier: { company_name, contact_name, contact_title, phone, fax,
---                              address: { street, city, region, postal_code, country } } } }
---   ]
--- }
+RENAME_PROPERTY customer_id TO _id IN customers
+CAST_CONSTRAINT customers._id TO DOCUMENT_ID
 
 -- ============================================
--- Operation Summary (29 steps, 8 operation types):
---   TRANSFORM:         1    RENAME_ENTITY:     1
---   ADD_PROPERTY:      8    DELETE_ENTITY:     6
---   UNFLATTEN:          4    NEST:              7
---   RENAME_PROPERTY:   1    CAST_CONSTRAINT:   1
+-- Final Result: 2 collections, see northwind_mongodb.json
 -- ============================================

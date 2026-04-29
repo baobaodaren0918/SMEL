@@ -1,12 +1,15 @@
 # Unified Meta Schema - Supports: PostgreSQL, MongoDB, Neo4j, Cassandra
 # Based on André Conrad's meta_model design with extensions
 
+import json
+import logging
+import uuid
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import ClassVar, Dict, List, Optional, Any, Union
-from dataclasses import dataclass, field
-from abc import ABC, abstractmethod
-import json
-import uuid
+
+logger = logging.getLogger(__name__)
 
 
 # ============================================================================
@@ -386,6 +389,27 @@ _NATIVE_TYPE_REGISTRY[DatabaseType.COLUMNAR] = TypeMappings.PRIMITIVE_TO_CASSAND
 
 def _uid() -> str:
     return str(uuid.uuid4())
+
+
+def _apply_id_map(obj: Any, id_map: Dict[str, str]) -> Any:
+    """Recursively rebuild ``obj`` with every string value rewritten via ``id_map``.
+
+    Used by ``Database.to_dict`` to swap runtime UUIDs (in ``meta_id``,
+    ``property_id``, ``points_to_unique_property_id`` fields) for the
+    deterministic path-based ids produced by
+    ``Database._build_deterministic_id_map``. The walk only touches strings
+    that are *exact* keys of ``id_map``, so unrelated string values
+    (entity names, types, descriptions) pass through unchanged — UUID-shaped
+    accidental matches in user data would be vanishingly rare and the map
+    only contains values from the actual object graph.
+    """
+    if isinstance(obj, dict):
+        return {k: _apply_id_map(v, id_map) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_apply_id_map(v, id_map) for v in obj]
+    if isinstance(obj, str):
+        return id_map.get(obj, obj)
+    return obj
 
 
 @dataclass
@@ -835,7 +859,7 @@ class Edge(Relationship):
     """Graph edge relationship (from Andre Conrad's paper Figure 2).
     References a RelationshipType by name, linking source to target entity.
     """
-    rel_type_name: str = ""    # Name of the RelationshipType (e.g. "ACTED_IN")
+    rel_type_name: str = ""    # Name of the RelationshipType (e.g. "PURCHASED")
     source_entity: str = ""    # Source entity name
     target_entity: str = ""    # Target entity name
 
@@ -869,10 +893,6 @@ class Edge(Relationship):
         )
 
 
-# Alias for backward compatibility
-Aggregate = Embedded
-
-
 # ============================================================================
 # ENTITY TYPE
 # ============================================================================
@@ -886,9 +906,7 @@ class EntityType:
     constraints: List[Constraint] = field(default_factory=list)
     properties: List[Property] = field(default_factory=list)
     relationships: List[Relationship] = field(default_factory=list)
-    to_connection_ids: List[str] = field(default_factory=list)    # from André Conrad: Connector meta_ids pointing TO this entity
-    from_connection_ids: List[str] = field(default_factory=list)  # from André Conrad: Connector meta_ids going FROM this entity
-    labels: List[str] = field(default_factory=list)  # Graph-specific: additional node labels (e.g. Person:Employee)
+    labels: List[str] = field(default_factory=list)  # Graph-specific: additional node labels (e.g. customers:Employee)
     source_entity: Optional[str] = None  # EDGE only: source node entity name
     target_entity: Optional[str] = None  # EDGE only: target node entity name
     edge_cardinality: Optional[Cardinality] = None  # EDGE only: relationship cardinality
@@ -913,12 +931,6 @@ class EntityType:
     def parent_path(self) -> List[str]:
         """Get parent path (all elements except last)."""
         return self.object_name[:-1] if len(self.object_name) > 1 else []
-
-    # Backward compatibility alias
-    @property
-    def en_name(self) -> str:
-        """Backward compatibility: returns simple name."""
-        return self.name
 
     # Constraint methods
     def add_constraint(self, constraint: Constraint):
@@ -967,10 +979,6 @@ class EntityType:
         """Get all embedded relationships."""
         return [r for r in self.relationships if isinstance(r, Embedded)]
 
-    # Backward compatibility alias
-    def get_aggregates(self) -> List[Embedded]:
-        return self.get_embedded()
-
     def get_edges(self) -> List['Edge']:
         """Get all edge relationships (graph database)."""
         return [r for r in self.relationships if isinstance(r, Edge)]
@@ -998,8 +1006,6 @@ class EntityType:
             "constraints": [c.to_dict() for c in self.constraints],
             "properties": [a.to_dict() for a in self.properties],
             "relationships": [r.to_dict() for r in self.relationships],
-            "to_connection_ids": self.to_connection_ids,
-            "from_connection_ids": self.from_connection_ids
         }
         if self.source_entity is not None:
             d["source_entity"] = self.source_entity
@@ -1022,12 +1028,7 @@ class EntityType:
         attrs = [Property.from_dict(a) for a in data.get("properties", [])]
         rels = [Relationship.from_dict(r) for r in data.get("relationships", [])]
 
-        # Support both old (en_name) and new (object_name) formats
-        object_name = data.get("object_name")
-        if object_name is None:
-            # Backward compatibility: convert en_name to object_name
-            en_name = data.get("en_name", "")
-            object_name = en_name.split(".") if en_name else [""]
+        object_name = data.get("object_name") or [""]
 
         edge_card_str = data.get("edge_cardinality")
         edge_cardinality = Cardinality.from_symbol(edge_card_str) if edge_card_str else None
@@ -1039,8 +1040,6 @@ class EntityType:
             constraints=constraints,
             properties=attrs,
             relationships=rels,
-            to_connection_ids=data.get("to_connection_ids", []),
-            from_connection_ids=data.get("from_connection_ids", []),
             source_entity=data.get("source_entity"),
             target_entity=data.get("target_entity"),
             edge_cardinality=edge_cardinality,
@@ -1109,47 +1108,6 @@ class RelationshipType:
 
 
 # ============================================================================
-# CONNECTOR (from André Conrad's code: links two DatabaseObjects with cardinalities)
-# ============================================================================
-
-class ConnectorCardinality(str, Enum):
-    """Cardinality for connector endpoints (from André Conrad's code)."""
-    ONE = "one"
-    MANY = "many"
-
-
-@dataclass
-class Connector:
-    """Connects two EntityTypes with cardinalities (from André Conrad's code).
-    tail = source side, head = target side.
-    """
-    tail_entity_id: str  # meta_id of source EntityType
-    head_entity_id: str  # meta_id of target EntityType
-    tail_cardinality: ConnectorCardinality = ConnectorCardinality.ONE
-    head_cardinality: ConnectorCardinality = ConnectorCardinality.MANY
-    meta_id: str = field(default_factory=_uid)
-
-    def to_dict(self) -> Dict[str, Any]:
-        return {
-            "meta_id": self.meta_id,
-            "tail_entity_id": self.tail_entity_id,
-            "head_entity_id": self.head_entity_id,
-            "tail_cardinality": self.tail_cardinality.value,
-            "head_cardinality": self.head_cardinality.value
-        }
-
-    @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'Connector':
-        return cls(
-            tail_entity_id=data.get("tail_entity_id", ""),
-            head_entity_id=data.get("head_entity_id", ""),
-            tail_cardinality=ConnectorCardinality(data.get("tail_cardinality", "one")),
-            head_cardinality=ConnectorCardinality(data.get("head_cardinality", "many")),
-            meta_id=data.get("meta_id", _uid())
-        )
-
-
-# ============================================================================
 # DATABASE (TOP-LEVEL)
 # ============================================================================
 
@@ -1158,7 +1116,6 @@ class Database:
     db_name: str
     db_type: DatabaseType = DatabaseType.RELATIONAL
     entity_types: Dict[str, EntityType] = field(default_factory=dict)
-    connectors: List[Connector] = field(default_factory=list)
     version: int = 1
     description: Optional[str] = None
     meta_id: str = field(default_factory=_uid)
@@ -1168,15 +1125,44 @@ class Database:
         """Add entity using full_path as key."""
         self.entity_types[e.full_path] = e
 
+    def get_entity_strict(self, full_path: str) -> Optional[EntityType]:
+        """Look up an entity by its exact ``full_path`` (no simple-name fallback).
+
+        Use this in code that has already constructed a fully-qualified path
+        (adapter parsers, ``_normalize_to_paths``, internal traversals): if the
+        path is wrong we want a clean ``None`` rather than a silently-picked
+        sibling that happens to share a leaf name. ``get_entity_type`` keeps
+        the lenient fallback for user-facing scripts where bare ``customers``
+        is the expected style.
+        """
+        return self.entity_types.get(full_path)
+
     def get_entity_type(self, name: str) -> Optional[EntityType]:
-        """Get entity by name (supports both full_path and simple name)."""
-        # First try exact match (full_path)
+        """Look up an entity by full path or simple name (lenient).
+
+        * Exact ``full_path`` match wins outright (always unambiguous).
+        * If no full-path match, fall back to comparing leaf names. When the
+          simple name matches *exactly one* entity, return it. When it matches
+          two or more, log a warning and return ``None`` — silently picking
+          the first match was the historical behaviour and risked selecting
+          the wrong entity in multi-root / deeply-nested schemas (e.g. an
+          ``UNFLATTEN address: ...`` script in a schema that has both
+          ``customers.address`` and ``orders.employee.address``).
+
+        Callers that already know the full path should use
+        ``get_entity_strict`` instead.
+        """
         if name in self.entity_types:
-            return self.entity_types.get(name)
-        # Fallback: search by simple name for backward compatibility
-        for entity in self.entity_types.values():
-            if entity.name == name:
-                return entity
+            return self.entity_types[name]
+        matches = [e for e in self.entity_types.values() if e.name == name]
+        if len(matches) == 1:
+            return matches[0]
+        if len(matches) > 1:
+            logger.warning(
+                "Ambiguous entity name '%s' matches %d entities (%s). "
+                "Use a fully-qualified path to disambiguate.",
+                name, len(matches), [e.full_path for e in matches],
+            )
         return None
 
     def remove_entity_type(self, name: str) -> Optional[EntityType]:
@@ -1207,31 +1193,39 @@ class Database:
             return self.remove_entity_type(name)
         return None
 
-    # Connector management (from André Conrad's code)
-    def add_connector(self, c: Connector):
-        self.connectors.append(c)
-
-    def get_connector(self, meta_id: str) -> Optional[Connector]:
-        return next((c for c in self.connectors if c.meta_id == meta_id), None)
-
-    def remove_connector(self, meta_id: str) -> Optional[Connector]:
-        for i, c in enumerate(self.connectors):
-            if c.meta_id == meta_id:
-                return self.connectors.pop(i)
-        return None
-
     def increment_version(self) -> int:
         self.version += 1
         return self.version
 
     # Serialization
     def to_dict(self) -> Dict[str, Any]:
-        d = {
+        """Serialize the Database to a JSON-ready dict with deterministic ids.
+
+        Runtime ``meta_id`` values are random UUIDs (cheap to allocate at
+        construction time, guaranteed unique). They make the in-memory model
+        easy to reason about, but they leak into the JSON output as noise:
+        running the *same* migration twice produces two different JSONs that
+        differ only in UUIDs, which makes git diffs unreadable, breaks
+        snapshot tests, and prevents byte-level comparison between the
+        Specific and Generalized grammar variants of the same migration.
+
+        ``to_dict`` therefore post-processes the raw dict and rewrites every
+        runtime UUID into a deterministic path-based id of the form
+        ``E:<entity_path>``, ``P:<entity_path>:<prop_name>`` etc. The
+        rewrite is applied recursively to *all* string values in the dict
+        tree, which covers both ``meta_id`` keys and the cross-references
+        (``property_id``, ``points_to_unique_property_id``) that point at
+        them. Two semantically-equivalent Databases now serialize byte-for-
+        byte identical.
+        """
+        # Build the dict with the raw UUIDs first — keeps the per-class
+        # to_dict() implementations untouched.
+        d: Dict[str, Any] = {
             "meta_id": self.meta_id,
             "db_name": self.db_name,
             "db_type": self.db_type.value,
             "version": self.version,
-            "entity_types": {n: e.to_dict() for n, e in self.entity_types.items()}
+            "entity_types": {n: e.to_dict() for n, e in self.entity_types.items()},
         }
         edge_entities = self.relationship_types
         if edge_entities:
@@ -1240,13 +1234,40 @@ class Database:
                 "source_entity": e.source_entity or "",
                 "target_entity": e.target_entity or "",
                 "properties": [a.to_dict() for a in e.properties],
-                "cardinality": (e.edge_cardinality or Cardinality.ZERO_TO_MANY).value
+                "cardinality": (e.edge_cardinality or Cardinality.ZERO_TO_MANY).value,
             } for n, e in edge_entities.items()}
-        if self.connectors:
-            d["connectors"] = [c.to_dict() for c in self.connectors]
         if self.description:
             d["description"] = self.description
-        return d
+
+        return _apply_id_map(d, self._build_deterministic_id_map())
+
+    def _build_deterministic_id_map(self) -> Dict[str, str]:
+        """Map every runtime UUID in this Database to a path-based id.
+
+        Covers Database, EntityType, Property, UniqueProperty, Reference,
+        Embedded, Edge, and edge_properties on References. Constraints
+        themselves carry no ``meta_id`` (only their UniqueProperty children
+        do), so they are addressed positionally instead.
+        """
+        m: Dict[str, str] = {self.meta_id: "db"}
+        for ent_path, entity in self.entity_types.items():
+            m[entity.meta_id] = f"E:{ent_path}"
+            for prop in entity.properties:
+                m[prop.meta_id] = f"P:{ent_path}:{prop.name}"
+            for ci, c in enumerate(entity.constraints):
+                if isinstance(c, UniqueConstraint):
+                    for upi, up in enumerate(c.unique_properties):
+                        m[up.meta_id] = f"UP:{ent_path}:{ci}:{upi}"
+            for rel in entity.relationships:
+                if isinstance(rel, Reference):
+                    m[rel.meta_id] = f"REF:{ent_path}:{rel.ref_name}"
+                    for ep in rel.edge_properties:
+                        m[ep.meta_id] = f"EP:{ent_path}:{rel.ref_name}:{ep.name}"
+                elif isinstance(rel, Embedded):
+                    m[rel.meta_id] = f"EMB:{ent_path}:{rel.aggr_name}"
+                elif isinstance(rel, Edge):
+                    m[rel.meta_id] = f"EDG:{ent_path}:{rel.rel_type_name}"
+        return m
 
     def to_json(self, indent: int = 2) -> str:
         return json.dumps(self.to_dict(), indent=indent)
@@ -1292,11 +1313,6 @@ class Database:
             )
             db.add_entity_type(edge_entity)
 
-        # Load connectors
-        for c_data in data.get("connectors", []):
-            connector = Connector.from_dict(c_data)
-            db.add_connector(connector)
-
         return db
 
     @classmethod
@@ -1314,7 +1330,6 @@ __all__ = [
     'Property', 'Constraint', 'UniqueProperty', 'ForeignKeyProperty',
     'UniqueConstraint', 'ForeignKeyConstraint',
     'Relationship', 'Reference', 'Embedded', 'Edge',
-    'ConnectorCardinality', 'Connector',
     'EntityType',
     'Database', 'UnifiedMetaSchema', 'TypeMappings'
 ]

@@ -1,12 +1,11 @@
 """
-SMILE Listeners - Parsers for all three SMILE grammar variants
+SMILE Listeners - Parsers for the two SMILE grammar variants.
 
 This module provides listener implementations for:
-1. SMILE_Specific.g4 - Specific operations version
-2. SMILE_Generalized.g4 - Generalized operations version
-3. SMILE.g4 - Original version (legacy)
+1. SMILE_Specific.g4 - Specific operations version (one keyword per op)
+2. SMILE_Generalized.g4 - Generalized operations version (verb + object)
 
-All listeners share common logic through the BaseSMILEListener class.
+Both listeners share common logic through the BaseSMILEListener class.
 """
 import sys
 from enum import Enum
@@ -316,20 +315,20 @@ class SMILESpecificListener(SMILE_SpecificListener, BaseSMILEListener):
     def enterFlatten(self, ctx):
         # New syntax: FLATTEN qualifiedName
         # Flattens nested object fields into parent table (reduce depth by 1)
-        # Example: FLATTEN person.name
-        #   Before: person { name: { vorname, nachname }, age }
-        #   After:  person { name_vorname, name_nachname, age }
+        # Example: FLATTEN customers.address
+        #   Before: customers { name: { first_name, last_name }, age }
+        #   After:  customers { name_first_name, name_last_name, age }
         self.operations.append(Operation(OpType.FLATTEN, FlattenParams(
             source=ctx.qualifiedName().getText()
         ), original_keyword="FLATTEN"))
 
     def enterUnflatten(self, ctx):
         # UNFLATTEN - Combine flat fields into nested object (reverse of FLATTEN)
-        # Example: UNFLATTEN person:vorname, nachname AS name
-        #   Before: person { vorname, nachname, age }
-        #   After:  person { name: { vorname, nachname }, age }
-        entity = ctx.identifier(0).getText()  # person
-        fields = [id.getText() for id in ctx.identifierList().identifier()]  # [vorname, nachname]
+        # Example: UNFLATTEN customers:first_name, last_name AS name
+        #   Before: customers { first_name, last_name, age }
+        #   After:  customers { name: { first_name, last_name }, age }
+        entity = ctx.identifier(0).getText()  # customers
+        fields = [id.getText() for id in ctx.identifierList().identifier()]  # [first_name, last_name]
         nested_name = ctx.identifier(1).getText()  # name
         self.operations.append(Operation(OpType.UNFLATTEN, UnflattenParams(
             entity=entity,
@@ -342,14 +341,14 @@ class SMILESpecificListener(SMILE_SpecificListener, BaseSMILEListener):
         target = ctx.identifier().getText() if ctx.identifier() else None
 
         if target:
-            # Mode 1: Create new table - UNWIND person.tags[] INTO person_tag
+            # Mode 1: Create new table - UNWIND customers.tags[] INTO customer_tag
             self.operations.append(Operation(OpType.UNWIND, UnwindParams(
                 mode="create_table",
                 source=source,
                 target=target,
             ), original_keyword="UNWIND"))
         else:
-            # Mode 2: Expand in place - UNWIND person_tag.value
+            # Mode 2: Expand in place - UNWIND customer_tag.value
             self.operations.append(Operation(OpType.UNWIND, UnwindParams(
                 mode="expand_in_place",
                 source=source,
@@ -357,26 +356,26 @@ class SMILESpecificListener(SMILE_SpecificListener, BaseSMILEListener):
 
     def enterWind(self, ctx):
         # WIND - Convert scalar property back to array (reverse of UNWIND)
-        # Syntax: WIND person_tag.tags
+        # Syntax: WIND customer_tag.tags
         # Cross-entity movement is handled by MERGE, not WIND.
-        source = ctx.qualifiedName().getText()  # person_tag.tags
+        source = ctx.qualifiedName().getText()  # customer_tag.tags
         self.operations.append(Operation(OpType.WIND, WindParams(
             source=source,
         ), original_keyword="WIND"))
 
     def enterNest(self, ctx):
         # Syntax: NEST identifier COLON unnestFieldList IN qualifiedName WHERE condition
-        # Example: NEST address:street,city IN person.address WHERE address.person_id = person.person_id
-        # Example: NEST address:street,city IN person.address WHERE address.person_id = person.person_id AND address.dept_id = person.dept_id
+        # Example: NEST address:street,city IN customers.address WHERE address.customer_id = customers.customer_id
+        # Example: NEST address:street,city IN customers.address WHERE address.customer_id = customers.customer_id AND address.dept_id = customers.dept_id
         source_entity = ctx.identifier().getText()  # address
-        target_location = ctx.qualifiedName().getText()  # person.address (single qualifiedName in rule)
+        target_location = ctx.qualifiedName().getText()  # customers.address (single qualifiedName in rule)
 
         # Parse WHERE condition(s): supports single or AND-chained conditions
         join_conditions = self._parse_condition_pairs(ctx.condition())
         source_fk = join_conditions[0]["left"] if join_conditions else ""
         target_pk = join_conditions[0]["right"] if join_conditions else ""
 
-        # Parse target location: person.address -> target_entity=person, embedded_name=address
+        # Parse target location: customers.address -> target_entity=customers, embedded_name=address
         target_parts = target_location.split(".")
         target_entity = target_parts[0] if target_parts else target_location
         embedded_name = target_parts[1] if len(target_parts) > 1 else source_entity
@@ -387,23 +386,23 @@ class SMILESpecificListener(SMILE_SpecificListener, BaseSMILEListener):
 
         self.operations.append(Operation(OpType.NEST, NestParams(
             source=source_entity,       # source entity to embed (address)
-            target=target_entity,       # target entity (person)
+            target=target_entity,       # target entity (customers)
             alias=embedded_name,        # embedded field name (address)
             properties=properties,      # properties to embed (street, city)
             nested=nested,              # nested objects
-            source_fk=source_fk,        # first join condition left (address.person_id)
-            target_pk=target_pk,        # first join condition right (person.person_id)
+            source_fk=source_fk,        # first join condition left (address.customer_id)
+            target_pk=target_pk,        # first join condition right (customers.customer_id)
             join_conditions=join_conditions,  # all join conditions
         ), original_keyword="NEST"))
 
     def enterUnnest(self, ctx):
         # New syntax: UNNEST qualifiedName COLON unnestFieldList AS identifier (WITH unnestCarryList)?
-        # Example: UNNEST person.address:street,city AS address WITH person.person_id TO address.person_id
+        # Example: UNNEST customers.address:street,city AS address WITH customers.customer_id TO address.customer_id
         # Example with multiple carry fields:
-        #   UNNEST person.employment:position AS employment
-        #       WITH person.person_id TO employment.person_id, person.dept_id TO employment.dept_id
+        #   UNNEST customers.employment:position AS employment
+        #       WITH customers.customer_id TO employment.customer_id, customers.dept_id TO employment.dept_id
         #   - WITH clause: copy fields from source to new table (can carry multiple fields)
-        source_path = ctx.qualifiedName().getText()  # person.address (single qualifiedName in unnest rule)
+        source_path = ctx.qualifiedName().getText()  # customers.address (single qualifiedName in unnest rule)
         target_name = ctx.identifier().getText()  # address (identifier after AS)
 
         # Parse carry fields (WITH clause is optional)
@@ -411,15 +410,15 @@ class SMILESpecificListener(SMILE_SpecificListener, BaseSMILEListener):
         if ctx.unnestCarryList():
             for carry_field in ctx.unnestCarryList().unnestCarryField():
                 # unnestCarryField has two qualifiedName: source AS target
-                source_field = carry_field.qualifiedName(0).getText()  # person.person_id
-                target_field = carry_field.qualifiedName(1).getText()  # address.person_id
+                source_field = carry_field.qualifiedName(0).getText()  # customers.customer_id
+                target_field = carry_field.qualifiedName(1).getText()  # address.customer_id
                 # Extract just the field name from target path
                 target_parts = target_field.split(".")
                 field_name = target_parts[-1] if target_parts else target_field
                 carry_fields.append({
-                    "source": source_field,      # person.person_id
-                    "target": target_field,      # address.person_id
-                    "field_name": field_name     # person_id
+                    "source": source_field,      # customers.customer_id
+                    "target": target_field,      # address.customer_id
+                    "field_name": field_name     # customer_id
                 })
 
         # Parse field list: recursively separate properties and nested objects
@@ -444,7 +443,7 @@ class SMILESpecificListener(SMILE_SpecificListener, BaseSMILEListener):
 
     def enterAdd_foreign_key(self, ctx):
         # ADD_FOREIGN_KEY entity.field REFERENCES table(column)
-        # Supports explicit entity.field syntax: ADD_FOREIGN_KEY address.person_id REFERENCES person(person_id)
+        # Supports explicit entity.field syntax: ADD_FOREIGN_KEY address.customer_id REFERENCES customers(customer_id)
         qualified_name = ctx.qualifiedName().getText()
         parts = qualified_name.split(".")
         if len(parts) == 2:
@@ -659,10 +658,10 @@ class SMILESpecificListener(SMILE_SpecificListener, BaseSMILEListener):
     def enterSplit(self, ctx):
         # New syntax: SPLIT identifier INTO splitPart (SEMICOLON splitPart)+
         # Vertical partitioning - divides one entity into multiple separate entities
-        # Example: SPLIT person INTO person:person_id, vorname, nachname, age; person_tag:person_id, tags
-        #   Before: person { person_id, vorname, nachname, age, tags[] }
-        #   After:  person { person_id, vorname, nachname, age }
-        #          person_tag { person_id, tags[] }
+        # Example: SPLIT customers INTO customers:customer_id, first_name, last_name, age; customer_tag:customer_id, tags
+        #   Before: customers { customer_id, first_name, last_name, age, tags[] }
+        #   After:  customers { customer_id, first_name, last_name, age }
+        #          customer_tag { customer_id, tags[] }
         source_entity = ctx.identifier().getText()
         split_parts = ctx.splitPart() if isinstance(ctx.splitPart(), list) else [ctx.splitPart()]
 
@@ -782,20 +781,20 @@ class SMILEGeneralizedListener(SMILE_GeneralizedListener, BaseSMILEListener):
     def enterFlatten_gen(self, ctx):
         # New syntax: FLATTEN qualifiedName
         # Flattens nested object fields into parent table (reduce depth by 1)
-        # Example: FLATTEN person.name
-        #   Before: person { name: { vorname, nachname }, age }
-        #   After:  person { name_vorname, name_nachname, age }
+        # Example: FLATTEN customers.address
+        #   Before: customers { name: { first_name, last_name }, age }
+        #   After:  customers { name_first_name, name_last_name, age }
         self.operations.append(Operation(OpType.FLATTEN, FlattenParams(
             source=ctx.qualifiedName().getText(),
         ), original_keyword="FLATTEN"))
 
     def enterUnflatten_gen(self, ctx):
         # UNFLATTEN - Combine flat fields into nested object (reverse of FLATTEN)
-        # Example: UNFLATTEN person:vorname, nachname AS name
-        #   Before: person { vorname, nachname, age }
-        #   After:  person { name: { vorname, nachname }, age }
-        entity = ctx.identifier(0).getText()  # person
-        fields = [id.getText() for id in ctx.identifierList().identifier()]  # [vorname, nachname]
+        # Example: UNFLATTEN customers:first_name, last_name AS name
+        #   Before: customers { first_name, last_name, age }
+        #   After:  customers { name: { first_name, last_name }, age }
+        entity = ctx.identifier(0).getText()  # customers
+        fields = [id.getText() for id in ctx.identifierList().identifier()]  # [first_name, last_name]
         nested_name = ctx.identifier(1).getText()  # name
         self.operations.append(Operation(OpType.UNFLATTEN, UnflattenParams(
             entity=entity,
@@ -808,14 +807,14 @@ class SMILEGeneralizedListener(SMILE_GeneralizedListener, BaseSMILEListener):
         target = ctx.identifier().getText() if ctx.identifier() else None
 
         if target:
-            # Mode 1: Create new table - UNWIND person.tags[] INTO person_tag
+            # Mode 1: Create new table - UNWIND customers.tags[] INTO customer_tag
             self.operations.append(Operation(OpType.UNWIND, UnwindParams(
                 mode="create_table",
                 source=source,
                 target=target,
             ), original_keyword="UNWIND"))
         else:
-            # Mode 2: Expand in place - UNWIND person_tag.value
+            # Mode 2: Expand in place - UNWIND customer_tag.value
             self.operations.append(Operation(OpType.UNWIND, UnwindParams(
                 mode="expand_in_place",
                 source=source,
@@ -823,26 +822,26 @@ class SMILEGeneralizedListener(SMILE_GeneralizedListener, BaseSMILEListener):
 
     def enterWind_gen(self, ctx):
         # WIND - Convert scalar property back to array (reverse of UNWIND)
-        # Syntax: WIND person_tag.tags
+        # Syntax: WIND customer_tag.tags
         # Cross-entity movement is handled by MERGE, not WIND.
-        source = ctx.qualifiedName().getText()  # person_tag.tags
+        source = ctx.qualifiedName().getText()  # customer_tag.tags
         self.operations.append(Operation(OpType.WIND, WindParams(
             source=source,
         ), original_keyword="WIND"))
 
     def enterNest_gen(self, ctx):
         # Syntax: NEST identifier COLON unnestFieldList IN qualifiedName WHERE condition
-        # Example: NEST address:street,city IN person.address WHERE address.person_id = person.person_id
-        # Example: NEST address:street,city IN person.address WHERE address.person_id = person.person_id AND address.dept_id = person.dept_id
+        # Example: NEST address:street,city IN customers.address WHERE address.customer_id = customers.customer_id
+        # Example: NEST address:street,city IN customers.address WHERE address.customer_id = customers.customer_id AND address.dept_id = customers.dept_id
         source_entity = ctx.identifier().getText()  # address
-        target_location = ctx.qualifiedName().getText()  # person.address (single qualifiedName in rule)
+        target_location = ctx.qualifiedName().getText()  # customers.address (single qualifiedName in rule)
 
         # Parse WHERE condition(s): supports single or AND-chained conditions
         join_conditions = self._parse_condition_pairs(ctx.condition())
         source_fk = join_conditions[0]["left"] if join_conditions else ""
         target_pk = join_conditions[0]["right"] if join_conditions else ""
 
-        # Parse target location: person.address -> target_entity=person, embedded_name=address
+        # Parse target location: customers.address -> target_entity=customers, embedded_name=address
         target_parts = target_location.split(".")
         target_entity = target_parts[0] if target_parts else target_location
         embedded_name = target_parts[1] if len(target_parts) > 1 else source_entity
@@ -853,23 +852,23 @@ class SMILEGeneralizedListener(SMILE_GeneralizedListener, BaseSMILEListener):
 
         self.operations.append(Operation(OpType.NEST, NestParams(
             source=source_entity,       # source entity to embed (address)
-            target=target_entity,       # target entity (person)
+            target=target_entity,       # target entity (customers)
             alias=embedded_name,        # embedded field name (address)
             properties=properties,      # properties to embed (street, city)
             nested=nested,              # nested objects
-            source_fk=source_fk,        # first join condition left (address.person_id)
-            target_pk=target_pk,        # first join condition right (person.person_id)
+            source_fk=source_fk,        # first join condition left (address.customer_id)
+            target_pk=target_pk,        # first join condition right (customers.customer_id)
             join_conditions=join_conditions,  # all join conditions
         ), original_keyword="NEST"))
 
     def enterUnnest_gen(self, ctx):
         # New syntax: UNNEST qualifiedName COLON unnestFieldList AS identifier (WITH unnestCarryList)?
-        # Example: UNNEST person.address:street,city AS address WITH person.person_id TO address.person_id
+        # Example: UNNEST customers.address:street,city AS address WITH customers.customer_id TO address.customer_id
         # Example with multiple carry fields:
-        #   UNNEST person.employment:position AS employment
-        #       WITH person.person_id TO employment.person_id, person.dept_id TO employment.dept_id
+        #   UNNEST customers.employment:position AS employment
+        #       WITH customers.customer_id TO employment.customer_id, customers.dept_id TO employment.dept_id
         #   - WITH clause: copy fields from source to new table (can carry multiple fields)
-        source_path = ctx.qualifiedName().getText()  # person.address (single qualifiedName in unnest_gen rule)
+        source_path = ctx.qualifiedName().getText()  # customers.address (single qualifiedName in unnest_gen rule)
         target_name = ctx.identifier().getText()  # address (identifier after AS)
 
         # Parse carry fields (WITH clause is optional)
@@ -877,15 +876,15 @@ class SMILEGeneralizedListener(SMILE_GeneralizedListener, BaseSMILEListener):
         if ctx.unnestCarryList():
             for carry_field in ctx.unnestCarryList().unnestCarryField():
                 # unnestCarryField has two qualifiedName: source AS target
-                source_field = carry_field.qualifiedName(0).getText()  # person.person_id
-                target_field = carry_field.qualifiedName(1).getText()  # address.person_id
+                source_field = carry_field.qualifiedName(0).getText()  # customers.customer_id
+                target_field = carry_field.qualifiedName(1).getText()  # address.customer_id
                 # Extract just the field name from target path
                 target_parts = target_field.split(".")
                 field_name = target_parts[-1] if target_parts else target_field
                 carry_fields.append({
-                    "source": source_field,      # person.person_id
-                    "target": target_field,      # address.person_id
-                    "field_name": field_name     # person_id
+                    "source": source_field,      # customers.customer_id
+                    "target": target_field,      # address.customer_id
+                    "field_name": field_name     # customer_id
                 })
 
         # Parse field list: recursively separate properties and nested objects
@@ -910,7 +909,7 @@ class SMILEGeneralizedListener(SMILE_GeneralizedListener, BaseSMILEListener):
 
     def enterForeignKeyAdd(self, ctx):
         # ADD FOREIGN KEY entity.field REFERENCES table(column)
-        # Supports explicit entity.field syntax: ADD FOREIGN KEY address.person_id REFERENCES person(person_id)
+        # Supports explicit entity.field syntax: ADD FOREIGN KEY address.customer_id REFERENCES customers(customer_id)
         qualified_name = ctx.qualifiedName().getText()
         parts = qualified_name.split(".")
         if len(parts) == 2:
@@ -1074,10 +1073,10 @@ class SMILEGeneralizedListener(SMILE_GeneralizedListener, BaseSMILEListener):
     def enterSplit_gen(self, ctx):
         # New syntax: SPLIT identifier INTO splitPartGen (SEMICOLON splitPartGen)+
         # Vertical partitioning - divides one entity into multiple separate entities
-        # Example: SPLIT person INTO person:person_id, vorname, nachname, age; person_tag:person_id, tags
-        #   Before: person { person_id, vorname, nachname, age, tags[] }
-        #   After:  person { person_id, vorname, nachname, age }
-        #          person_tag { person_id, tags[] }
+        # Example: SPLIT customers INTO customers:customer_id, first_name, last_name, age; customer_tag:customer_id, tags
+        #   Before: customers { customer_id, first_name, last_name, age, tags[] }
+        #   After:  customers { customer_id, first_name, last_name, age }
+        #          customer_tag { customer_id, tags[] }
         source_entity = ctx.identifier().getText()
         split_parts = ctx.splitPartGen() if isinstance(ctx.splitPartGen(), list) else [ctx.splitPartGen()]
 

@@ -1,7 +1,7 @@
 """
 SMILE Full Flow Verification - Two-Layer Validation
 
-Tests all 40 migration configurations (8 Person + 8 Northwind Same-Model + 24 Northwind Cross-Model)
+Tests all 32 Northwind migration configurations (8 Same-Model + 24 Cross-Model)
 with a unified validation framework.
 
 Pipeline:

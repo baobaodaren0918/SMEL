@@ -66,7 +66,7 @@ class PostgreSQLAdapter(DatabaseAdapter):
         Parse SQL DDL content and return Database object.
 
         Example Input (PostgreSQL DDL):
-            CREATE TABLE person (
+            CREATE TABLE customers (
                 id SERIAL PRIMARY KEY,
                 name VARCHAR(100) NOT NULL,
                 email VARCHAR(255)
@@ -75,7 +75,7 @@ class PostgreSQLAdapter(DatabaseAdapter):
             CREATE TABLE address (
                 id SERIAL PRIMARY KEY,
                 street VARCHAR(200),
-                person_id INTEGER REFERENCES person(id)
+                customer_id INTEGER REFERENCES customers(id)
             );
 
         Example Output (Unified Meta Schema):
@@ -83,8 +83,8 @@ class PostgreSQLAdapter(DatabaseAdapter):
                 db_name="mydb",
                 db_type=DatabaseType.RELATIONAL,
                 entity_types={
-                    "person": EntityType(
-                        object_name=["person"],
+                    "customers": EntityType(
+                        object_name=["customers"],
                         properties=[
                             Property("id", INTEGER, is_key=True),
                             Property("name", STRING(100)),
@@ -94,7 +94,7 @@ class PostgreSQLAdapter(DatabaseAdapter):
                     "address": EntityType(
                         object_name=["address"],
                         properties=[...],
-                        relationships=[Reference("person_id" -> "person")]
+                        relationships=[Reference("customer_id" -> "customers")]
                     )
                 }
             )
@@ -147,8 +147,8 @@ class PostgreSQLAdapter(DatabaseAdapter):
             List of (table_name, table_body) tuples
 
         Example:
-            "CREATE TABLE person (id INT, name VARCHAR);"
-            -> [("person", "id INT, name VARCHAR")]
+            "CREATE TABLE customers (id INT, name VARCHAR);"
+            -> [("customers", "id INT, name VARCHAR")]
         """
         pattern = r'CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:\w+\.)?(\w+)\s*\((.*?)\);'
         matches = re.findall(pattern, ddl, re.IGNORECASE | re.DOTALL)
@@ -159,11 +159,11 @@ class PostgreSQLAdapter(DatabaseAdapter):
         Parse a single CREATE TABLE body into EntityType.
 
         Example:
-            table_name = "person"
+            table_name = "customers"
             table_body = "id SERIAL PRIMARY KEY, name VARCHAR(100) NOT NULL"
 
             -> EntityType(
-                 object_name=["person"],
+                 object_name=["customers"],
                  properties=[
                      Property("id", INTEGER, is_key=True),
                      Property("name", STRING(100), is_optional=False)
@@ -206,12 +206,12 @@ class PostgreSQLAdapter(DatabaseAdapter):
                     entity.add_constraint(constraint)
 
                 # Store REFERENCES for later resolution
-                # e.g., "person_id INTEGER REFERENCES person(id)"
+                # e.g., "customer_id INTEGER REFERENCES customers(id)"
                 if ref_info:
                     self._pending_references.append((entity.name, ref_info[0], ref_info[1]))
 
         # Parse table-level constraints
-        # e.g., "PRIMARY KEY (person_id, knows_person_id)"
+        # e.g., "PRIMARY KEY (customer_id, knows_customer_id)"
         for constraint_def in table_level_constraints:
             upper = constraint_def.upper().strip()
             if upper.startswith('PRIMARY KEY') and not entity.get_primary_key():
@@ -290,11 +290,11 @@ class PostgreSQLAdapter(DatabaseAdapter):
         Parse a single column definition.
 
         Example Input:
-            "person_id INTEGER NOT NULL REFERENCES person(id)"
+            "customer_id INTEGER NOT NULL REFERENCES customers(id)"
 
         Example Output:
-            Property("person_id", INTEGER, is_key=False, is_optional=False)
-            ref_info = ("person_id", "person")
+            Property("customer_id", INTEGER, is_key=False, is_optional=False)
+            ref_info = ("customer_id", "customers")
 
         Returns:
             (Property, ref_info) where ref_info is (fk_column, target_table) or None
@@ -310,10 +310,10 @@ class PostgreSQLAdapter(DatabaseAdapter):
         if not match:
             return None, None
 
-        col_name = match.group(1).lower()          # "person_id"
+        col_name = match.group(1).lower()          # "customer_id"
         col_type = match.group(2).upper()          # "INTEGER"
         type_params = match.group(3)               # "100" for VARCHAR(100)
-        constraints = match.group(4) or ""         # "NOT NULL REFERENCES person(id)"
+        constraints = match.group(4) or ""         # "NOT NULL REFERENCES customers(id)"
 
         # Determine data type
         data_type = self._parse_data_type(col_type, type_params)
@@ -382,8 +382,8 @@ class PostgreSQLAdapter(DatabaseAdapter):
             we ensure the target table exists.
 
         Example:
-            _pending_references = [("address", "person_id", "person")]
-            -> address entity gets Reference("person_id" -> "person")
+            _pending_references = [("address", "customer_id", "customers")]
+            -> address entity gets Reference("customer_id" -> "customers")
         """
         for entity_name, ref_name, target_name in self._pending_references:
             entity = self.database.get_entity_type(entity_name)
@@ -474,7 +474,7 @@ class PostgreSQLAdapter(DatabaseAdapter):
         Export Unified Meta Schema to PostgreSQL DDL format.
 
         Example Output:
-            TABLE person (
+            TABLE customers (
                 id SERIAL PRIMARY KEY,
                 name VARCHAR(100) NOT NULL
             );
@@ -482,7 +482,7 @@ class PostgreSQLAdapter(DatabaseAdapter):
             TABLE address (
                 id SERIAL PRIMARY KEY,
                 street VARCHAR(200),
-                person_id INTEGER NOT NULL REFERENCES person(id)
+                customer_id INTEGER NOT NULL REFERENCES customers(id)
             );
 
         Note: Tables are sorted by dependency order (referenced tables first)
@@ -516,8 +516,8 @@ class PostgreSQLAdapter(DatabaseAdapter):
         Uses topological sort to handle FK dependencies.
 
         Example:
-            address -> person (address has FK to person)
-            Result: [person, address] (person first)
+            address -> customers (address has FK to customers)
+            Result: [customers, address] (customers first)
         """
         entities = list(database.entity_types.values())
 
@@ -557,7 +557,7 @@ class PostgreSQLAdapter(DatabaseAdapter):
         Export a single entity to CREATE TABLE DDL format.
 
         Example Output:
-            TABLE person (
+            TABLE customers (
                 id SERIAL PRIMARY KEY,
                 name VARCHAR(100) NOT NULL,
                 email VARCHAR(255)
@@ -597,7 +597,7 @@ class PostgreSQLAdapter(DatabaseAdapter):
             columns.append(f"    {col_def}")
 
         # Add composite PRIMARY KEY constraint if needed
-        # e.g., PRIMARY KEY (person_id, knows_person_id)
+        # e.g., PRIMARY KEY (customer_id, knows_customer_id)
         if is_composite_pk:
             pk_constraint_str = f"    PRIMARY KEY ({', '.join(pk_columns)})"
             columns.append(pk_constraint_str)
@@ -616,8 +616,8 @@ class PostgreSQLAdapter(DatabaseAdapter):
             Single PK:    "id SERIAL PRIMARY KEY"
             Required:     "name VARCHAR(100) NOT NULL"
             Optional:     "email VARCHAR(255)"
-            FK:           "person_id INTEGER NOT NULL REFERENCES person(id)"
-            Composite PK: "person_id VARCHAR(255) NOT NULL" (PK constraint is separate)
+            FK:           "customer_id INTEGER NOT NULL REFERENCES customers(id)"
+            Composite PK: "customer_id VARCHAR(255) NOT NULL" (PK constraint is separate)
         """
         parts = [attr.name]
 
@@ -693,8 +693,8 @@ class PostgreSQLAdapter(DatabaseAdapter):
         Used for REFERENCES clause: REFERENCES target_entity(pk_column)
 
         Example:
-            entity_name = "person"
-            -> Looks up person's PK -> "_id" or "id"
+            entity_name = "customers"
+            -> Looks up customers's PK -> "_id" or "id"
             -> Returns "_id"
         """
         # Try to get PK from database metadata
@@ -740,7 +740,7 @@ class PostgreSQLAdapter(DatabaseAdapter):
 # -------------------------------------------------------
 #
 # ddl_content = '''
-# CREATE TABLE person (
+# CREATE TABLE customers (
 #     id SERIAL PRIMARY KEY,
 #     name VARCHAR(100) NOT NULL,
 #     email VARCHAR(255)
@@ -750,7 +750,7 @@ class PostgreSQLAdapter(DatabaseAdapter):
 #     id SERIAL PRIMARY KEY,
 #     street VARCHAR(200),
 #     city VARCHAR(100),
-#     person_id INTEGER NOT NULL REFERENCES person(id)
+#     customer_id INTEGER NOT NULL REFERENCES customers(id)
 # );
 # '''
 #
@@ -761,8 +761,8 @@ class PostgreSQLAdapter(DatabaseAdapter):
 #   database.db_name = "mydb"
 #   database.db_type = DatabaseType.RELATIONAL
 #   database.entity_types = {
-#       "person": EntityType(
-#           object_name=["person"],
+#       "customers": EntityType(
+#           object_name=["customers"],
 #           properties=[
 #               Property("id", INTEGER, is_key=True),
 #               Property("name", STRING(100), is_optional=False),
@@ -776,9 +776,9 @@ class PostgreSQLAdapter(DatabaseAdapter):
 #               Property("id", INTEGER, is_key=True),
 #               Property("street", STRING(200)),
 #               Property("city", STRING(100)),
-#               Property("person_id", INTEGER, is_optional=False)
+#               Property("customer_id", INTEGER, is_optional=False)
 #           ],
-#           relationships=[Reference("person_id" -> "person")]
+#           relationships=[Reference("customer_id" -> "customers")]
 #       )
 #   }
 #
@@ -796,7 +796,7 @@ class PostgreSQLAdapter(DatabaseAdapter):
 # print(sql_ddl)
 #
 # Output:
-#   TABLE person (
+#   TABLE customers (
 #       id SERIAL PRIMARY KEY,
 #       name VARCHAR(100) NOT NULL,
 #       email VARCHAR(255)
@@ -806,7 +806,7 @@ class PostgreSQLAdapter(DatabaseAdapter):
 #       id SERIAL PRIMARY KEY,
 #       street VARCHAR(200),
 #       city VARCHAR(100),
-#       person_id INTEGER NOT NULL REFERENCES person(id)
+#       customer_id INTEGER NOT NULL REFERENCES customers(id)
 #   );
 #
 #
@@ -819,24 +819,24 @@ class PostgreSQLAdapter(DatabaseAdapter):
 # Example 5: Composite Primary Key (M:N join table from FLATTEN without GENERATE KEY)
 # ------------------------------------------------------------------------------------
 #
-# After FLATTEN person.knows[] AS person_knows (no GENERATE KEY -> composite PK):
+# After FLATTEN customers.knows[] AS customer_knows (no GENERATE KEY -> composite PK):
 #
-# person_knows = EntityType(
-#     object_name=["person_knows"],
+# customer_knows = EntityType(
+#     object_name=["customer_knows"],
 #     properties=[
-#         Property("person_id", STRING, is_key=True),
-#         Property("knows_person_id", STRING, is_key=True)
+#         Property("customer_id", STRING, is_key=True),
+#         Property("knows_customer_id", STRING, is_key=True)
 #     ],
 #     constraints=[UniqueConstraint(
 #         is_primary_key=True,
-#         unique_properties=[person_id, knows_person_id]  # Composite!
+#         unique_properties=[customer_id, knows_customer_id]  # Composite!
 #     )]
 # )
 #
 # Export result:
-#   TABLE person_knows (
-#       person_id VARCHAR(255) NOT NULL REFERENCES person(_id),
-#       knows_person_id VARCHAR(255) NOT NULL REFERENCES person(_id),
-#       PRIMARY KEY (person_id, knows_person_id)
+#   TABLE customer_knows (
+#       customer_id VARCHAR(255) NOT NULL REFERENCES customers(_id),
+#       knows_customer_id VARCHAR(255) NOT NULL REFERENCES customers(_id),
+#       PRIMARY KEY (customer_id, knows_customer_id)
 #   );
 #

@@ -1,6 +1,6 @@
 -- SMILE Northwind: PostgreSQL -> MongoDB (Specific Operations Version)
--- Normalized Tables (3NF) -> Orders Document (multi-level nested objects + arrays)
--- Direction: Normalized (3NF) -> Denormalized (Embedded)
+-- 8 Normalized Tables (3NF) -> 2 Document Collections (orders + customers, max L3 nesting)
+-- Direction: Normalized (3NF) -> Partial Denormalization (2 roots + ObjectId ref)
 --
 -- Operation Semantics:
 --   NEST:      Embed separate table into parent as nested object (reverse of UNNEST)
@@ -23,149 +23,77 @@ USING adapted_northwind_schema VERSION 1
 -- order_details (order_id [PK,FK->orders], product_id [PK,FK->products], unit_price, quantity, discount)
 
 -- ============================================
--- Target: MongoDB Orders Document
+-- Target: MongoDB 2 collections, max depth 3
 -- ============================================
--- {
---   _id: "ORD001",
---   order_date, required_date, shipped_date, freight, ship_name,
---   ship_destination: { ship_address, ship_city, ship_region, ship_postal_code, ship_country },
---   customer: { company_name, contact_name, contact_title, phone, fax,
---               address: { street, city, region, postal_code, country } },
---   employee: { last_name, first_name, title, birth_date, hire_date, phone, notes, reports_to,
---               address: { street, city, region, postal_code, country } },
---   shipper: { company_name, phone },
---   details: [
---     { unit_price, quantity, discount,
---       product: { product_name, unit_price, units_in_stock, discontinued, quantity_per_unit,
---                  category: { category_name, description },
---                  supplier: { company_name, contact_name, contact_title, phone, fax,
---                              address: { street, city, region, postal_code, country } } } }
---   ]
--- }
+-- Root 1: orders { _id, order_date, ..., customer_id (REF -> customers._id),
+--   ship_destination{...}, employee{..., address{...}}, shipper{...},
+--   details[]{ ..., product{..., category{...}, supplier{... flat address ...}} } }
+-- Root 2: customers { _id, company_name, address{...} }
 
 -- ============================================
--- Step 1: UNFLATTEN address fields (3 entities have flat address -> sub-objects)
+-- Step 1: UNFLATTEN address fields where the target schema has nested address
+--   - customers (Root 2: address is L1 sub-object)
+--   - employees (will be embedded in orders.employee, address at L2)
+--   - orders ship_* fields -> ship_destination L1 sub-object
+-- NOT UNFLATTEN suppliers (target keeps supplier address flat at L3 to cap depth)
 -- ============================================
--- Reverse of: FLATTEN suppliers.address / customers.address / employees.address
-UNFLATTEN suppliers:street, city, region, postal_code, country AS address
 UNFLATTEN customers:street, city, region, postal_code, country AS address
 UNFLATTEN employees:street, city, region, postal_code, country AS address
 UNFLATTEN orders:ship_address, ship_city, ship_region, ship_postal_code, ship_country AS ship_destination
--- Result:
--- suppliers: { supplier_id, company_name, contact_name, contact_title, phone, fax, address{street, city, region, postal_code, country} }
--- customers: { customer_id, company_name, contact_name, contact_title, phone, fax, address{street, city, region, postal_code, country} }
--- employees: { employee_id, last_name, first_name, title, birth_date, hire_date, phone, notes, reports_to, address{street, city, region, postal_code, country} }
 
 -- ============================================
--- Step 2: NEST categories into products (Level 3 -- deepest embedding first)
+-- Step 2: NEST categories into products (L3 leaf)
 -- ============================================
--- Reverse of: UNNEST products.category:category_name, description AS categories
 NEST categories:category_name, description IN products.category WHERE products.category_id = categories.category_id
 DELETE_ENTITY categories
--- Result:
--- products: { product_id, product_name, unit_price, units_in_stock, discontinued, quantity_per_unit, supplier_id,
---             category{category_name, description} }
 
 -- ============================================
--- Step 3: NEST suppliers into products (Level 3 -- with nested address)
+-- Step 3: NEST suppliers into products (L3 leaf, supplier keeps flat address)
 -- ============================================
--- Reverse of: UNNEST products.supplier:company_name, contact_name, contact_title, phone, fax, address{...} AS suppliers
-NEST suppliers:company_name, contact_name, contact_title, phone, fax, address{street, city, region, postal_code, country} IN products.supplier WHERE products.supplier_id = suppliers.supplier_id
+NEST suppliers:company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country IN products.supplier WHERE products.supplier_id = suppliers.supplier_id
 DELETE_ENTITY suppliers
--- Result:
--- products: { product_id, product_name, unit_price, units_in_stock, discontinued, quantity_per_unit,
---             category{category_name, description},
---             supplier{company_name, contact_name, contact_title, phone, fax, address{street, city, region, postal_code, country}} }
 
 -- ============================================
--- Step 4: NEST products into order_details (Level 2)
+-- Step 4: NEST products into order_details (L2)
 -- ============================================
--- Reverse of: UNNEST order_details.product:product_name, unit_price, ... AS products
-NEST products:product_name, unit_price, units_in_stock, discontinued, quantity_per_unit, category{category_name, description}, supplier{company_name, contact_name, contact_title, phone, fax, address{street, city, region, postal_code, country}} IN order_details.product WHERE order_details.product_id = products.product_id
+NEST products:product_name, unit_price, units_in_stock, discontinued, quantity_per_unit, category{category_name, description}, supplier{company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country} IN order_details.product WHERE order_details.product_id = products.product_id
 DELETE_ENTITY products
--- Result:
--- order_details: { order_id, unit_price, quantity, discount,
---                  product{product_name, unit_price, units_in_stock, discontinued, quantity_per_unit,
---                          category{category_name, description},
---                          supplier{company_name, contact_name, contact_title, phone, fax, address{...}}} }
 
 -- ============================================
--- Step 5: NEST shippers into orders (Level 1)
+-- Step 5: NEST shippers into orders (L1)
 -- ============================================
--- Reverse of: UNNEST orders.shipper:company_name, phone AS shippers
 NEST shippers:company_name, phone IN orders.shipper WHERE orders.shipper_id = shippers.shipper_id
 DELETE_ENTITY shippers
--- Result:
--- orders: { order_id, order_date, required_date, shipped_date, freight, ship_name,
---   ship_destination: { ship_address, ship_city, ship_region, ship_postal_code, ship_country },
---           customer_id, employee_id, shipper{company_name, phone} }
 
 -- ============================================
--- Step 6: NEST employees into orders (Level 1 -- with address + self-ref)
+-- Step 6: NEST employees into orders (L1, with nested address at L2)
 -- ============================================
--- Reverse of: UNNEST orders.employee:last_name, first_name, ... AS employees
 NEST employees:last_name, first_name, title, birth_date, hire_date, phone, notes, reports_to, address{street, city, region, postal_code, country} IN orders.employee WHERE orders.employee_id = employees.employee_id
 DELETE_ENTITY employees
--- Result:
--- orders: { order_id, order_date, required_date, shipped_date, freight, ship_name,
---   ship_destination: { ship_address, ship_city, ship_region, ship_postal_code, ship_country },
---           customer_id, shipper{...},
---           employee{last_name, first_name, title, birth_date, hire_date, phone, notes, reports_to, address{...}} }
 
 -- ============================================
--- Step 7: NEST customers into orders (Level 1 -- with address)
+-- Step 7: NEST order_details into orders.details[] (L1 array)
 -- ============================================
--- Reverse of: UNNEST orders.customer:company_name, contact_name, ... AS customers
-NEST customers:company_name, contact_name, contact_title, phone, fax, address{street, city, region, postal_code, country} IN orders.customer WHERE orders.customer_id = customers.customer_id
-DELETE_ENTITY customers
--- Result:
--- orders: { order_id, order_date, required_date, shipped_date, freight, ship_name,
---   ship_destination: { ship_address, ship_city, ship_region, ship_postal_code, ship_country },
---           shipper{...}, employee{...},
---           customer{company_name, contact_name, contact_title, phone, fax, address{street, city, region, postal_code, country}} }
-
--- ============================================
--- Step 8: NEST order_details into orders (Level 1 -- as array)
--- ============================================
--- Reverse of: UNNEST orders.details:unit_price, quantity, discount, product{...} AS order_details
-NEST order_details:unit_price, quantity, discount, product{product_name, unit_price, units_in_stock, discontinued, quantity_per_unit, category{category_name, description}, supplier{company_name, contact_name, contact_title, phone, fax, address{street, city, region, postal_code, country}}} IN orders.details WHERE order_details.order_id = orders.order_id
+NEST order_details:unit_price, quantity, discount, product{product_name, unit_price, units_in_stock, discontinued, quantity_per_unit, category{category_name, description}, supplier{company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country}} IN orders.details WHERE order_details.order_id = orders.order_id
 DELETE_ENTITY order_details
--- Result:
--- orders: { order_id, order_date, required_date, shipped_date, freight, ship_name,
---   ship_destination: { ship_address, ship_city, ship_region, ship_postal_code, ship_country },
---           customer{...}, employee{...}, shipper{...},
---           details[{unit_price, quantity, discount, product{...}}] }
 
 -- ============================================
--- Step 9: Rename PK for MongoDB convention
+-- Step 8: customers stays as Root 2 — promote PK to _id
 -- ============================================
--- Reverse of: RENAME_PROPERTY _id TO order_id IN orders
+RENAME_PROPERTY customer_id TO _id IN customers
+CAST_CONSTRAINT customers._id TO DOCUMENT_ID
+
+-- ============================================
+-- Step 9: orders PK -> _id; orders.customer_id stays as cross-collection reference
+-- ============================================
 RENAME_PROPERTY order_id TO _id IN orders
 CAST_CONSTRAINT orders._id TO DOCUMENT_ID
--- Final Result:
--- orders: {
---   _id,
---   order_date, required_date, shipped_date, freight, ship_name,
---   ship_destination: { ship_address, ship_city, ship_region, ship_postal_code, ship_country },
---   customer: { company_name, contact_name, contact_title, phone, fax,
---               address: { street, city, region, postal_code, country } },
---   employee: { last_name, first_name, title, birth_date, hire_date, phone, notes, reports_to,
---               address: { street, city, region, postal_code, country } },
---   shipper: { company_name, phone },
---   details: [
---     { unit_price, quantity, discount,
---       product: { product_name, unit_price, units_in_stock, discontinued, quantity_per_unit,
---                  category: { category_name, description },
---                  supplier: { company_name, contact_name, contact_title, phone, fax,
---                              address: { street, city, region, postal_code, country } } } }
---   ]
--- }
+DELETE_FOREIGN_KEY orders.customer_id
 
 -- ============================================
--- Operation Summary (13 steps):
---   UNFLATTEN: 4       (address sub-objects for suppliers, customers, employees + ship_destination for orders)
---   NEST: 7            (categories->products, suppliers->products, products->order_details,
---                        shippers->orders, employees->orders, customers->orders, order_details->orders)
---   RENAME_PROPERTY: 1 (order_id -> _id)
---   CAST_CONSTRAINT: 1  (orders._id -> DOCUMENT_ID)
+-- Final Result (2 collections, max L3):
+-- Root 1: orders { _id, order_date, required_date, shipped_date, freight, ship_name, customer_id (string ref),
+--   ship_destination{ship_address, ...}, employee{..., address{...}}, shipper{...},
+--   details[]{ unit_price, quantity, discount, product{name, ..., category{...}, supplier{... flat address ...}} } }
+-- Root 2: customers { _id, company_name, contact_name, contact_title, phone, fax, address{...} }
 -- ============================================

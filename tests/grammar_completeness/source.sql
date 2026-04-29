@@ -1,4 +1,4 @@
--- Synthetic source for grammar-completeness test (NOT a real Northwind / Person dataset).
+-- Synthetic source for grammar-completeness test (NOT a real Northwind / customers dataset).
 -- Designed to give all 9 currently-unused SMILE ops a meaningful surface:
 --   ADD_UNIQUE_KEY     → on customers.email
 --   DELETE_UNIQUE_KEY  → undoes the above

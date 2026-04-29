@@ -23,43 +23,48 @@ def _normalize_to_paths(meta: Dict[str, Any]) -> Dict[str, Any]:
     Normalize a flat-named meta dict to use path-based entity names.
 
     Migration results use flat names like 'customer', 'address' with embedded
-    relationships linking them. MongoDB adapter uses path names like
-    'orders.customer', 'orders.customer.address'.
+    relationships linking them. The MongoDB adapter, after parsing a native
+    schema, uses path names like 'orders.customer', 'orders.customer.address'.
 
-    This function:
-    1. Finds the root entity (document kind, not referenced as embedded target)
-    2. Walks the embedded tree recursively
-    3. Creates path-named entries, duplicating shared entities as needed
+    Handles both Mongo schema shapes uniformly:
+
+    * **Single-root** — one document at the top, all other entities embedded
+      beneath it. Most cross-model migrations into Document produce this.
+    * **Multi-root** — several independent collections (the multi-root
+      northwind schema has ``orders`` and ``customers`` as siblings).
+
+    The algorithm is identical in both cases: any entity that is not the
+    embedded target of another entity is treated as a root, and the embedded
+    subtree under each root is rewritten to dotted-path names. The root set
+    is the input — single-root just happens to produce a singleton list.
     """
     entities = {k: v for k, v in meta.items() if not k.startswith("__")}
     if not entities:
         return meta
 
-    # Find root entity: has entity_kind 'document' and is not an embedded target
     embedded_targets = set()
     for e in entities.values():
         for emb in e.get("embedded", []):
             embedded_targets.add(emb.get("target", ""))
 
-    roots = []
-    for name, e in entities.items():
-        if name not in embedded_targets:
-            roots.append(name)
-
-    if len(roots) != 1:
-        # Can't normalize without a single root - return as-is
+    roots = [name for name in entities if name not in embedded_targets]
+    if not roots:
+        # Fully cyclic / orphan-free graph — nothing to anchor on. Leave as-is
+        # rather than guess; the caller's diff will surface the problem.
         return meta
 
-    root_name = roots[0]
-    result = {}
+    result: Dict[str, Any] = {}
 
-    # Copy special keys
+    # Preserve any meta-level scratch keys (e.g. ``__db_name``) untouched.
     for k, v in meta.items():
         if k.startswith("__"):
             result[k] = v
 
-    # Walk embedded tree and build path-based entries
-    _walk_embedded(entities, root_name, root_name, result)
+    # Walk each root's subtree independently. ``_walk_embedded`` writes into
+    # ``result`` in-place, keyed by dotted path, so multiple roots contribute
+    # disjoint key ranges.
+    for root_name in roots:
+        _walk_embedded(entities, root_name, root_name, result)
 
     return result
 
@@ -118,7 +123,7 @@ def _resolve_target_file(config_key: str, target_type: str):
     Resolve the target native file for validation.
 
     Priority:
-    1. MIGRATION_TARGET_FILES: per-direction target (Person, same-model)
+    1. MIGRATION_TARGET_FILES: per-direction target (customers, same-model)
     2. TARGET_SCHEMA_FILES: shared target by type — *only* for Northwind
        cross-model configs, since the shared Northwind file is meaningful
        only when the source schema is also Northwind. Other configs

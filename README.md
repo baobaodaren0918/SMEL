@@ -92,7 +92,7 @@ python -m pytest tests/test_full_flow.py -k r2d -q
 - Off-diagonal = **cross-model migration**
 - Each direction has both **Specific** (`.smile`) and **Generalized** (`.smile_gen`) grammar variants = **32 Northwind configs**
 
-In addition to the 32 Northwind configs, the registry includes 8 **Person** mini-dataset configs (used as a smaller smoke-test surface) and 1 **grammar-completeness** script that exercises the operations not naturally hit by the Northwind matrix — **41 configs in total**.
+In addition to the 32 Northwind configs, the registry includes 1 **grammar-completeness** script that exercises the operations not naturally hit by the Northwind matrix — **33 configs in total**.
 
 ### Test Dataset: Northwind
 
@@ -132,13 +132,12 @@ SMILE/
 ├── tests/
 │   ├── northwind_*.sql/json/cypher/cql  # 4 source schemas (Northwind, all 4 paradigms)
 │   ├── northwind_*_target.*             # Same-model evolution targets (V2)
-│   ├── person_*                         # Person mini-dataset (8 configs)
-│   ├── specific/                        # 20 Specific scripts (.smile)   — 16 Northwind + 4 Person
-│   ├── generalized/                     # 20 Generalized scripts (.smile_gen)
+│   ├── specific/                        # 16 Specific scripts (.smile)
+│   ├── generalized/                     # 16 Generalized scripts (.smile_gen)
 │   ├── grammar_completeness/            # source.sql + test_all_unused.smile
 │   │                                    #   (exercises the 9 ops not hit by the matrix)
 │   ├── test_full_flow.py                # 32 Northwind migration tests
-│   └── test_parser.py                   # 41 parser tests
+│   └── test_parser.py                   # 33 parser tests
 ├── core.py                            # SchemaTransformer (30 handler methods covering 36 surface ops)
 │                                      #   plus run_load / run_apply / run_export pipeline helpers
 ├── smile_listeners.py                  # ANTLR listeners (Specific + Generalized)
@@ -147,7 +146,7 @@ SMILE/
 ├── schema_inspector.py                # Reverse-engineer any source DDL → Meta V1 (web UI only)
 ├── schema_diff.py                     # Meta V1 vs Meta V2 → OpRecord list (used by script_renderer)
 ├── script_renderer.py                 # OpRecord list → Specific or Generalized SMILE script
-├── config.py                          # Migration registry (41 configs: 32 Northwind + 8 Person + 1 grammar-completeness)
+├── config.py                          # Migration registry (33 configs: 32 Northwind + 1 grammar-completeness)
 ├── validate_meta.py                   # Layer 1: Meta V2 vs expected schema
 ├── validate_export.py                 # Layer 2: Export round-trip verification
 ├── main.py                            # CLI entry point
@@ -292,8 +291,8 @@ Two functionally equivalent grammars — same abstract syntax, different concret
 
 | Grammar | Extension | Keywords | Example |
 |---------|-----------|----------|---------|
-| **Specific** | `.smile` | 38 dedicated | `ADD_PROPERTY name TO person WITH TYPE String` |
-| **Generalized** | `.smile_gen` | 27 composable | `ADD PROPERTY name TO person WITH TYPE String` |
+| **Specific** | `.smile` | 38 dedicated | `ADD_PROPERTY email TO customers WITH TYPE String` |
+| **Generalized** | `.smile_gen` | 27 composable | `ADD PROPERTY email TO customers WITH TYPE String` |
 
 The Generalized grammar reduces keyword count by ~29% through verb+object composition (6 verbs × 5 object types + modifiers). Structural operations (`NEST`, `UNNEST`, `FLATTEN`, `UNFLATTEN`, `WIND`, `UNWIND`, `MERGE`, `SPLIT`, `TRANSFORM`) are identical in both variants.
 

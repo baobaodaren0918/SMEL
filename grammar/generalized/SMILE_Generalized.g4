@@ -12,24 +12,24 @@
  * Design: from André Conrad
  *
  * Example SMILE migration script:
- *   MIGRATION person_migration:1.0
+ *   MIGRATION customer_migration:1.0
  *   FROM DOCUMENT TO RELATIONAL
- *   USING person_schema VERSION 1.0
+ *   USING customer_schema VERSION 1.0
  *
  * Example SMILE evolution script:
- *   EVOLUTION person_evolution:1.0
+ *   EVOLUTION customer_evolution:1.0
  *   FROM DOCUMENT TO DOCUMENT
- *   USING person_schema VERSION 1.0 TO 2.0
+ *   USING customer_schema VERSION 1.0 TO 2.0
  *
  *   -- Extract nested object to table
- *   FLATTEN person.address AS address
+ *   FLATTEN customers.address AS address
  *   ADD PRIMARY KEY address_id TO address
- *   ADD FOREIGN KEY person_id TO address REFERENCES person(id)
+ *   ADD FOREIGN KEY customer_id TO address REFERENCES customers(id)
  *
  *   -- Expand array to table
- *   UNWIND person.tags[] INTO person_tag
- *   ADD PRIMARY KEY id TO person_tag
- *   ADD FOREIGN KEY person_id TO person_tag REFERENCES person(id)
+ *   UNWIND customers.tags[] INTO customer_tag
+ *   ADD PRIMARY KEY id TO customer_tag
+ *   ADD FOREIGN KEY customer_id TO customer_tag REFERENCES customers(id)
  */
 grammar SMILE_Generalized;
 
@@ -87,7 +87,7 @@ notNullClause: NOT_NULL;
 
 // Add foreign key: ADD FOREIGN KEY entity.field REFERENCES target_table(target_column)
 // SQL-style foreign key constraint syntax with explicit entity.field
-// Example: ADD FOREIGN KEY address.person_id REFERENCES person(person_id)
+// Example: ADD FOREIGN KEY address.customer_id REFERENCES customers(customer_id)
 // Example: ADD FOREIGN KEY order.customer_id REFERENCES customer(id) WITH CARDINALITY ONE_TO_MANY
 foreignKeyAdd: FOREIGN KEY qualifiedName REFERENCES identifier LPAREN identifier RPAREN constraintClause*;
 constraintClause: withCardinalityClause | usingKeyClause | whereClause;
@@ -116,7 +116,7 @@ keyAdd: keyType? KEY keyColumns (AS dataType)? (TO identifier)? keyClause*;
 // Key columns - qualifiedName (entity.field) or parenthesized list for composite keys
 keyColumns: qualifiedName | LPAREN identifierList RPAREN;
 
-// Add label (Graph): ADD LABEL Employee TO Person
+// Add label (Graph): ADD LABEL Employee TO customers
 labelAdd: LABEL identifier TO identifier;
 
 // ============================================================================
@@ -151,7 +151,7 @@ entityDelete: ENTITY identifier;
 // Delete key: DELETE PRIMARY KEY id FROM Customer
 keyDelete: keyType KEY keyColumns (FROM identifier)?;
 
-// Delete label: DELETE LABEL Employee FROM Person
+// Delete label: DELETE LABEL Employee FROM customers
 labelDelete: LABEL identifier FROM identifier;
 
 // ============================================================================
@@ -195,28 +195,28 @@ identifierList: identifier (COMMA identifier)*;
 // FLATTEN - Flatten nested object fields into parent table (reduce depth by 1)
 // Reference: André Conrad - "Die Operation FLATTEN erstellt aus dem Objekt in der Spalte
 //            jeweils eine Spalte für jedes Attribut dieses Objekts"
-// Example: FLATTEN person.name
-//   Before: person { name: { vorname, nachname }, age }
-//   After:  person { name_vorname, name_nachname, age }
+// Example: FLATTEN customers.address
+//   Before: customers { name: { first_name, last_name }, age }
+//   After:  customers { name_first_name, name_last_name, age }
 flatten_gen: FLATTEN qualifiedName;
 
 // UNFLATTEN - Combine flat fields into nested object (reverse of FLATTEN)
-// Example: UNFLATTEN person:vorname, nachname AS name
-//   Before: person { vorname, nachname, age }
-//   After:  person { name: { vorname, nachname }, age }
+// Example: UNFLATTEN customers:first_name, last_name AS name
+//   Before: customers { first_name, last_name, age }
+//   After:  customers { name: { first_name, last_name }, age }
 unflatten_gen: UNFLATTEN identifier COLON identifierList AS identifier;
 
 // UNNEST - Extract nested object to separate table (normalization)
-// Example: UNNEST person.address:street,city AS address WITH person.person_id TO address.person_id
+// Example: UNNEST customers.address:street,city AS address WITH customers.customer_id TO address.customer_id
 // Example with multiple carry fields:
-//   UNNEST person.employment:position AS employment
-//       WITH person.person_id TO employment.person_id, person.dept_id TO employment.dept_id
+//   UNNEST customers.employment:position AS employment
+//       WITH customers.customer_id TO employment.customer_id, customers.dept_id TO employment.dept_id
 //   - 'street,city' are properties to extract
 //   - WITH clause: copy fields from source to new table (can carry multiple fields)
 //   - WITH is optional, for cases where no parent fields need to be copied
-//   Before: person { person_id, address: { street, city } }
-//   After:  person { person_id }
-//           address { person_id, street, city }
+//   Before: customers { customer_id, address: { street, city } }
+//   After:  customers { customer_id }
+//           address { customer_id, street, city }
 // Note: Use separate ADD KEY, ADD FOREIGN KEY for constraints
 unnest_gen: UNNEST qualifiedName COLON unnestFieldList AS identifier (WITH unnestCarryList)?;
 
@@ -235,21 +235,21 @@ unnestField: identifier                                    # SimpleField
 // UNWIND - Expand array field into multiple rows
 // Reference: André Conrad - array expansion operation
 // Supports two modes:
-//   1. Expand in place: UNWIND person_tag.tags (expands array within existing table)
-//   2. Create new table: UNWIND person.tags[] INTO person_tag (legacy, creates new table)
+//   1. Expand in place: UNWIND customer_tag.tags (expands array within existing table)
+//   2. Create new table: UNWIND customers.tags[] INTO customer_tag (legacy, creates new table)
 // Note: Use separate ADD KEY, ADD FOREIGN KEY, RENAME PROPERTY for constraints
 unwind_gen: UNWIND qualifiedName (INTO identifier)?;
 
 // WIND - Convert scalar property back to array (reverse of UNWIND)
-// Syntax: WIND person_tag.tags
+// Syntax: WIND customer_tag.tags
 // Cross-entity movement is handled by MERGE, not WIND.
 wind_gen: WIND qualifiedName;
 
 // NEST - Merge separate table into embedded document (PostgreSQL -> MongoDB)
-// Example: NEST address:street,city IN person.address WHERE address.person_id = person.person_id
+// Example: NEST address:street,city IN customers.address WHERE address.customer_id = customers.customer_id
 //   - 'address' is source entity
 //   - ':street,city' are properties to embed
-//   - 'IN person.address' specifies target (person entity, address field)
+//   - 'IN customers.address' specifies target (customers entity, address field)
 //   - WHERE clause specifies join condition
 // Note: source entity is not removed automatically; use DELETE ENTITY explicitly when desired.
 nest_gen: NEST identifier COLON unnestFieldList IN qualifiedName WHERE condition;
@@ -259,15 +259,15 @@ nest_gen: NEST identifier COLON unnestFieldList IN qualifiedName WHERE condition
 // ============================================================================
 
 // COPY: Duplicate a property or entity
-// Example: COPY PROPERTY email FROM person TO employee
-// Example: COPY ENTITY person AS employee
-// Example: COPY ENTITY works_at AS employed_at FROM person TO company  (copy EDGE with explicit endpoints)
+// Example: COPY PROPERTY email FROM customers TO employee
+// Example: COPY ENTITY customers AS employee
+// Example: COPY ENTITY works_at AS employed_at FROM customers TO company  (copy EDGE with explicit endpoints)
 copy_gen: COPY (entityCopy | propertyCopy);
 propertyCopy: PROPERTY identifier FROM identifier TO identifier;
 entityCopy: ENTITY identifier AS identifier (FROM identifier TO identifier)?;
 
 // MOVE: Relocate a property to another entity (removes original)
-// Example: MOVE PROPERTY email FROM person TO employee
+// Example: MOVE PROPERTY email FROM customers TO employee
 move_gen: MOVE PROPERTY identifier FROM identifier TO identifier;
 
 // MERGE: Combine two entities into one new entity
@@ -276,11 +276,11 @@ merge_gen: MERGE identifier COMMA identifier INTO identifier (AS identifier)?;
 
 // SPLIT: Divide one entity into multiple separate entities (vertical partitioning)
 // Reference: André Conrad - "SPLIT Person into Person:id, firstname, lastname AND knows:id, knows"
-// Example: SPLIT person INTO person:person_id, vorname, nachname, age; person_tag:person_id, tags
-//   Before: person { person_id, vorname, nachname, age, tags[] }
-//   After:  person { person_id, vorname, nachname, age }
-//          person_tag { person_id, tags[] }
-// Note: Fields can be duplicated across parts (e.g., person_id in both parts)
+// Example: SPLIT customers INTO customers:customer_id, first_name, last_name, age; customer_tag:customer_id, tags
+//   Before: customers { customer_id, first_name, last_name, age, tags[] }
+//   After:  customers { customer_id, first_name, last_name, age }
+//          customer_tag { customer_id, tags[] }
+// Note: Fields can be duplicated across parts (e.g., customer_id in both parts)
 split_gen: SPLIT identifier INTO splitPartGen (SEMICOLON splitPartGen)+;
 splitPartGen: identifier COLON identifierList;
 
@@ -294,13 +294,13 @@ constraintCast: CONSTRAINT qualifiedName TO constraintKeyType;
 entityCast: ENTITY identifier TO databaseType;
 
 // RECARD: Change the multiplicity/cardinality of a reference
-// Example: RECARD person.address_id TO ONE_TO_MANY
+// Example: RECARD customers.address_id TO ONE_TO_MANY
 recard_gen: RECARD qualifiedName TO cardinalityType;
 
 // TRANSFORM: Transform entity between node and relationship (Graph database)
 // Reference: Hausler et al. - "transform a node with its features into a relationship" / vice versa
-// Example: TRANSFORM works_at INTO RELATIONSHIP FROM person TO company
-// Example: TRANSFORM works_at INTO RELATIONSHIP FROM person TO company WITH CARDINALITY ZERO_TO_MANY
+// Example: TRANSFORM works_at INTO RELATIONSHIP FROM customers TO company
+// Example: TRANSFORM works_at INTO RELATIONSHIP FROM customers TO company WITH CARDINALITY ZERO_TO_MANY
 // Example: TRANSFORM works_at INTO ENTITY
 transform_gen: TRANSFORM identifier INTO transformTarget;
 transformTarget: RELATIONSHIP FROM identifier TO identifier (WITH CARDINALITY cardinalityType)?   # TransformToRelationship

@@ -96,14 +96,8 @@ TARGET_SCHEMA_FILES = {
 
 # Per-migration target schema files for two-layer validation
 # Maps config_key prefix -> {target_type -> native file}
-# Used when a migration direction has its own dedicated target file
-# (e.g. Person D2R target differs from Person R2R target)
+# Used when a migration direction has its own dedicated target file.
 MIGRATION_TARGET_FILES = {
-    # Person mini example
-    "person_d2r":  TESTS_DIR / "person_d2r_target.sql",
-    "person_r2d":  TESTS_DIR / "person_r2d_target.json",
-    "person_r2r":  TESTS_DIR / "person_r2r_target.sql",
-    "person_d2d":  TESTS_DIR / "person_d2d_target.json",
     # Northwind same-model evolution
     "northwind_r2r": TESTS_DIR / "northwind_r2r_target.sql",
     "northwind_d2d": TESTS_DIR / "northwind_d2d_target.json",
@@ -120,71 +114,6 @@ MIGRATION_TARGET_FILES = {
 # wrapper at the bottom of this section enforces the schema.
 
 _RAW_CONFIGS = {
-    # Person: MongoDB -> PostgreSQL (Specific Grammar)
-    "person_d2r_specific": {
-        "source_file": TESTS_DIR / "person_mongodb.json",
-        "smile_file": TESTS_DIR / "specific" / "person_mongo_to_pg_minibeispiel.smile",
-        "source_type": SOURCE_TYPE_DOCUMENT,
-        "target_type": SOURCE_TYPE_RELATIONAL,
-        "display_name": "Person: MongoDB \u2192 PostgreSQL (Specific)",
-    },
-    # Person: MongoDB -> PostgreSQL (Generalized Grammar)
-    "person_d2r_generalized": {
-        "source_file": TESTS_DIR / "person_mongodb.json",
-        "smile_file": TESTS_DIR / "generalized" / "person_mongo_to_pg_minibeispiel.smile_gen",
-        "source_type": SOURCE_TYPE_DOCUMENT,
-        "target_type": SOURCE_TYPE_RELATIONAL,
-        "display_name": "Person: MongoDB \u2192 PostgreSQL (Generalized)",
-    },
-    # Person: PostgreSQL -> MongoDB (Specific Grammar)
-    "person_r2d_specific": {
-        "source_file": TESTS_DIR / "person_postgresql.sql",
-        "smile_file": TESTS_DIR / "specific" / "person_pg_to_mongo_minibeispiel.smile",
-        "source_type": SOURCE_TYPE_RELATIONAL,
-        "target_type": SOURCE_TYPE_DOCUMENT,
-        "display_name": "Person: PostgreSQL \u2192 MongoDB (Specific)",
-    },
-    # Person: PostgreSQL -> MongoDB (Generalized Grammar)
-    "person_r2d_generalized": {
-        "source_file": TESTS_DIR / "person_postgresql.sql",
-        "smile_file": TESTS_DIR / "generalized" / "person_pg_to_mongo_minibeispiel.smile_gen",
-        "source_type": SOURCE_TYPE_RELATIONAL,
-        "target_type": SOURCE_TYPE_DOCUMENT,
-        "display_name": "Person: PostgreSQL \u2192 MongoDB (Generalized)",
-    },
-    # Person: PostgreSQL V1 -> PostgreSQL V2 (Specific Grammar)
-    "person_r2r_specific": {
-        "source_file": TESTS_DIR / "person_postgresql.sql",
-        "smile_file": TESTS_DIR / "specific" / "person_pg1_to_pg2_minibeispiel.smile",
-        "source_type": SOURCE_TYPE_RELATIONAL,
-        "target_type": SOURCE_TYPE_RELATIONAL,
-        "display_name": "Person: PostgreSQL \u2192 PostgreSQL V2 (Specific)",
-    },
-    # Person: PostgreSQL V1 -> PostgreSQL V2 (Generalized Grammar)
-    "person_r2r_generalized": {
-        "source_file": TESTS_DIR / "person_postgresql.sql",
-        "smile_file": TESTS_DIR / "generalized" / "person_pg1_to_pg2_minibeispiel.smile_gen",
-        "source_type": SOURCE_TYPE_RELATIONAL,
-        "target_type": SOURCE_TYPE_RELATIONAL,
-        "display_name": "Person: PostgreSQL \u2192 PostgreSQL V2 (Generalized)",
-    },
-    # Person: MongoDB V1 -> MongoDB V2 (Specific Grammar)
-    "person_d2d_specific": {
-        "source_file": TESTS_DIR / "person_mongodb.json",
-        "smile_file": TESTS_DIR / "specific" / "person_mongo1_to_mongo2_minibeispiel.smile",
-        "source_type": SOURCE_TYPE_DOCUMENT,
-        "target_type": SOURCE_TYPE_DOCUMENT,
-        "display_name": "Person: MongoDB \u2192 MongoDB V2 (Specific)",
-    },
-    # Person: MongoDB V1 -> MongoDB V2 (Generalized Grammar)
-    "person_d2d_generalized": {
-        "source_file": TESTS_DIR / "person_mongodb.json",
-        "smile_file": TESTS_DIR / "generalized" / "person_mongo1_to_mongo2_minibeispiel.smile_gen",
-        "source_type": SOURCE_TYPE_DOCUMENT,
-        "target_type": SOURCE_TYPE_DOCUMENT,
-        "display_name": "Person: MongoDB \u2192 MongoDB V2 (Generalized)",
-    },
-
     # =========================================================================
     # NORTHWIND — Same-Model Evolution (R→R, D→D, G→G, C→C)
     # =========================================================================

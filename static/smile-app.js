@@ -1499,7 +1499,7 @@
             // ── Section 2: MongoDB ──
             html += '<div class="schema-section">';
             html += '<div class="schema-section-header"><h2>MongoDB</h2><span class="schema-badge document">Document</span></div>';
-            html += '<div class="schema-section-subtitle">1 Root Document "orders", 4-Level Nesting — Fully Denormalized</div>';
+            html += '<div class="schema-section-subtitle">2 Root Collections (orders + customers), 3-Level Max Nesting — Cross-collection ObjectId reference</div>';
             html += '<div class="vis-and-code">';
             html += '<div class="vis-block"><div class="section-title">Document Structure</div>';
             html += '<div class="document-tree">' + renderMongoDocTree() + '</div></div>';
@@ -1537,6 +1537,12 @@
         }
 
         // ── Static ER Diagram (PostgreSQL Northwind) ──
+        // SCHEMA-DRIFT WARNING: this diagram is hand-built and not generated
+        // from tests/northwind_postgresql.sql. If you edit that .sql file,
+        // remember to update the entity boxes / FK arrows below to match,
+        // otherwise the Source-Schemas tab will lie about what's actually
+        // loaded. The schema-section-subtitle on line ~1491 also lists
+        // hardcoded counts ("8 Tables, 8 Foreign Keys, 69 Fields") — keep in sync.
         function getStaticERDiagram() {
             const containerId = 'er-dot-' + (erDiagramCounter++);
             const dot = `digraph ER {
@@ -1805,6 +1811,11 @@
             }
         });
 
+        // ── Static Graph Diagram (Neo4j Northwind) ──
+        // SCHEMA-DRIFT WARNING: nodes / relationships below are hand-built and
+        // not generated from tests/northwind_neo4j.cypher. Keep the node list,
+        // edge list, and the schema-section-subtitle counts ("7 Nodes, 7
+        // Relationships, 61 Properties") in sync if the .cypher file changes.
         function getStaticGraphDiagram() {
             const W = 960, H = 700;
             const nodes = [
@@ -1879,33 +1890,29 @@
         }
 
         // ── MongoDB Document Tree ──
+        // Renders the 2-collection northwind Mongo schema (orders + customers).
+        // Kept as a hand-built ASCII tree on purpose — easier to scan visually
+        // than auto-generated DOM nodes for a fixed reference schema.
+        // SCHEMA-DRIFT WARNING: this is NOT generated from
+        // tests/northwind_mongodb.json. If you edit that file (add/remove
+        // collections, change nesting), update the tree below AND the
+        // schema-section-subtitle on line ~1502 in sync.
         function renderMongoDocTree() {
-            return '<span class="dt-key">orders</span> <span class="dt-comment">(root document)</span>\n'
+            const ordersTree =
+                  '<span class="dt-key">orders</span> <span class="dt-comment">(root collection #1)</span>\n'
                 + '<span class="dt-key">|-- _id</span>: <span class="dt-type">string</span> <span class="dt-comment">(order_id, primary key)</span>\n'
                 + '<span class="dt-key">|-- order_date</span>: <span class="dt-type">date</span>\n'
                 + '<span class="dt-key">|-- required_date</span>: <span class="dt-type">date</span>\n'
                 + '<span class="dt-key">|-- shipped_date</span>: <span class="dt-type">date</span>\n'
                 + '<span class="dt-key">|-- freight</span>: <span class="dt-type">double</span>\n'
                 + '<span class="dt-key">|-- ship_name</span>: <span class="dt-type">string</span>\n'
+                + '<span class="dt-key">|-- customer_id</span>: <span class="dt-type">string</span> <span class="dt-comment">(cross-collection ref &rarr; customers._id)</span>\n'
                 + '<span class="dt-key">|-- ship_destination</span>: <span class="dt-obj">{object}</span> <span class="dt-comment">Level 1</span>\n'
                 + '<span class="dt-key">|   |-- ship_address</span>: <span class="dt-type">string</span>\n'
                 + '<span class="dt-key">|   |-- ship_city</span>: <span class="dt-type">string</span>\n'
                 + '<span class="dt-key">|   |-- ship_region</span>: <span class="dt-type">string</span>\n'
                 + '<span class="dt-key">|   |-- ship_postal_code</span>: <span class="dt-type">string</span>\n'
                 + '<span class="dt-key">|   +-- ship_country</span>: <span class="dt-type">string</span>\n'
-                + '<span class="dt-key">|</span>\n'
-                + '<span class="dt-key">|-- customer</span>: <span class="dt-obj">{object}</span> <span class="dt-comment">Level 1, required</span>\n'
-                + '<span class="dt-key">|   |-- company_name</span>: <span class="dt-type">string</span>\n'
-                + '<span class="dt-key">|   |-- contact_name</span>: <span class="dt-type">string</span>\n'
-                + '<span class="dt-key">|   |-- contact_title</span>: <span class="dt-type">string</span>\n'
-                + '<span class="dt-key">|   |-- phone</span>: <span class="dt-type">string</span>\n'
-                + '<span class="dt-key">|   |-- fax</span>: <span class="dt-type">string</span>\n'
-                + '<span class="dt-key">|   +-- address</span>: <span class="dt-obj">{object}</span> <span class="dt-comment">Level 2</span>\n'
-                + '<span class="dt-key">|       |-- street</span>: <span class="dt-type">string</span>\n'
-                + '<span class="dt-key">|       |-- city</span>: <span class="dt-type">string</span>\n'
-                + '<span class="dt-key">|       |-- region</span>: <span class="dt-type">string</span>\n'
-                + '<span class="dt-key">|       |-- postal_code</span>: <span class="dt-type">string</span>\n'
-                + '<span class="dt-key">|       +-- country</span>: <span class="dt-type">string</span>\n'
                 + '<span class="dt-key">|</span>\n'
                 + '<span class="dt-key">|-- employee</span>: <span class="dt-obj">{object}</span> <span class="dt-comment">Level 1, required</span>\n'
                 + '<span class="dt-key">|   |-- last_name</span>: <span class="dt-type">string</span>\n'
@@ -1938,24 +1945,45 @@
                 + '<span class="dt-key">            |-- units_in_stock</span>: <span class="dt-type">int</span>\n'
                 + '<span class="dt-key">            |-- discontinued</span>: <span class="dt-type">bool</span>\n'
                 + '<span class="dt-key">            |-- quantity_per_unit</span>: <span class="dt-type">string</span>\n'
-                + '<span class="dt-key">            |-- category</span>: <span class="dt-obj">{object}</span> <span class="dt-comment">Level 3, required</span>\n'
+                + '<span class="dt-key">            |-- category</span>: <span class="dt-obj">{object}</span> <span class="dt-comment">Level 3 (leaf)</span>\n'
                 + '<span class="dt-key">            |   |-- category_name</span>: <span class="dt-type">string</span>\n'
                 + '<span class="dt-key">            |   +-- description</span>: <span class="dt-type">string</span>\n'
-                + '<span class="dt-key">            +-- supplier</span>: <span class="dt-obj">{object}</span> <span class="dt-comment">Level 3, required</span>\n'
+                + '<span class="dt-key">            +-- supplier</span>: <span class="dt-obj">{object}</span> <span class="dt-comment">Level 3 (leaf, flat address)</span>\n'
                 + '<span class="dt-key">                |-- company_name</span>: <span class="dt-type">string</span>\n'
                 + '<span class="dt-key">                |-- contact_name</span>: <span class="dt-type">string</span>\n'
                 + '<span class="dt-key">                |-- contact_title</span>: <span class="dt-type">string</span>\n'
                 + '<span class="dt-key">                |-- phone</span>: <span class="dt-type">string</span>\n'
                 + '<span class="dt-key">                |-- fax</span>: <span class="dt-type">string</span>\n'
-                + '<span class="dt-key">                +-- address</span>: <span class="dt-obj">{object}</span> <span class="dt-comment">Level 4 (deepest)</span>\n'
-                + '<span class="dt-key">                    |-- street</span>: <span class="dt-type">string</span>\n'
-                + '<span class="dt-key">                    |-- city</span>: <span class="dt-type">string</span>\n'
-                + '<span class="dt-key">                    |-- region</span>: <span class="dt-type">string</span>\n'
-                + '<span class="dt-key">                    |-- postal_code</span>: <span class="dt-type">string</span>\n'
-                + '<span class="dt-key">                    +-- country</span>: <span class="dt-type">string</span>';
+                + '<span class="dt-key">                |-- street</span>: <span class="dt-type">string</span>\n'
+                + '<span class="dt-key">                |-- city</span>: <span class="dt-type">string</span>\n'
+                + '<span class="dt-key">                |-- region</span>: <span class="dt-type">string</span>\n'
+                + '<span class="dt-key">                |-- postal_code</span>: <span class="dt-type">string</span>\n'
+                + '<span class="dt-key">                +-- country</span>: <span class="dt-type">string</span>';
+
+            const customersTree =
+                  '<span class="dt-key">customers</span> <span class="dt-comment">(root collection #2)</span>\n'
+                + '<span class="dt-key">|-- _id</span>: <span class="dt-type">string</span> <span class="dt-comment">(customer_id, primary key)</span>\n'
+                + '<span class="dt-key">|-- company_name</span>: <span class="dt-type">string</span>\n'
+                + '<span class="dt-key">|-- contact_name</span>: <span class="dt-type">string</span>\n'
+                + '<span class="dt-key">|-- contact_title</span>: <span class="dt-type">string</span>\n'
+                + '<span class="dt-key">|-- phone</span>: <span class="dt-type">string</span>\n'
+                + '<span class="dt-key">|-- fax</span>: <span class="dt-type">string</span>\n'
+                + '<span class="dt-key">+-- address</span>: <span class="dt-obj">{object}</span> <span class="dt-comment">Level 1, required</span>\n'
+                + '<span class="dt-key">    |-- street</span>: <span class="dt-type">string</span>\n'
+                + '<span class="dt-key">    |-- city</span>: <span class="dt-type">string</span>\n'
+                + '<span class="dt-key">    |-- region</span>: <span class="dt-type">string</span>\n'
+                + '<span class="dt-key">    |-- postal_code</span>: <span class="dt-type">string</span>\n'
+                + '<span class="dt-key">    +-- country</span>: <span class="dt-type">string</span>';
+
+            // Two collections rendered side by side, separated by a blank line.
+            return ordersTree + '\n\n' + customersTree;
         }
 
         // ── Static Chebotko Diagram (Cassandra Northwind) ──
+        // SCHEMA-DRIFT WARNING: tables/columns/keys below are hand-built and
+        // not generated from tests/northwind_cassandra.cql. Keep the column
+        // list and the schema-section-subtitle counts ("8 Tables, ..., 69
+        // Fields") in sync if the .cql file changes.
         function getStaticChebotkoDiagram() {
             const tables = [
                 { name: 'categories', cols: [

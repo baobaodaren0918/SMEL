@@ -230,20 +230,20 @@ class SchemaTransformer:
         """
         NEST: Embed separate table into parent as nested object (denormalization).
 
-        Syntax: NEST address:street,city IN person.address WHERE address.person_id = person.person_id
+        Syntax: NEST suppliers:company_name,phone IN products.supplier WHERE products.supplier_id = suppliers.supplier_id
 
-        Example: NEST_PS address:street,city IN person.address WHERE address.person_id = person.person_id
-          Before: person { person_id }
-                  address { person_id, street, city }
-          After:  person { person_id, address: { street, city } }
+        Example: NEST suppliers:company_name,phone IN products.supplier WHERE products.supplier_id = suppliers.supplier_id
+          Before: products { product_id, supplier_id }
+                  suppliers { supplier_id, company_name, phone }
+          After:  products { product_id, supplier: { company_name, phone } }
 
         Parameters:
-        - source: address (source entity to embed)
-        - target: person (target entity)
-        - alias: address (embedded field name)
-        - properties: [street, city] (properties to embed)
-        - source_fk: address.person_id (source FK for matching)
-        - target_pk: person.person_id (target PK for matching)
+        - source: suppliers (source entity to embed)
+        - target: products (target entity)
+        - alias: supplier (embedded field name)
+        - properties: [company_name, phone] (properties to embed)
+        - source_fk: products.supplier_id (source FK for matching)
+        - target_pk: suppliers.supplier_id (target PK for matching)
 
         Note: source entity is not removed automatically; use DELETE_ENTITY explicitly
         if the source table should be dropped after the embedding.
@@ -356,15 +356,15 @@ class SchemaTransformer:
         Reference: André Conrad - "Die Operation FLATTEN erstellt aus dem Objekt in der Spalte
                    jeweils eine Spalte für jedes Attribut dieses Objekts"
 
-        Example: FLATTEN_PS person.name
-          Before: person { name: { vorname, nachname }, age }
-          After:  person { name_vorname, name_nachname, age }
+        Example: FLATTEN customers.address
+          Before: customers { customer_id, address: { street, city, region } }
+          After:  customers { customer_id, address_street, address_city, address_region }
 
         The nested object's fields are flattened with a prefix (nested_fieldname).
         """
         source_path = params.source
 
-        # Parse path: person.name -> parent=person, nested=name
+        # Parse path: customers.address -> parent=customers, nested=address
         parent_path, nested_name = self._split_path(source_path)
         if not parent_path:
             return OperationResult.skipped("flatten: precondition not met")
@@ -420,9 +420,9 @@ class SchemaTransformer:
         """
         UNFLATTEN: Combine flat fields into nested object (reverse of FLATTEN).
 
-        Example: UNFLATTEN person:vorname, nachname AS name
-          Before: person { vorname, nachname, age }
-          After:  person { name: { vorname, nachname }, age }
+        Example: UNFLATTEN customers:street, city, region AS address
+          Before: customers { customer_id, street, city, region }
+          After:  customers { customer_id, address: { street, city, region } }
 
         The specified fields are moved into a new nested object.
         """
@@ -465,12 +465,12 @@ class SchemaTransformer:
         """
         UNNEST: Extract nested object to separate table (normalization).
 
-        Syntax: UNNEST person.address:street,city AS address WITH person.person_id TO address.person_id
+        Syntax: UNNEST orders.customer:company_name,phone AS customers WITH orders.order_id TO customers.order_id
 
         Example:
-          Before: person { person_id, address: { street, city } }
-          After:  person { person_id }
-                  address { person_id, street, city }
+          Before: orders { order_id, customer: { company_name, phone } }
+          After:  orders { order_id }
+                  customers { order_id, company_name, phone }
         """
         source_path = params.source_path
         target_name = params.target
@@ -538,7 +538,7 @@ class SchemaTransformer:
         """Construct the new entity extracted by UNNEST.
 
         Populated in two passes: carry_fields copied from the parent (WITH
-        clause, e.g. `person.person_id TO address.person_id`) and the
+        clause, e.g. `orders.order_id TO customers.order_id`) and the
         specified properties copied from the embedded source (falling back to
         STRING when a name is not found on the source).
         """
@@ -576,8 +576,8 @@ class SchemaTransformer:
         """Relocate any embedded objects named in the UNNEST field list from
         under the old source path to under the new target.
 
-        For each explicitly listed embedded (e.g. `UNNEST person.employment:
-        position, company` ­­– `company` moves with it), all entities whose
+        For each explicitly listed embedded (e.g. `UNNEST orders.customer:
+        company_name, address` – `address` moves with it), all entities whose
         path begins with `old_prefix` are re-homed under `new_prefix`, inner
         Embedded.aggregates paths are rewritten, and a fresh Embedded
         relationship is attached to `new_entity`.
@@ -588,8 +588,8 @@ class SchemaTransformer:
 
         for emb_name in specified:
             inner_rel = embedded_map[emb_name]
-            emb_old_path = inner_rel.aggregates         # e.g., "person.employment.company"
-            emb_new_path = f"{new_prefix}.{emb_name}"   # e.g., "employment.company"
+            emb_old_path = inner_rel.aggregates         # e.g., "orders.customer.address"
+            emb_new_path = f"{new_prefix}.{emb_name}"   # e.g., "customer.address"
 
             # All entities at or below the old path need to move with the embedded.
             to_update = [emb_old_path]
@@ -623,18 +623,18 @@ class SchemaTransformer:
         UNWIND: Expand array field.
 
         Supports two modes:
-        1. Create new table: UNWIND_PS person.tags[] INTO person_tag
+        1. Create new table: UNWIND customers.tags[] INTO customer_tag
            Creates a new table for the array elements.
-        2. Expand in place: UNWIND_PS person_tag.value
+        2. Expand in place: UNWIND customer_tag.value
            Expands the array within an existing table (per reference definition).
 
-        The subsequent ADD_PS KEY and ADD_PS CONSTRAINT operations define the structure.
+        The subsequent ADD KEY and ADD CONSTRAINT operations define the structure.
         """
         mode = params.mode
         source_path = params.source
 
         if mode == "expand_in_place":
-            # Mode 2: Expand in place - UNWIND person_tag.tags
+            # Mode 2: Expand in place - UNWIND customer_tag.tags
             # Transform array property to its element type (for schema transformation)
             # e.g., tags: ListDataType(STRING) -> tags: STRING
             entity, attr_name = self._resolve_entity_attr(source_path)
@@ -654,7 +654,7 @@ class SchemaTransformer:
         if not target_name:
             return OperationResult.skipped("unwind: precondition not met")
 
-        # Parse source path: person.tags[] -> parent=person, array_name=tags
+        # Parse source path: customers.tags[] -> parent=customers, array_name=tags
         parent_path, array_name = self._split_path(source_path.replace("[]", ""))
         if not parent_path:
             return OperationResult.skipped("unwind: precondition not met")
@@ -691,10 +691,10 @@ class SchemaTransformer:
         """
         WIND: Convert scalar property back to array (reverse of UNWIND).
 
-        Syntax: WIND person_tag.tags
-          Before: person_tag { person_id, tags } (multiple rows, scalar)
-          After:  person_tag { person_id, tags[] } (single row, array)
-          Reverse of: UNWIND person_tag.tags
+        Syntax: WIND customer_tag.tags
+          Before: customer_tag { customer_id, tags } (multiple rows, scalar)
+          After:  customer_tag { customer_id, tags[] } (single row, array)
+          Reverse of: UNWIND customer_tag.tags
 
         Note: Cross-entity movement is handled by MERGE, not WIND.
         """
@@ -1048,7 +1048,7 @@ class SchemaTransformer:
 
     @register_handler(OpType.DELETE_LABEL)
     def _handle_delete_label(self, params: DeleteLabelParams) -> OperationResult:
-        """DELETE LABEL Employee FROM Person (graph database)"""
+        """DELETE LABEL Vendor FROM suppliers (graph database)"""
         label = params.label
         entity_name = params.entity
 
@@ -1064,7 +1064,7 @@ class SchemaTransformer:
 
     @register_handler(OpType.ADD_LABEL)
     def _handle_add_label(self, params: AddLabelParams) -> OperationResult:
-        """ADD LABEL Employee TO Person (graph database)"""
+        """ADD LABEL Vendor TO suppliers (graph database)"""
         label = params.label
         entity_name = params.entity
 
@@ -1080,7 +1080,7 @@ class SchemaTransformer:
 
     @register_handler(OpType.ADD_KEY)
     def _handle_add_key(self, params: AddKeyParams) -> OperationResult:
-        """ADD_PS KEY id AS String OR ADD_PS PRIMARY KEY (id1, id2) TO Customer"""
+        """ADD KEY id AS String — or ADD PRIMARY KEY (id1, id2) TO Customer (composite)."""
         entity_name = params.entity
         key_columns = params.key_columns
         if not key_columns:
@@ -1389,9 +1389,9 @@ class SchemaTransformer:
         COPY_PROPERTY: Copy property from source to target.
 
         Supports nested paths for embedded objects:
-        - COPY PROPERTY person.address.street TO address.street
-          Source: entity="person.address", attr="street"
-          Target: entity="address", attr="street"
+        - COPY PROPERTY customers.address.street TO orders.ship_address
+          Source: entity="customers.address", attr="street"
+          Target: entity="orders", attr="ship_address"
         """
         source_path = params.source
         target_path = params.target
@@ -1429,8 +1429,8 @@ class SchemaTransformer:
         Deep copies the source entity (properties, keys, constraints, relationships)
         and adds it as a new entity with the target name.
 
-        Example: COPY_ENTITY person AS employee
-        Example: COPY_ENTITY works_at AS employed_at FROM person TO company  (EDGE)
+        Example: COPY_ENTITY customers AS premium_customers
+        Example: COPY_ENTITY PURCHASED AS REORDERED FROM customers TO orders  (EDGE)
         """
         source_name = params.source
         target_name = params.target
@@ -1640,12 +1640,12 @@ class SchemaTransformer:
 
         Reference: André Conrad - "SPLIT Person into Person:id, firstname, lastname AND knows:id, knows"
 
-        Example: SPLIT_PS person INTO person(person_id, vorname, nachname, age), person_tag(person_id, tags)
-          Before: person { person_id, vorname, nachname, age, tags[] }
-          After:  person { person_id, vorname, nachname, age }
-                 person_tag { person_id, tags[] }
+        Example: SPLIT customers INTO customers:customer_id, company_name, street, city, region; customer_contacts:customer_id, contact_name, phone, fax
+          Before: customers { customer_id, company_name, contact_name, phone, fax, street, city, region }
+          After:  customers { customer_id, company_name, street, city, region }
+                 customer_contacts { customer_id, contact_name, phone, fax }
 
-        Note: Fields can be duplicated across parts (e.g., person_id in both parts for FK relationship).
+        Note: Fields can be duplicated across parts (e.g., customer_id in both parts for FK relationship).
         """
         source_name = params.source
         parts = params.parts
@@ -1763,8 +1763,8 @@ class SchemaTransformer:
         """CAST_CONSTRAINT: Change the type of a constraint.
 
         Reference: Orion "Cast Reference" - change the type of a constraint.
-        Example: CAST_CONSTRAINT person.email TO UNIQUE KEY
-        Example: CAST_CONSTRAINT person.city TO PARTITION KEY
+        Example: CAST_CONSTRAINT customers.email TO UNIQUE KEY
+        Example: CAST_CONSTRAINT customers.city TO PARTITION KEY
         """
         target = params.target
         new_type = params.constraint_type  # PRIMARY_KEY, UNIQUE_KEY, PARTITION_KEY, CLUSTERING_KEY, NODE_KEY, DOCUMENT_ID
@@ -1812,7 +1812,7 @@ class SchemaTransformer:
         Overrides automatic entity_kind normalization for this entity.
         For VERTEX<->EDGE conversion, use TRANSFORM instead.
         Example: CAST_ENTITY orders TO DOCUMENT
-        Example: CAST_ENTITY person TO GRAPH
+        Example: CAST_ENTITY customers TO GRAPH
         """
         target = params.target
         entity_kind_str = params.entity_kind
@@ -1867,7 +1867,7 @@ class SchemaTransformer:
         """RECARD: Change the multiplicity/cardinality of a reference.
 
         Reference: Orion "Mult Reference" - change the multiplicity of a reference.
-        Example: RECARD person.address_id TO ONE_TO_MANY
+        Example: RECARD orders.customer_id TO ONE_TO_MANY
         """
         target = params.target
         new_cardinality_str = params.cardinality
@@ -1993,8 +1993,38 @@ def _get_type_str(data_type) -> str:
     return 'unknown'
 
 
-def _serialize_entity(name: str, entity) -> Dict[str, Any]:
-    """Serialize a single EntityType to dict (shared by db_to_dict and db_to_source_dict)."""
+def _resolve_unique_property_name(db: Optional[Database], up_meta_id: str) -> str:
+    """Resolve a ``UniqueProperty.meta_id`` reference to the underlying property name.
+
+    Foreign keys carry ``points_to_unique_property_id`` — the runtime UUID of
+    the target ``UniqueProperty``. Exposing that UUID directly in the JSON
+    payload (a) leaks an internal id into the API surface and (b) means
+    Specific vs Generalized runs produce non-identical JSON for equivalent
+    migrations. Resolving it to the target property name keeps the wire
+    format both human-readable and reproducible. Returns ``""`` when the
+    target cannot be located (db not passed in legacy callsites, or stale id).
+    """
+    if not db or not up_meta_id:
+        return ""
+    for entity in db.entity_types.values():
+        for c in entity.constraints:
+            if isinstance(c, UniqueConstraint):
+                for up in c.unique_properties:
+                    if up.meta_id == up_meta_id:
+                        prop = entity.get_property_by_id(up.property_id)
+                        if prop:
+                            return prop.name
+    return ""
+
+
+def _serialize_entity(name: str, entity, db: Optional[Database] = None) -> Dict[str, Any]:
+    """Serialize a single EntityType to dict (shared by db_to_dict and db_to_source_dict).
+
+    ``db`` is optional for back-compat with legacy callers; when provided,
+    foreign-key ``references_property`` fields are resolved from the runtime
+    ``UniqueProperty.meta_id`` UUID to the target property's name (see
+    ``_resolve_unique_property_name``).
+    """
     # Serialize constraints
     constraints = []
     for c in entity.constraints:
@@ -2027,7 +2057,7 @@ def _serialize_entity(name: str, entity) -> Dict[str, Any]:
                     "type": "FOREIGN_KEY",
                     "column": col_name,
                     "references_entity": ref_target,
-                    "references_property": fkp.points_to_unique_property_id
+                    "references_property": _resolve_unique_property_name(db, fkp.points_to_unique_property_id),
                 })
 
     # Build pk_type_map for Cassandra PARTITION/CLUSTERING key_type
@@ -2121,7 +2151,7 @@ def db_to_dict(db: Database) -> Dict[str, Any]:
     for name, entity in db.entity_types.items():
         if entity.entity_kind == EntityKind.EDGE:
             continue  # EDGE entities are serialized as relationship_types
-        entities[name] = _serialize_entity(name, entity)
+        entities[name] = _serialize_entity(name, entity, db)
 
     result = entities  # Keep flat entity dict for backward compatibility with web UI
 
@@ -2223,7 +2253,7 @@ def db_to_source_dict(db: Database, source_type: str) -> Dict[str, Any]:
         if entity.entity_kind == EntityKind.EDGE:
             continue  # EDGE entities are serialized as relationship_types
         # Build entity dict with source-specific types
-        entity_dict = _serialize_entity(name, entity)
+        entity_dict = _serialize_entity(name, entity, db)
         # Override property type with source-specific format, preserve key_type etc.
         for i, a in enumerate(entity.properties):
             if i < len(entity_dict["properties"]):
@@ -2253,10 +2283,12 @@ def parse_original_source(raw_source: str, source_type: str) -> Dict[str, Any]:
     import json
 
     if source_type == SOURCE_TYPE_DOCUMENT:
-        # Parse MongoDB JSON schema - return nested structure
+        # Parse MongoDB JSON schema - return nested structure for the web UI.
+        # Two input shapes are supported, mirroring MongoDBAdapter.parse():
+        #   * multi-root: {"collections": {name: schema, ...}}
+        #   * single-root (legacy): top-level object IS the root document
         try:
             schema = json.loads(raw_source)
-            collection_name = schema.get("title", "document")
 
             def parse_properties(properties: Dict) -> List[Dict]:
                 """Recursively parse properties into nested structure."""
@@ -2265,7 +2297,6 @@ def parse_original_source(raw_source: str, source_type: str) -> Dict[str, Any]:
                     bson_type = prop_def.get("bsonType", "string")
 
                     if bson_type == "object":
-                        # Nested object - recurse
                         nested_props = prop_def.get("properties", {})
                         result.append({
                             "name": prop_name,
@@ -2273,7 +2304,6 @@ def parse_original_source(raw_source: str, source_type: str) -> Dict[str, Any]:
                             "nested": parse_properties(nested_props)
                         })
                     elif bson_type == "array":
-                        # Array - check item type and recurse into items if object
                         items = prop_def.get("items", {})
                         item_type = items.get("bsonType", "string")
                         entry = {
@@ -2285,7 +2315,6 @@ def parse_original_source(raw_source: str, source_type: str) -> Dict[str, Any]:
                             entry["nested"] = parse_properties(items["properties"])
                         result.append(entry)
                     else:
-                        # Primitive type
                         result.append({
                             "name": prop_name,
                             "type": bson_type,
@@ -2293,14 +2322,29 @@ def parse_original_source(raw_source: str, source_type: str) -> Dict[str, Any]:
                         })
                 return result
 
-            properties = schema.get("properties", {})
-            return {
-                collection_name: {
-                    "name": collection_name,
+            def render_collection(name: str, coll_schema: Dict) -> Dict:
+                """Render one collection schema dict into the UI tree shape."""
+                return {
+                    "name": name,
                     "type": "collection",
-                    "properties": parse_properties(properties)
+                    "properties": parse_properties(coll_schema.get("properties", {})),
                 }
-            }
+
+            collections = schema.get("collections")
+            if isinstance(collections, dict) and collections:
+                # Multi-root: render every collection as a sibling top-level entry.
+                # The frontend already iterates over the returned dict, so any
+                # number of roots renders without further changes.
+                out: Dict[str, Any] = {}
+                for coll_name, coll_schema in collections.items():
+                    inner_title = coll_schema.get("title") if isinstance(coll_schema, dict) else None
+                    name = (inner_title or coll_name)
+                    out[name] = render_collection(name, coll_schema)
+                return out
+
+            # Single-root (legacy): the top-level object IS the root collection.
+            collection_name = schema.get("title", "document")
+            return {collection_name: render_collection(collection_name, schema)}
         except json.JSONDecodeError:
             return {}
 
@@ -2594,7 +2638,7 @@ def _normalize_entity_kinds(db: Database, target_type: str, source_type: str = "
             entity.entity_kind = target_kind
 
     # PK type normalization (SIMPLE↔PARTITION) is now handled explicitly by
-    # CAST_CONSTRAINT / CAST_PS CONSTRAINT in each cross-model SMILE script.
+    # CAST_CONSTRAINT (Specific) / CAST CONSTRAINT (Generalized) in each cross-model SMILE script.
 
     # Normalize Embedded cardinality for cross-model Document targets
     # MongoDB JSON Schema uses "required" array, so RE always produces required cardinality

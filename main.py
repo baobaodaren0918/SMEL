@@ -48,7 +48,7 @@ def print_schema_comparison(result):
         elif change.startswith("ADD_REF:"):
             ref_highlights.add(change[8:])
         elif change.startswith("SPLIT:"):
-            # SPLIT:person->person,person_tag — new entities after the comma
+            # SPLIT:customers->customers,customer_tag — new entities after the comma
             parts = change.split("->")
             if len(parts) == 2:
                 for name in parts[1].split(","):

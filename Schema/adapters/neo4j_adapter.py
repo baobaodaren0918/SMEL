@@ -9,8 +9,8 @@ This adapter provides bidirectional conversion:
 Data Flow:
   Neo4j Graph JSON                       Unified Meta Schema
   ─────────────────────────────────────────────────────────────
-  Node label "Person"              ->     EntityType(entity_kind=VERTEX)
-  Relationship type "ACTED_IN"     ->     EntityType(EDGE) + Edge
+  Node label "customers"              ->     EntityType(entity_kind=VERTEX)
+  Relationship type "PURCHASED"     ->     EntityType(EDGE) + Edge
   Property { "type": "string" }    ->     PrimitiveType.STRING
   primary_key field                ->     UniqueConstraint (is_primary_key=True)
 
@@ -82,7 +82,7 @@ class Neo4jAdapter(DatabaseAdapter):
             {
                 "nodes": [
                     {
-                        "label": "Person",
+                        "label": "customers",
                         "properties": [
                             {"name": "name", "type": "string"},
                             {"name": "age", "type": "integer"}
@@ -90,7 +90,7 @@ class Neo4jAdapter(DatabaseAdapter):
                         "primary_key": "name"
                     },
                     {
-                        "label": "Movie",
+                        "label": "orders",
                         "properties": [
                             {"name": "title", "type": "string"},
                             {"name": "year", "type": "integer"}
@@ -100,9 +100,9 @@ class Neo4jAdapter(DatabaseAdapter):
                 ],
                 "relationships": [
                     {
-                        "type": "ACTED_IN",
-                        "source": "Person",
-                        "target": "Movie",
+                        "type": "PURCHASED",
+                        "source": "customers",
+                        "target": "orders",
                         "properties": [{"name": "role", "type": "string"}],
                         "cardinality": "0..n"
                     }
@@ -114,8 +114,8 @@ class Neo4jAdapter(DatabaseAdapter):
                 db_name="mydb",
                 db_type=DatabaseType.GRAPH,
                 entity_types={
-                    "Person": EntityType(
-                        object_name=["Person"],
+                    "customers": EntityType(
+                        object_name=["customers"],
                         entity_kind=EntityKind.VERTEX,
                         properties=[
                             Property("name", STRING, is_key=True),
@@ -123,13 +123,13 @@ class Neo4jAdapter(DatabaseAdapter):
                         ],
                         constraints=[UniqueConstraint(is_primary_key=True, ...)]
                     ),
-                    "Movie": EntityType(...)
+                    "orders": EntityType(...)
                 },
-                    "ACTED_IN": EntityType(
-                        object_name=["ACTED_IN"],
+                    "PURCHASED": EntityType(
+                        object_name=["PURCHASED"],
                         entity_kind=EntityKind.EDGE,
-                        source_entity="Person",
-                        target_entity="Movie",
+                        source_entity="customers",
+                        target_entity="orders",
                         properties=[Property("role", STRING)],
                         edge_cardinality=ZERO_TO_MANY
                     )
@@ -168,7 +168,7 @@ class Neo4jAdapter(DatabaseAdapter):
 
         Example:
             node_def = {
-                "label": "Person",
+                "label": "customers",
                 "properties": [
                     {"name": "name", "type": "string"},
                     {"name": "age", "type": "integer"}
@@ -177,7 +177,7 @@ class Neo4jAdapter(DatabaseAdapter):
             }
 
             -> EntityType(
-                 object_name=["Person"],
+                 object_name=["customers"],
                  entity_kind=EntityKind.VERTEX,
                  properties=[
                      Property("name", STRING, is_key=True),
@@ -237,15 +237,15 @@ class Neo4jAdapter(DatabaseAdapter):
 
         Example:
             rel_def = {
-                "type": "ACTED_IN",
-                "source": "Person",
-                "target": "Movie",
+                "type": "PURCHASED",
+                "source": "customers",
+                "target": "orders",
                 "properties": [{"name": "role", "type": "string"}],
                 "cardinality": "0..n"
             }
 
-            -> EntityType(EDGE)("ACTED_IN", source="Person", target="Movie", ...)
-            -> Edge on Person entity (rel_type_name="ACTED_IN", target="Movie")
+            -> EntityType(EDGE)("PURCHASED", source="customers", target="orders", ...)
+            -> Edge on customers entity (rel_type_name="PURCHASED", target="orders")
         """
         rel_name = rel_def.get("type", "RELATED_TO")
         source_label = rel_def.get("source", "")
@@ -497,21 +497,21 @@ class Neo4jAdapter(DatabaseAdapter):
             // Neo4j Graph Schema
             // Generated by SMILE
 
-            // Node: Person
-            CREATE CONSTRAINT person_name_unique IF NOT EXISTS
-              FOR (n:Person) REQUIRE n.name IS UNIQUE;
+            // Node: customers
+            CREATE CONSTRAINT customer_name_unique IF NOT EXISTS
+              FOR (n:customers) REQUIRE n.name IS UNIQUE;
             // Properties: name (string), age (integer)
 
-            // Node: Movie
+            // Node: orders
             CREATE CONSTRAINT movie_title_unique IF NOT EXISTS
-              FOR (n:Movie) REQUIRE n.title IS UNIQUE;
+              FOR (n:orders) REQUIRE n.title IS UNIQUE;
             // Properties: title (string), year (integer)
 
-            // Relationship: ACTED_IN (Person -> Movie)
+            // Relationship: PURCHASED (customers -> orders)
             // Properties: role (string)
             // Cardinality: 0..n
 
-            // Relationship: DIRECTED (Person -> Movie)
+            // Relationship: SOLD (customers -> orders)
             // Cardinality: 0..n
         """
         lines = []
@@ -540,14 +540,14 @@ class Neo4jAdapter(DatabaseAdapter):
         Export a single node entity to Cypher constraint and property comments.
 
         Example Output:
-            // Node: Person
-            CREATE CONSTRAINT person_name_unique IF NOT EXISTS
-              FOR (n:Person) REQUIRE n.name IS UNIQUE;
+            // Node: customers
+            CREATE CONSTRAINT customer_name_unique IF NOT EXISTS
+              FOR (n:customers) REQUIRE n.name IS UNIQUE;
             // Properties: name (string), age (integer)
         """
         lines = []
         label = entity.name
-        # Include additional labels (e.g. Person:Employee)
+        # Include additional labels (e.g. customers:Employee)
         extra_labels = getattr(entity, 'labels', [])
         label_display = label + (''.join(f':{l}' for l in extra_labels) if extra_labels else '')
         lines.append(f"// Node: {label_display}")
@@ -592,7 +592,7 @@ class Neo4jAdapter(DatabaseAdapter):
         Export a single EDGE entity type to Cypher comments.
 
         Example Output:
-            // Relationship: ACTED_IN (Person -> Movie)
+            // Relationship: PURCHASED (customers -> orders)
             // Properties: role (string)
             // Cardinality: 0..n
         """
@@ -651,7 +651,7 @@ class Neo4jAdapter(DatabaseAdapter):
 # graph_schema = {
 #     "nodes": [
 #         {
-#             "label": "Person",
+#             "label": "customers",
 #             "properties": [
 #                 {"name": "name", "type": "string"},
 #                 {"name": "age", "type": "integer"}
@@ -659,7 +659,7 @@ class Neo4jAdapter(DatabaseAdapter):
 #             "primary_key": "name"
 #         },
 #         {
-#             "label": "Movie",
+#             "label": "orders",
 #             "properties": [
 #                 {"name": "title", "type": "string"},
 #                 {"name": "year", "type": "integer"}
@@ -669,16 +669,16 @@ class Neo4jAdapter(DatabaseAdapter):
 #     ],
 #     "relationships": [
 #         {
-#             "type": "ACTED_IN",
-#             "source": "Person",
-#             "target": "Movie",
+#             "type": "PURCHASED",
+#             "source": "customers",
+#             "target": "orders",
 #             "properties": [{"name": "role", "type": "string"}],
 #             "cardinality": "0..n"
 #         },
 #         {
-#             "type": "DIRECTED",
-#             "source": "Person",
-#             "target": "Movie",
+#             "type": "SOLD",
+#             "source": "customers",
+#             "target": "orders",
 #             "properties": [],
 #             "cardinality": "0..n"
 #         }
@@ -692,8 +692,8 @@ class Neo4jAdapter(DatabaseAdapter):
 #   database.db_name = "movies"
 #   database.db_type = DatabaseType.GRAPH
 #   database.entity_types = {
-#       "Person": EntityType(
-#           object_name=["Person"],
+#       "customers": EntityType(
+#           object_name=["customers"],
 #           entity_kind=EntityKind.VERTEX,
 #           properties=[
 #               Property("name", STRING, is_key=True),
@@ -701,12 +701,12 @@ class Neo4jAdapter(DatabaseAdapter):
 #           ],
 #           constraints=[UniqueConstraint(is_primary_key=True, ...)],
 #           relationships=[
-#               Edge(rel_type_name="ACTED_IN", target="Movie"),
-#               Edge(rel_type_name="DIRECTED", target="Movie")
+#               Edge(rel_type_name="PURCHASED", target="orders"),
+#               Edge(rel_type_name="SOLD", target="orders")
 #           ]
 #       ),
-#       "Movie": EntityType(
-#           object_name=["Movie"],
+#       "orders": EntityType(
+#           object_name=["orders"],
 #           entity_kind=EntityKind.VERTEX,
 #           properties=[
 #               Property("title", STRING, is_key=True),
@@ -715,17 +715,17 @@ class Neo4jAdapter(DatabaseAdapter):
 #       )
 #   }
 #   database.relationship_types = {
-#       "ACTED_IN": EntityType(EDGE)(
-#           rel_name="ACTED_IN",
-#           source_entity="Person",
-#           target_entity="Movie",
+#       "PURCHASED": EntityType(EDGE)(
+#           rel_name="PURCHASED",
+#           source_entity="customers",
+#           target_entity="orders",
 #           properties=[Property("role", STRING)],
 #           cardinality=ZERO_TO_MANY
 #       ),
-#       "DIRECTED": EntityType(EDGE)(
-#           rel_name="DIRECTED",
-#           source_entity="Person",
-#           target_entity="Movie",
+#       "SOLD": EntityType(EDGE)(
+#           rel_name="SOLD",
+#           source_entity="customers",
+#           target_entity="orders",
 #           properties=[],
 #           cardinality=ZERO_TO_MANY
 #       )
@@ -748,21 +748,21 @@ class Neo4jAdapter(DatabaseAdapter):
 #   -- Neo4j Graph Schema
 #   -- Generated by SMILE
 #
-#   -- Node: Person
-#   CREATE CONSTRAINT person_name_unique IF NOT EXISTS
-#     FOR (n:Person) REQUIRE n.name IS UNIQUE;
+#   -- Node: customers
+#   CREATE CONSTRAINT customer_name_unique IF NOT EXISTS
+#     FOR (n:customers) REQUIRE n.name IS UNIQUE;
 #   -- Properties: name (string), age (integer)
 #
-#   -- Node: Movie
+#   -- Node: orders
 #   CREATE CONSTRAINT movie_title_unique IF NOT EXISTS
-#     FOR (n:Movie) REQUIRE n.title IS UNIQUE;
+#     FOR (n:orders) REQUIRE n.title IS UNIQUE;
 #   -- Properties: title (string), year (integer)
 #
-#   -- Relationship: ACTED_IN (Person -> Movie)
+#   -- Relationship: PURCHASED (customers -> orders)
 #   -- Properties: role (string)
 #   -- Cardinality: 0..n
 #
-#   -- Relationship: DIRECTED (Person -> Movie)
+#   -- Relationship: SOLD (customers -> orders)
 #   -- Cardinality: 0..n
 #
 #

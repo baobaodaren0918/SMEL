@@ -48,45 +48,57 @@ class MongoDBAdapter(DatabaseAdapter):
         """
         Parse MongoDB JSON Schema and return Database object.
 
-        Accepts either a JSON string (parsed via ``json.loads``) or a pre-parsed
-        dict. The string form is the canonical input — using it lets callers
-        treat all four adapters uniformly via the ``DatabaseAdapter`` ABC.
+        Two input shapes are accepted, distinguished by whether a ``collections``
+        wrapper is present at the top level:
 
-        Example Input (MongoDB JSON Schema):
+        * **Multi-root** — top-level ``{"collections": {name: schema, ...}}``
+          maps each entry to its own root document entity. Use this for
+          schemas that model independent collections (e.g. ``orders`` and
+          ``customers`` referencing each other by ObjectId).
+
+        * **Single-root** (legacy) — top-level object is the root document
+          itself, with ``"title"`` providing the collection name. Kept for
+          back-compat with schemas authored before multi-root support.
+
+        Example multi-root input:
             {
-                "title": "person",
-                "bsonType": "object",
-                "properties": {
-                    "_id": {"bsonType": "objectId"},
-                    "name": {"bsonType": "string"},
-                    "age": {"bsonType": "int"}
+                "title": "northwind_mongodb",
+                "collections": {
+                    "orders":    {"bsonType": "object", "properties": {...}},
+                    "customers": {"bsonType": "object", "properties": {...}}
                 }
             }
 
-        Example Output (Unified Meta Schema):
-            Database(
-                db_name="person",
-                db_type=DatabaseType.DOCUMENT,
-                entity_types={
-                    "person": EntityType(
-                        object_name=["person"],
-                        properties=[
-                            Property("_id", OBJECT_ID, is_key=True),
-                            Property("name", STRING),
-                            Property("age", INTEGER)
-                        ]
-                    )
-                }
-            )
+        Example single-root input:
+            {
+                "title": "customers",
+                "bsonType": "object",
+                "properties": {"_id": {"bsonType": "objectId"}, "name": {"bsonType": "string"}}
+            }
         """
         if isinstance(schema, str):
             schema = json.loads(schema)
         self.database = Database(db_name=db_name, db_type=DatabaseType.DOCUMENT)
 
-        # Parse root document as main entity
-        root_name = schema.get('title', 'root_document').lower().replace(' ', '_')
-        root_entity = self._parse_object_schema(schema, root_name, parent_path=[], is_root=True)
-        self.database.add_entity_type(root_entity)
+        collections = schema.get('collections')
+        if isinstance(collections, dict) and collections:
+            # Multi-root: each top-level entry is an independent root document.
+            for coll_name, coll_schema in collections.items():
+                # Prefer the collection key as the canonical name; fall back to
+                # the inner ``title`` if present, then to the key.
+                inner_title = coll_schema.get('title') if isinstance(coll_schema, dict) else None
+                root_name = (inner_title or coll_name).lower().replace(' ', '_')
+                root_entity = self._parse_object_schema(
+                    coll_schema, root_name, parent_path=[], is_root=True
+                )
+                self.database.add_entity_type(root_entity)
+        else:
+            # Single-root (legacy): the top-level object IS the root document.
+            root_name = schema.get('title', 'root_document').lower().replace(' ', '_')
+            root_entity = self._parse_object_schema(
+                schema, root_name, parent_path=[], is_root=True
+            )
+            self.database.add_entity_type(root_entity)
 
         return self.database
 
@@ -97,17 +109,17 @@ class MongoDBAdapter(DatabaseAdapter):
         Uses André Conrad's object_name: List[str] design for nested paths.
 
         Example - Nested object:
-            Input: person.address (parent_path=["person"], name="address")
-            Output: EntityType(object_name=["person", "address"])
+            Input: customers.address (parent_path=["customers"], name="address")
+            Output: EntityType(object_name=["customers", "address"])
 
         Example - Deep nested:
-            Input: person.address.location (parent_path=["person", "address"], name="location")
-            Output: EntityType(object_name=["person", "address", "location"])
+            Input: customers.address.location (parent_path=["customers", "address"], name="location")
+            Output: EntityType(object_name=["customers", "address", "location"])
         """
         if parent_path is None:
             parent_path = []
         # Build full object_name path (from André Conrad)
-        # Example: parent_path=["person"], name="address" -> ["person", "address"]
+        # Example: parent_path=["customers"], name="address" -> ["customers", "address"]
         object_name = parent_path + [name]
         entity = EntityType(
             object_name=object_name,
@@ -127,7 +139,7 @@ class MongoDBAdapter(DatabaseAdapter):
             if bson_type == 'object':
                 # Embedded object - pass current entity's object_name as parent_path
                 # Example: { "address": { "bsonType": "object", "properties": {...} } }
-                #   -> Creates EntityType(object_name=["person", "address"])
+                #   -> Creates EntityType(object_name=["customers", "address"])
                 #   -> Creates Embedded relationship with Cardinality.ONE_TO_ONE
                 embedded_entity = self._parse_object_schema(prop_schema, prop_name_lower, parent_path=object_name)
                 self.database.add_entity_type(embedded_entity)
@@ -235,34 +247,78 @@ class MongoDBAdapter(DatabaseAdapter):
         """
         Export Unified Meta Schema to MongoDB JSON Schema format.
 
-        Args:
-            database: The Database object to export
-            root_entity_name: Name of the root document entity (auto-detected if not provided)
+        Output shape is decided by how many root collections the database
+        contains (computed via ``_find_root_entities``):
 
-        Returns:
-            MongoDB JSON Schema as a dictionary
+        * **One root** → a flat single-collection JSON Schema (back-compat).
+        * **Multiple roots** → a ``{"collections": {...}}`` envelope with one
+          entry per root.
+
+        ``root_entity_name`` forces single-root mode against the named entity
+        and is kept for callers that already do the picking themselves.
         """
-        # Find root entity (the one that contains others via Embedded relationships)
         if not database.entity_types:
             return {"bsonType": "object", "properties": {}}
 
-        if root_entity_name is None:
-            root_entity_name = cls._find_root_entity(database)
+        # Caller pinned a specific root → single-root export, no auto-detect.
+        if root_entity_name is not None:
+            return cls._build_single_collection_schema(database, root_entity_name, is_top_level=True)
 
-        root_entity = database.get_entity_type(root_entity_name)
+        roots = cls._find_root_entities(database)
+        if len(roots) <= 1:
+            # Zero/one root: keep the legacy flat shape so existing single-root
+            # consumers (and the round-trip validator) see no behavior change.
+            chosen = roots[0] if roots else next(iter(database.entity_types.keys()), None)
+            return cls._build_single_collection_schema(database, chosen, is_top_level=True)
+
+        # Multi-root: emit ``collections`` envelope. Each entry is itself a
+        # full collection schema, but with the document-level ``$schema`` /
+        # ``title`` stripped (the envelope owns those).
+        envelope: Dict[str, Any] = {
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "title": database.db_name,
+            "collections": {},
+        }
+        for root_name in roots:
+            envelope["collections"][root_name] = cls._build_single_collection_schema(
+                database, root_name, is_top_level=False
+            )
+        return envelope
+
+    @classmethod
+    def _build_single_collection_schema(cls, database: Database, root_name: str,
+                                        *, is_top_level: bool) -> Dict[str, Any]:
+        """Render one collection (root + its embedded subtree) as a JSON Schema dict.
+
+        ``is_top_level=True`` adds the document-level ``$schema``/``title``/
+        ``description`` keys; ``False`` skips them (used by the multi-root
+        envelope, which owns those fields itself).
+        """
+        root_entity = database.get_entity_type(root_name) if root_name else None
         if not root_entity:
-            raise ValueError(f"Root entity '{root_entity_name}' not found")
+            raise ValueError(f"Root entity '{root_name}' not found")
 
+        # Pass ``is_root=True`` regardless of envelope shape: each collection
+        # in a multi-root schema still owns the ``_id`` primary-key convention
+        # and the same document-level metadata. The envelope-vs-flat decision
+        # is just about WHERE that metadata lives, not whether to compute it.
         schema = cls._export_entity_to_schema(database, root_entity, is_root=True)
 
-        # Add RelationshipType metadata if any exist
-        if database.relationship_types:
+        # Strip the document-level keys when this collection is being placed
+        # inside a multi-root envelope — the envelope owns them.
+        if not is_top_level:
+            for k in ("$schema", "title", "description"):
+                schema.pop(k, None)
+
+        # Relationship-type metadata is a database-level concern, so it only
+        # rides along with the top-level shape (single-root export).
+        if is_top_level and database.relationship_types:
             rel_types_meta = {}
             for rt_name, rt in database.relationship_types.items():
                 rt_dict = {
                     "source": rt.source_entity,
                     "target": rt.target_entity,
-                    "cardinality": rt.cardinality.value if rt.cardinality else "0..n"
+                    "cardinality": rt.cardinality.value if rt.cardinality else "0..n",
                 }
                 if rt.properties:
                     rt_dict["properties"] = [attr.name for attr in rt.properties]
@@ -272,29 +328,38 @@ class MongoDBAdapter(DatabaseAdapter):
         return schema
 
     @classmethod
-    def _find_root_entity(cls, database: Database) -> str:
-        """Find the root entity (typically 'payment_message' or similar)."""
-        from ..unified_meta_schema import Embedded
+    def _find_root_entities(cls, database: Database) -> List[str]:
+        """Return all root collection names, in declaration order.
 
-        # Entities that are embedded by others
-        embedded_entities = set()
+        A "root" is an entity whose ``full_path`` is not the embedded target
+        of any other entity. With single-root MongoDB schemas this returns one
+        name; with the multi-root format it returns every top-level collection.
+        """
+        from ..unified_meta_schema import Embedded, EntityKind
+
+        embedded_targets = set()
         for entity in database.entity_types.values():
             for rel in entity.relationships:
                 if isinstance(rel, Embedded):
-                    embedded_entities.add(rel.get_target_entity_name())
+                    embedded_targets.add(rel.get_target_entity_name())
 
-        # Root = entity that has Embedded relationships but is not embedded by anyone
+        roots: List[str] = []
         for name, entity in database.entity_types.items():
-            has_embedded = any(isinstance(r, Embedded) for r in entity.relationships)
-            if has_embedded and name not in embedded_entities:
-                return name
+            # EDGE entities are graph-paradigm artifacts — never a Mongo root.
+            if entity.entity_kind == EntityKind.EDGE:
+                continue
+            if name in embedded_targets:
+                continue
+            roots.append(name)
+        return roots
 
-        # Fallback: first entity with embedded relationships
-        for name, entity in database.entity_types.items():
-            if any(isinstance(r, Embedded) for r in entity.relationships):
-                return name
-
-        # Last fallback: first entity (or None if empty)
+    @classmethod
+    def _find_root_entity(cls, database: Database) -> str:
+        """Single-root convenience wrapper preserved for callers that pre-date
+        multi-root support. New code should call ``_find_root_entities``."""
+        roots = cls._find_root_entities(database)
+        if roots:
+            return roots[0]
         return next(iter(database.entity_types.keys()), None)
 
     @classmethod
@@ -449,7 +514,7 @@ class MongoDBAdapter(DatabaseAdapter):
 # ------------------------------------------------------------
 #
 # mongo_schema = {
-#     "title": "person",
+#     "title": "customers",
 #     "bsonType": "object",
 #     "properties": {
 #         "_id": {"bsonType": "objectId"},
@@ -473,8 +538,8 @@ class MongoDBAdapter(DatabaseAdapter):
 #   database.db_name = "mydb"
 #   database.db_type = DatabaseType.DOCUMENT
 #   database.entity_types = {
-#       "person": EntityType(
-#           object_name=["person"],
+#       "customers": EntityType(
+#           object_name=["customers"],
 #           properties=[
 #               Property("_id", PrimitiveType.OBJECT_ID, is_key=True),
 #               Property("name", PrimitiveType.STRING),
@@ -482,10 +547,10 @@ class MongoDBAdapter(DatabaseAdapter):
 #               Property("tags", ListDataType(element_type=PrimitiveDataType(STRING)))
 #           ],
 #           relationships=[
-#               Embedded(aggr_name="address", aggregates="person.address", cardinality=ZERO_TO_ONE)
+#               Embedded(aggr_name="address", aggregates="customers.address", cardinality=ZERO_TO_ONE)
 #           ]
 #       ),
-#       "person.address": EntityType(
+#       "customers.address": EntityType(
 #           object_name=["person", "address"],  # from André Conrad
 #           properties=[
 #               Property("street", PrimitiveType.STRING),
@@ -498,7 +563,7 @@ class MongoDBAdapter(DatabaseAdapter):
 # Example 2: Load from file
 # -------------------------
 #
-# database = MongoDBAdapter.load_from_file("person.json", db_name="mydb")
+# database = MongoDBAdapter.load_from_file("customers.json", db_name="mydb")
 #
 #
 # Example 3: Export back to MongoDB JSON Schema

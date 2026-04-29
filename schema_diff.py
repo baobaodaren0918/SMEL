@@ -670,13 +670,13 @@ def _key_record(entity: str, k: _KeyInfo, action: str) -> OpRecord:
 # MAPPING HINTS
 # ============================================================================
 # Hint shapes (all keys lower-case):
-#   {"op": "FLATTEN",  "entity": "person", "nested": "name"}
-#   {"op": "UNFLATTEN","entity": "person", "fields": ["vorname","nachname"], "nested_name": "name"}
-#   {"op": "NEST",     "source": "address", "fields": ["street","city"], "parent": "person", "embed_name": "address", "where": "person.address_id = address.id"}
-#   {"op": "UNNEST",   "entity": "person", "nested": "address", "fields": ["street","city"], "new_entity": "address", "carry": [["person.id","address.person_id"]]}
-#   {"op": "UNWIND",   "entity": "person", "field": "tags", "new_entity": "person_tag"}  (new_entity optional)
-#   {"op": "WIND",     "entity": "person_tag", "field": "tags"}
-#   {"op": "TRANSFORM","entity": "works_at", "into": "RELATIONSHIP", "source": "person", "target": "company", "cardinality": "ZERO_TO_MANY"}
+#   {"op": "FLATTEN",  "entity": "customers", "nested": "name"}
+#   {"op": "UNFLATTEN","entity": "customers", "fields": ["first_name","last_name"], "nested_name": "name"}
+#   {"op": "NEST",     "source": "address", "fields": ["street","city"], "parent": "customers", "embed_name": "address", "where": "customers.address_id = address.id"}
+#   {"op": "UNNEST",   "entity": "customers", "nested": "address", "fields": ["street","city"], "new_entity": "address", "carry": [["customers.id","address.customer_id"]]}
+#   {"op": "UNWIND",   "entity": "customers", "field": "tags", "new_entity": "customer_tag"}  (new_entity optional)
+#   {"op": "WIND",     "entity": "customer_tag", "field": "tags"}
+#   {"op": "TRANSFORM","entity": "works_at", "into": "RELATIONSHIP", "source": "customers", "target": "company", "cardinality": "ZERO_TO_MANY"}
 #   {"op": "TRANSFORM","entity": "works_at", "into": "ENTITY"}
 #
 # Each hint may also carry "suppress": {"src_props":[["entity","field"]...], ...}
