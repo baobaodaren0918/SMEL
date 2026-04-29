@@ -70,8 +70,9 @@ print(result['validation_export'])   # Layer 2 validation result
 ### Run Tests
 ```bash
 python -m pytest tests/ -q
-# 73 tests: 32 full-flow (Northwind 4×4 × 2 grammars) + 41 parser tests
-#           (20 specific + 20 generalized + 1 grammar-completeness script)
+# 89 tests: 32 full-flow (Northwind 4×4 × 2 grammars)
+#         + 33 parser  (16 specific + 16 generalized + 1 grammar-completeness)
+#         + 24 negative (graceful-failure surfaces)
 
 python -m pytest tests/test_full_flow.py -k r2d -q
 # Run only tests matching a keyword
@@ -135,19 +136,40 @@ SMILE/
 │   ├── specific/                        # 16 Specific scripts (.smile)
 │   ├── generalized/                     # 16 Generalized scripts (.smile_gen)
 │   ├── grammar_completeness/            # source.sql + test_all_unused.smile
-│   │                                    #   (exercises the 9 ops not hit by the matrix)
-│   ├── test_full_flow.py                # 32 Northwind migration tests
-│   └── test_parser.py                   # 33 parser tests
-├── core.py                            # SchemaTransformer (30 handler methods covering 36 surface ops)
-│                                      #   plus run_load / run_apply / run_export pipeline helpers
-├── smile_listeners.py                  # ANTLR listeners (Specific + Generalized)
-├── parser_factory.py                  # Grammar auto-detection by file extension
-├── operation_params.py                # Per-op param dataclasses (NestParams, UnnestParams, ...)
+│   │                                    #   (exercises the ops not hit by the matrix)
+│   ├── test_full_flow.py                # 32 Northwind end-to-end migration tests
+│   ├── test_parser.py                   # 33 parser tests (specific + generalized)
+│   └── test_negative.py                 # 24 graceful-failure tests
+│                                        #   (OpParams validation, handler skip
+│                                        #    reasons, malformed scripts, etc.)
+├── core/                              # SchemaTransformer + pipeline orchestration
+│   ├── __init__.py                    #   public re-exports (run_migration, ...)
+│   ├── transformer.py                 #   SchemaTransformerBase + @register_handler
+│   ├── pipeline.py                    #   run_load / run_apply / run_export / run_migration
+│   ├── normalization.py               #   _calculate_changes + entity-kind / cardinality passes
+│   ├── serialization.py               #   db_to_dict / parse_original_source helpers
+│   └── handlers/                      #   30 handlers split into 4 mixin files
+│       ├── structural.py              #     NEST/UNNEST/FLATTEN/UNFLATTEN/WIND/UNWIND
+│       ├── crud.py                    #     ADD/DELETE/RENAME × {PROPERTY,ENTITY,EMBEDDED} + COPY/MOVE
+│       ├── keys_constraints.py        #     FK/KEY/LABEL/CAST_CONSTRAINT/RECARD/TRANSFORM
+│       └── reshape.py                 #     MERGE/SPLIT/CAST_PROPERTY/CAST_ENTITY
+├── parser/                            # SMILE script parsing
+│   ├── factory.py                     #   parse_smile_auto (grammar auto-detect by extension)
+│   ├── listeners.py                   #   ANTLR listeners (Specific + Generalized)
+│   └── params.py                      #   Per-op param dataclasses (NestParams, ...)
+├── validation/                        # Two-layer + blame-attribution validators
+│   ├── meta.py                        #   Layer 1: Meta V2 vs expected schema
+│   ├── export.py                      #   Layer 2: Export → re-parse round-trip
+│   └── pipeline.py                    #   Wraps L1 + L2; assigns blame
+│                                      #     (ok | smile_script | adapter | unverifiable)
+├── diff/                              # Unified diff engine + two formatter shapes
+│   ├── engine.py                      #   compute_diff (single source of truth)
+│   ├── formatters.py                  #   to_ui_changes (per-op panel)
+│   │                                  #   to_validation_report (Layer 1 report)
+│   └── __init__.py
 ├── schema_inspector.py                # Reverse-engineer any source DDL → Meta V1 (web UI only)
 ├── script_renderer.py                 # Emits SMILE header for /api/generate_script (body left to user)
 ├── config.py                          # Migration registry (33 configs: 32 Northwind + 1 grammar-completeness)
-├── validate_meta.py                   # Layer 1: Meta V2 vs expected schema
-├── validate_export.py                 # Layer 2: Export round-trip verification
 ├── main.py                            # CLI entry point
 └── web_server.py                      # Web interface (http.server, port 5601)
 ```
@@ -186,10 +208,10 @@ SMILE/
 | Phase | Component | Input → Output |
 |-------|-----------|---------------|
 | 1. Reverse Engineering | `ADAPTER_REGISTRY[source_type]` (driven by `core.run_load`) | Native DDL → Meta V1 (M-Model+) |
-| 2. SMILE Parsing | `parser_factory.parse_smile_auto()` | `.smile` / `.smile_gen` → `Operation` list |
+| 2. SMILE Parsing | `parser.factory.parse_smile_auto()` | `.smile` / `.smile_gen` → `Operation` list |
 | 3. Transformation | `SchemaTransformer` (30 handlers, called via `core.run_apply`) | Meta V1 + Operations → Meta V2 |
 | 4. Forward Engineering | `ADAPTER_REGISTRY[target_type]` (driven by `core.run_export`) | Meta V2 → Target DDL |
-| 5. Validation | `validate_meta` + `validate_export` | Two-layer correctness check |
+| 5. Validation | `validation.meta` + `validation.export` (composed by `validation.pipeline`) | Two-layer correctness check + blame attribution |
 
 `core.run_migration()` is a thin orchestrator on top of the three pipeline helpers (`run_load`, `run_apply`, `run_export`) so each phase can also be invoked independently from the web UI's User Transformation flow.
 
@@ -197,8 +219,9 @@ SMILE/
 
 | Layer | File | What it proves | How |
 |-------|------|---------------|-----|
-| **Layer 1** | `validate_meta.py` | SMILE script correctness | Meta V2 vs expected target schema |
-| **Layer 2** | `validate_export.py` | Adapter FE correctness | Exported target → RE round-trip vs expected |
+| **Layer 1** | `validation/meta.py` | SMILE script correctness | Meta V2 vs expected target schema |
+| **Layer 2** | `validation/export.py` | Adapter FE correctness | Exported target → RE round-trip vs expected |
+| **Blame**   | `validation/pipeline.py` | Which side failed | `ok` / `smile_script` (L1 fail) / `adapter` (L2 fail with L1 ok) / `unverifiable` |
 
 For **cross-model** migrations, the 4 original Northwind files form a closed validation loop — each file is both source (outgoing) and expected target (incoming). No manually written ground truth needed.
 
@@ -223,7 +246,7 @@ Database
 
 ## SMILE Operations (36 surface ops)
 
-The grammar exposes 36 named operations grouped as **9 structural + 6 property + 4 entity + 11 key/constraint + 2 type/cardinality + 4 embedded/label**. Many of them collapse at the IR level — e.g. `ADD_PRIMARY_KEY` / `ADD_UNIQUE_KEY` / `ADD_PARTITION_KEY` / `ADD_CLUSTERING_KEY` all dispatch through a single `_handle_add_key` — so `core.py` ships 30 unique handler methods. The single source of truth for the surface op set is `grammar/smile_operations.json` (also consumed by the web-UI Ace autocomplete).
+The grammar exposes 36 named operations grouped as **9 structural + 6 property + 4 entity + 11 key/constraint + 2 type/cardinality + 4 embedded/label**. Many of them collapse at the IR level — e.g. `ADD_PRIMARY_KEY` / `ADD_UNIQUE_KEY` / `ADD_PARTITION_KEY` / `ADD_CLUSTERING_KEY` all dispatch through a single `_handle_add_key` — so the four mixin files in `core/handlers/` (`structural.py`, `crud.py`, `keys_constraints.py`, `reshape.py`) jointly register 30 unique handler methods via the `@register_handler` decorator. The single source of truth for the surface op set is `grammar/smile_operations.json` (also consumed by the web-UI Ace autocomplete).
 
 ### Structural Operations (9)
 
@@ -338,7 +361,9 @@ SPLIT customers INTO customers:customer_id, company_name, street, city, region,
   phone, fax
 
 -- Add new entities for territory management
-ADD_ENTITY region WITH PROPERTIES (region_id String, region_description String)
+-- (Named sales_region to disambiguate from the address.region column
+--  that already exists in customers/employees/suppliers.)
+ADD_ENTITY sales_region WITH PROPERTIES (region_id String, region_description String)
 ADD_ENTITY territories WITH PROPERTIES (territory_id String, territory_description String, region_id String)
 ```
 
