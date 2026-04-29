@@ -95,7 +95,7 @@ CREATE TABLE customer_contacts (
     contact_id VARCHAR(255) PRIMARY KEY
 );
 
-CREATE TABLE region (
+CREATE TABLE sales_region (
     region_id VARCHAR(255) PRIMARY KEY,
     region_description VARCHAR(255)
 );
@@ -103,7 +103,7 @@ CREATE TABLE region (
 CREATE TABLE territories (
     territory_id VARCHAR(255) PRIMARY KEY,
     territory_description VARCHAR(255),
-    region_id VARCHAR(255) NOT NULL REFERENCES region(region_id)
+    region_id VARCHAR(255) NOT NULL REFERENCES sales_region(region_id)
 );
 
 CREATE TABLE employee_territories (

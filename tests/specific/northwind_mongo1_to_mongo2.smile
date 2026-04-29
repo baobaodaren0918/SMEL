@@ -55,12 +55,14 @@ ADD_PROPERTY territory_id TO territories WITH TYPE String
 ADD_PROPERTY territory_description TO territories WITH TYPE String
 
 -- ============================================
--- Phase 4: ADD region inside territories (nested embedded — keeps max depth = 3)
+-- Phase 4: ADD sales_region inside territories (nested embedded — keeps max depth = 3)
+-- (Named sales_region to disambiguate from the address.region field that
+--  already exists in customers/employees addresses — same word, unrelated.)
 -- ============================================
--- After: territories[] { territory_id, territory_description, region { region_id, region_description } }
-ADD_EMBEDDED region TO territories
-ADD_PROPERTY region_id TO region WITH TYPE String
-ADD_PROPERTY region_description TO region WITH TYPE String
+-- After: territories[] { territory_id, territory_description, sales_region { region_id, region_description } }
+ADD_EMBEDDED sales_region TO territories
+ADD_PROPERTY region_id TO sales_region WITH TYPE String
+ADD_PROPERTY region_description TO sales_region WITH TYPE String
 
 -- ============================================
 -- Phase 5: employee — simplify + ADD email
@@ -84,7 +86,7 @@ ADD_PROPERTY status TO orders WITH TYPE String
 --   employee { last_name, first_name, title, hire_date, email, phone, reports_to,                   [L1]
 --              address { street, city, region, postal_code, country },                              [L2]
 --              territories[] { territory_id, territory_description,                                 [L2]
---                              region { region_id, region_description } } }                          [L3]
+--                              sales_region { region_id, region_description } } }                    [L3]
 --   shipper { company_name, phone }                                                                  [L1]
 --   details[] { unit_price, quantity, discount,                                                      [L1]
 --     product { name, unit_price, units_in_stock, discontinued, quantity_per_unit,                  [L2]

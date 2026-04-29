@@ -54,11 +54,11 @@
               "description": "territories array",
               "items": {
                 "bsonType": "object",
-                "required": ["region"],
+                "required": ["sales_region"],
                 "properties": {
                   "territory_id": { "bsonType": "string" },
                   "territory_description": { "bsonType": "string" },
-                  "region": {
+                  "sales_region": {
                     "bsonType": "object",
                     "properties": {
                       "region_id": { "bsonType": "string" },

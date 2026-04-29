@@ -47,6 +47,11 @@ ADD_PARTITION_KEY product_id TO products
 SPLIT customers INTO customers:customer_id, company_name, street, city, region, postal_code, country; customer_contacts:customer_id, contact_name, contact_title, phone, fax
 ADD_PARTITION_KEY customer_id TO customers
 ADD_PARTITION_KEY customer_id TO customer_contacts
+-- Note: contact_id is not in the SPLIT carry-list above; ADD_CLUSTERING_KEY's
+-- handler auto-creates the missing Integer property when the named column
+-- doesn't exist yet (default type when no AS clause is given).
+-- After this op, customer_contacts has both customer_id (partition) and
+-- contact_id (clustering) as keys.
 ADD_CLUSTERING_KEY contact_id TO customer_contacts
 
 -- ============================================
@@ -63,15 +68,18 @@ ADD_CLUSTERING_KEY customer_id TO orders
 ADD_CLUSTERING_KEY order_id TO orders
 
 -- ============================================
--- Phase 4: ADD region (new entity)
+-- Phase 4: ADD sales_region (new entity)
 -- Business: Sales territory management -- geographic regions
+-- (Named sales_region to disambiguate from the address.region column
+--  already present in customers/employees/suppliers — same word,
+--  unrelated concept.)
 -- ============================================
-ADD_ENTITY region WITH PROPERTIES (region_id String, region_description String)
-ADD_PARTITION_KEY region_id TO region
+ADD_ENTITY sales_region WITH PROPERTIES (region_id String, region_description String)
+ADD_PARTITION_KEY region_id TO sales_region
 
 -- ============================================
 -- Phase 5: ADD territories (new entity)
--- Business: Sales territories within regions
+-- Business: Sales territories within sales_region
 -- ============================================
 ADD_ENTITY territories WITH PROPERTIES (territory_id String, territory_description String, region_id String)
 ADD_PARTITION_KEY territory_id TO territories
@@ -103,7 +111,7 @@ RENAME_PROPERTY freight TO shipping_cost IN orders
 ADD_PROPERTY status TO orders WITH TYPE String
 
 -- ============================================
--- Final Meta V2 (10 entities):
+-- Final Meta V2 (11 entities):
 -- products:              { product_id [PARTITION], name, unit_price, units_in_stock, discontinued, quantity_per_unit, supplier_id, category_name, description }
 -- suppliers:             { supplier_id [PARTITION], company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country }
 -- shippers:              { shipper_id [PARTITION], company_name, phone }
@@ -112,7 +120,7 @@ ADD_PROPERTY status TO orders WITH TYPE String
 -- customer_contacts:     { customer_id [PARTITION], contact_id [CLUSTERING], contact_name, contact_title, phone, fax }
 -- orders:                { order_date [PARTITION], customer_id [CLUSTERING], order_id [CLUSTERING], required_date, shipped_date, shipping_cost, ship_name, ship_address, ship_city, ship_region, ship_postal_code, ship_country, employee_id, shipper_id, status }
 -- order_details:         { order_id [PARTITION], product_id [PARTITION], unit_price, quantity, discount }
--- region:                { region_id [PARTITION], region_description }
+-- sales_region:          { region_id [PARTITION], region_description }
 -- territories:           { territory_id [PARTITION], territory_description, region_id }
 -- employee_territories:  { employee_id [PARTITION], region_id [PARTITION], territory_id [CLUSTERING] }
 -- ============================================

@@ -102,7 +102,7 @@ CREATE TABLE customer_contacts (
     PRIMARY KEY ((customer_id), contact_id)
 );
 
-CREATE TABLE region (
+CREATE TABLE sales_region (
     region_id TEXT,
     region_description TEXT,
     PRIMARY KEY (region_id)

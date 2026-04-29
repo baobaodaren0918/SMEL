@@ -51,11 +51,12 @@ ADD PROPERTY territory_id TO territories WITH TYPE String
 ADD PROPERTY territory_description TO territories WITH TYPE String
 
 -- ============================================
--- Phase 4: ADD region inside territories (keeps max depth = 3)
+-- Phase 4: ADD sales_region inside territories (keeps max depth = 3)
+-- (Named sales_region to disambiguate from address.region.)
 -- ============================================
-ADD EMBEDDED region TO territories
-ADD PROPERTY region_id TO region WITH TYPE String
-ADD PROPERTY region_description TO region WITH TYPE String
+ADD EMBEDDED sales_region TO territories
+ADD PROPERTY region_id TO sales_region WITH TYPE String
+ADD PROPERTY region_description TO sales_region WITH TYPE String
 
 -- ============================================
 -- Phase 5: employee -- simplify + ADD email

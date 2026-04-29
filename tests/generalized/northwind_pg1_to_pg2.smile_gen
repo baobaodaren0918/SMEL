@@ -43,19 +43,20 @@ ADD KEY customer_contacts.contact_id AS String
 ADD FOREIGN KEY customer_contacts.customer_id REFERENCES customers(customer_id) WITH CARDINALITY ONE_TO_MANY
 
 -- ============================================
--- Phase 3: ADD region (new entity)
+-- Phase 3: ADD sales_region (new entity)
 -- Business: Sales territory management -- geographic regions
+-- (Named sales_region to disambiguate from address.region columns.)
 -- ============================================
-ADD ENTITY region WITH PROPERTIES (region_id String, region_description String)
-ADD KEY region_id TO region
+ADD ENTITY sales_region WITH PROPERTIES (region_id String, region_description String)
+ADD KEY region_id TO sales_region
 
 -- ============================================
--- Phase 4: ADD territories (new entity, FK -> region)
--- Business: Sales territories within regions
+-- Phase 4: ADD territories (new entity, FK -> sales_region)
+-- Business: Sales territories within sales_region
 -- ============================================
 ADD ENTITY territories WITH PROPERTIES (territory_id String, territory_description String, region_id String)
 ADD KEY territory_id TO territories
-ADD FOREIGN KEY territories.region_id REFERENCES region(region_id) WITH CARDINALITY ONE_TO_MANY
+ADD FOREIGN KEY territories.region_id REFERENCES sales_region(region_id) WITH CARDINALITY ONE_TO_MANY
 
 -- ============================================
 -- Phase 5: ADD employee_territories (M:N junction table)
@@ -83,7 +84,7 @@ RENAME PROPERTY freight TO shipping_cost IN orders
 ADD PROPERTY status TO orders WITH TYPE String
 
 -- ============================================
--- Final Meta V2 (10 entities):
+-- Final Meta V2 (11 entities):
 -- products:              { product_id [PK], name, unit_price, units_in_stock, discontinued, quantity_per_unit, supplier_id [FK], category_name, description }
 -- suppliers:             { supplier_id [PK], company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country }
 -- shippers:              { shipper_id [PK], company_name, phone }

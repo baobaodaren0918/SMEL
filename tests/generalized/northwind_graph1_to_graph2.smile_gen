@@ -50,21 +50,22 @@ CAST CONSTRAINT contact.contact_id TO NODE KEY
 ADD ENTITY HAS_CONTACT FROM customers TO contact
 
 -- ============================================
--- Phase 3: ADD region node (new entity)
+-- Phase 3: ADD sales_region node (new entity)
 -- Business: Geographic region for sales territory management
+-- (Named sales_region to disambiguate from address.region property.)
 -- ============================================
-ADD ENTITY region WITH PROPERTIES (region_id String, region_description String)
-ADD KEY region_id TO region
-CAST CONSTRAINT region.region_id TO NODE KEY
+ADD ENTITY sales_region WITH PROPERTIES (region_id String, region_description String)
+ADD KEY region_id TO sales_region
+CAST CONSTRAINT sales_region.region_id TO NODE KEY
 
 -- ============================================
--- Phase 4: ADD territories node (new entity, edge -> region)
--- Business: Sales territories within regions
+-- Phase 4: ADD territories node (new entity, edge -> sales_region)
+-- Business: Sales territories within sales_region
 -- ============================================
 ADD ENTITY territories WITH PROPERTIES (territory_id String, territory_description String)
 ADD KEY territory_id TO territories
 CAST CONSTRAINT territories.territory_id TO NODE KEY
-ADD ENTITY BELONGS_TO FROM territories TO region
+ADD ENTITY BELONGS_TO FROM territories TO sales_region
 
 -- ============================================
 -- Phase 5: ADD ASSIGNED_TO edge (employees -> territories, M:N)

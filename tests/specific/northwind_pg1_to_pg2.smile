@@ -49,19 +49,22 @@ ADD_PRIMARY_KEY customer_contacts.contact_id AS String
 ADD_FOREIGN_KEY customer_contacts.customer_id REFERENCES customers(customer_id) WITH CARDINALITY ONE_TO_MANY
 
 -- ============================================
--- Phase 3: ADD region (new entity)
+-- Phase 3: ADD sales_region (new entity)
 -- Business: Sales territory management -- geographic regions
+-- (Named sales_region to disambiguate from the address.region column
+--  that already exists in customers/employees/suppliers — same word,
+--  unrelated concept.)
 -- ============================================
-ADD_ENTITY region WITH PROPERTIES (region_id String, region_description String)
-ADD_PRIMARY_KEY region_id TO region
+ADD_ENTITY sales_region WITH PROPERTIES (region_id String, region_description String)
+ADD_PRIMARY_KEY region_id TO sales_region
 
 -- ============================================
--- Phase 4: ADD territories (new entity, FK -> region)
+-- Phase 4: ADD territories (new entity, FK -> sales_region)
 -- Business: Sales territories within regions
 -- ============================================
 ADD_ENTITY territories WITH PROPERTIES (territory_id String, territory_description String, region_id String)
 ADD_PRIMARY_KEY territory_id TO territories
-ADD_FOREIGN_KEY territories.region_id REFERENCES region(region_id) WITH CARDINALITY ONE_TO_MANY
+ADD_FOREIGN_KEY territories.region_id REFERENCES sales_region(region_id) WITH CARDINALITY ONE_TO_MANY
 
 -- ============================================
 -- Phase 5: ADD employee_territories (M:N junction table)
@@ -89,7 +92,7 @@ RENAME_PROPERTY freight TO shipping_cost IN orders
 ADD_PROPERTY status TO orders WITH TYPE String
 
 -- ============================================
--- Final Meta V2 (10 entities):
+-- Final Meta V2 (11 entities):
 -- products:              { product_id [PK], name, unit_price, units_in_stock, discontinued, quantity_per_unit, supplier_id [FK], category_name, description }
 -- suppliers:             { supplier_id [PK], company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country }
 -- shippers:              { shipper_id [PK], company_name, phone }
@@ -98,8 +101,8 @@ ADD_PROPERTY status TO orders WITH TYPE String
 -- customer_contacts:     { contact_id [PK], customer_id [FK], contact_name, contact_title, phone, fax }
 -- orders:                { order_id [PK], order_date, required_date, shipped_date, shipping_cost, ship_name, ship_address, ship_city, ship_region, ship_postal_code, ship_country, customer_id [FK], employee_id [FK], shipper_id [FK], status }
 -- order_details:         { order_id [PK,FK], product_id [PK,FK], unit_price, quantity, discount }
--- region:                { region_id [PK], region_description }
--- territories:           { territory_id [PK], territory_description, region_id [FK->region] }
+-- sales_region:          { region_id [PK], region_description }
+-- territories:           { territory_id [PK], territory_description, region_id [FK->sales_region] }
 -- employee_territories:  { employee_id [PK,FK], territory_id [PK,FK] }
 -- ============================================
 

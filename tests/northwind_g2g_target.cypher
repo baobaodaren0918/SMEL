@@ -2,7 +2,7 @@
 // 8 nodes, 9 relationships
 // categories MERGED into products, PART_OF deleted
 // customers SPLIT -> customers + contact, HAS_CONTACT added
-// region + territories added, BELONGS_TO + ASSIGNED_TO added
+// sales_region + territories added, BELONGS_TO + ASSIGNED_TO added
 
 // Node: suppliers:Vendor
 // Key: supplier_id
@@ -32,7 +32,7 @@
 // Key: contact_id
 // Properties: contact_id (string), customer_id (string), contact_name (string), contact_title (string), phone (string), fax (string)
 
-// Node: region
+// Node: sales_region
 // Key: region_id
 // Properties: region_id (string), region_description (string)
 
@@ -62,8 +62,8 @@
 // Relationship: HAS_CONTACT (customers -> contact)
 // Per customer: 0..n contacts; Per contact: 0..n customers
 
-// Relationship: BELONGS_TO (territories -> region)
-// Per territory: 0..n regions; Per region: 0..n territories
+// Relationship: BELONGS_TO (territories -> sales_region)
+// Per territory: 0..n sales_region; Per sales_region: 0..n territories
 
 // Relationship: ASSIGNED_TO (employees -> territories)
 // Per employee: 0..n territories; Per territory: 0..n employees
