@@ -2312,9 +2312,18 @@
                         + data.target_db_type + ').'
                         + '\nMeta V2 + real target DDL written to the panels below.';
                 if (data.operations_skipped && data.operations_skipped.length) {
-                    msg += '\n\nSkipped:\n' + data.operations_skipped.join('\n');
+                    msg += '\n\nSkipped (handler chose not to apply, e.g. entity not found):\n'
+                         + data.operations_skipped.join('\n');
                 }
-                status.className = 'compose-status ok';
+                // Errors are handler bugs — separated from skipped since 2026-04-29.
+                // Surface them red so users can spot a real defect in their script,
+                // not a deliberate handler skip.
+                const hasErrors = data.operations_errors && data.operations_errors.length;
+                if (hasErrors) {
+                    msg += '\n\nERRORS (handler bugs — investigate):\n'
+                         + data.operations_errors.join('\n');
+                }
+                status.className = hasErrors ? 'compose-status err' : 'compose-status ok';
                 status.textContent = msg;
             } catch (e) {
                 status.className = 'compose-status err';

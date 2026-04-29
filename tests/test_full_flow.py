@@ -237,12 +237,18 @@ def run_test(direction: str, verbose: bool = False) -> dict:
     total_ops = stats.get("total", 0)
     success_ops = stats.get("success", 0)
     skipped_ops = stats.get("skipped", 0)
+    error_ops = stats.get("error", 0)
 
     is_cross_model = r["source_type"] != r["target_type"]
     is_northwind = direction.startswith("northwind_")
 
     # ── Layer 0: Execution check ──
-    layer0 = (skipped_ops == 0 and total_ops > 0)
+    # A passing migration must apply *every* op without falling back to a
+    # deliberate skip AND without a single handler bug. ``error_ops`` lives
+    # in its own bucket since 2026-04-29 — previously handler exceptions
+    # were folded into ``skipped_ops`` and the fact that the count went up
+    # for the wrong reason was hidden from the layer-0 verdict.
+    layer0 = (skipped_ops == 0 and error_ops == 0 and total_ops > 0)
     result_entities = {k for k in r.get("result", {}) if not k.startswith("__")}
     if len(result_entities) == 0:
         layer0 = False
@@ -272,7 +278,7 @@ def run_test(direction: str, verbose: bool = False) -> dict:
     print(f"  [{status}] {direction}")
     print(f"         Layer 0: {'PASS' if layer0 else 'FAIL'} "
           f"({total_ops} ops, {success_ops} success, {skipped_ops} skipped, "
-          f"{len(result_entities)} entities)")
+          f"{error_ops} error, {len(result_entities)} entities)")
 
     l1_summary = v_meta.get("summary", "N/A")
     l2_summary = v_export.get("summary", "N/A")

@@ -6,7 +6,7 @@ import sys
 import json
 import re
 from pathlib import Path
-from http.server import HTTPServer, ThreadingHTTPServer, SimpleHTTPRequestHandler
+from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from urllib.parse import parse_qs
 import threading
 import webbrowser
@@ -14,12 +14,9 @@ import webbrowser
 sys.path.insert(0, str(Path(__file__).parent))
 
 from core import run_migration
-from config import MIGRATION_CONFIGS, DB_TYPE_EXPORT_LABEL, NORTHWIND_SCHEMA_FILES, PRODUCT_TO_SOURCE_TYPE
-from schema_inspector import inspect_schema, EXT_TO_DB_TYPE
-from schema_diff import diff_schemas
-from script_renderer import render_script
+from config import MIGRATION_CONFIGS, DB_TYPE_EXPORT_LABEL, NORTHWIND_SCHEMA_FILES
+from schema_inspector import inspect_schema, _resolve_db_type
 from Schema.adapters import ADAPTER_REGISTRY
-from schema_inspector import _resolve_db_type
 
 PORT = 5601
 
@@ -65,27 +62,6 @@ class SMILEHandler(SimpleHTTPRequestHandler):
                         result[key] = fpath.read_text(encoding='utf-8')
                     except Exception as e:
                         result[key] = f'Error reading {fpath}: {e}'
-
-                self.send_response(200)
-                self.send_header('Content-type', 'application/json')
-                self.send_header('Access-Control-Allow-Origin', '*')
-                self.send_header('Cache-Control', 'no-cache')
-                self.end_headers()
-                self.wfile.write(json.dumps(result).encode())
-            elif self.path.startswith('/api/inspect/example/'):
-                # GET /api/inspect/example/postgresql (or mongodb, neo4j, cassandra)
-                db_key = self.path.split('/api/inspect/example/')[1].split('?')[0]
-                if db_key in NORTHWIND_SCHEMA_FILES:
-                    fpath = NORTHWIND_SCHEMA_FILES[db_key]
-                    db_type = PRODUCT_TO_SOURCE_TYPE[db_key]
-                    try:
-                        schema_text = fpath.read_text(encoding='utf-8')
-                        inspect_result = inspect_schema(str(fpath), db_type, input_mode="file")
-                        result = {"schema_text": schema_text, **inspect_result}
-                    except Exception as e:
-                        result = {"error": str(e)}
-                else:
-                    result = {"error": f"Unknown db type: {db_key}"}
 
                 self.send_response(200)
                 self.send_header('Content-type', 'application/json')
@@ -181,8 +157,8 @@ class SMILEHandler(SimpleHTTPRequestHandler):
 
                     # Parse SMILE script in-memory under requested grammar
                     from antlr4 import InputStream, CommonTokenStream, ParseTreeWalker
-                    from parser_factory import get_parser_components, SyntaxErrorListener
-                    from smile_listeners import SMILESpecificListener, SMILEGeneralizedListener
+                    from parser.factory import get_parser_components, SyntaxErrorListener
+                    from parser.listeners import SMILESpecificListener, SMILEGeneralizedListener
                     grammar = 'generalized' if syntax == 'generalized' else 'specific'
                     LexerClass, ParserClass, _ = get_parser_components(grammar)
                     ListenerCls = SMILEGeneralizedListener if grammar == 'generalized' else SMILESpecificListener
@@ -206,9 +182,17 @@ class SMILEHandler(SimpleHTTPRequestHandler):
                         # share one implementation.
                         from core import SchemaTransformer, run_apply, run_export
                         transformer = SchemaTransformer(src_db)
-                        ops_detail, applied, skipped_ct = run_apply(transformer, operations)
+                        ops_detail, applied, skipped_ct, error_ct = run_apply(transformer, operations)
+                        # Separate deliberate skips (handler returned OperationResult.skipped)
+                        # from handler bugs (caught exception). Conflating them under a single
+                        # "skipped" label hides real defects from the user — e.g. a typo in a
+                        # custom handler would show up as "Skipped: step N" with no clue it's
+                        # actually a bug. run_apply already counts the two separately; this
+                        # endpoint surfaces them as separate response fields.
                         skipped = [f"step {d['step']}: {d['type']}" for d in ops_detail
-                                   if d['status'] != 'success']
+                                   if d['status'] == 'skipped']
+                        errors = [f"step {d['step']}: {d['type']} — {d.get('reason', '')}"
+                                  for d in ops_detail if d['status'] == 'error']
 
                         tgt_type_resolved = _resolve_db_type(target_db_type)
                         try:
@@ -233,10 +217,10 @@ class SMILEHandler(SimpleHTTPRequestHandler):
                             "operations_total": len(operations),
                             "operations_applied": applied,
                             "operations_skipped": skipped,
+                            "operations_errors": errors,
                             "source_entity_count": src_count,
                             "result_entity_count": len(result_db.entity_types),
                             "meta_v2_summary": meta_v2_summary,
-                            "meta_v2_dict": result_db.to_dict(),
                             "exported_target": exported_text,
                             "target_db_type": tgt_type_resolved.upper(),
                         }
@@ -403,7 +387,7 @@ def _validate_smile_text(text: str, syntax: str) -> list:
     """Parse SMILE text with the requested grammar and return a list of error strings."""
     from io import StringIO
     from antlr4 import InputStream, CommonTokenStream
-    from parser_factory import get_parser_components, SyntaxErrorListener
+    from parser.factory import get_parser_components, SyntaxErrorListener
     LexerClass, ParserClass, _ = get_parser_components(
         'generalized' if syntax == 'generalized' else 'specific'
     )

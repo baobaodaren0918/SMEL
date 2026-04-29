@@ -116,8 +116,8 @@ SMILE/
 │   ├── generalized/                   # Generalized grammar (verb + object composition)
 │   │   ├── SMILE_Generalized.g4
 │   │   └── generate_parser.bat
-│   ├── smile_operations.json          # Single source of truth for all 36 ops (used by
-│   │                                  #   schema_diff, script_renderer, and editor autocomplete)
+│   ├── smile_operations.json          # Single source of truth for all 36 ops
+│   │                                  #   (used by editor autocomplete)
 │   └── antlr-4.13.2-complete.jar
 ├── Schema/
 │   ├── unified_meta_schema.py         # M-Model+ Meta Schema
@@ -144,8 +144,7 @@ SMILE/
 ├── parser_factory.py                  # Grammar auto-detection by file extension
 ├── operation_params.py                # Per-op param dataclasses (NestParams, UnnestParams, ...)
 ├── schema_inspector.py                # Reverse-engineer any source DDL → Meta V1 (web UI only)
-├── schema_diff.py                     # Meta V1 vs Meta V2 → OpRecord list (used by script_renderer)
-├── script_renderer.py                 # OpRecord list → Specific or Generalized SMILE script
+├── script_renderer.py                 # Emits SMILE header for /api/generate_script (body left to user)
 ├── config.py                          # Migration registry (33 configs: 32 Northwind + 1 grammar-completeness)
 ├── validate_meta.py                   # Layer 1: Meta V2 vs expected schema
 ├── validate_export.py                 # Layer 2: Export round-trip verification
