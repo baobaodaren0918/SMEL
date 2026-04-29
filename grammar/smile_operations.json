@@ -1,5 +1,5 @@
 {
-  "$comment": "Single source of truth for SMILE operations. Used by schema_diff/script_renderer (server-side) and CodeMirror autocomplete (client-side). Each operation: 'specific' = .smile keyword (underscore form), 'generalized' = .smile_gen keyword (space form). 'template_specific'/'template_generalized' use Python str.format placeholders ({entity}, {field}, etc.). 'snippet' uses the LSP/textmate ${1:label} syntax for editor expansion. 'clauses' each may have: name, values (enum), snippet, optional, when (entity_kind filter), doc.",
+  "$comment": "Single source of truth for SMILE operations. Used by CodeMirror autocomplete (client-side). Each operation: 'specific' = .smile keyword (underscore form), 'generalized' = .smile_gen keyword (space form). 'template_specific'/'template_generalized' use Python str.format placeholders ({entity}, {field}, etc.). 'snippet' uses the LSP/textmate ${1:label} syntax for editor expansion. 'clauses' each may have: name, values (enum), snippet, optional, when (entity_kind filter), doc.",
   "version": "1.0",
   "header": {
     "migration": {
@@ -40,15 +40,16 @@
       "category": "add",
       "specific": "ADD_FOREIGN_KEY",
       "generalized": "ADD FOREIGN KEY",
-      "doc": "Add a foreign key constraint with REFERENCES",
-      "syntax_specific": "ADD_FOREIGN_KEY <entity.field> REFERENCES <entity>(<field>) [WITH CARDINALITY <type>] [USING KEY <name>] [WHERE <cond>]",
-      "syntax_generalized": "ADD FOREIGN KEY <entity.field> REFERENCES <entity>(<field>) [WITH CARDINALITY <type>] [USING KEY <name>] [WHERE <cond>]",
+      "doc": "Add a foreign key constraint with REFERENCES (single-column or composite)",
+      "syntax_specific": "ADD_FOREIGN_KEY <entity.field|(f1,f2,..) TO <entity>> REFERENCES <entity>(<field|f1,f2,..>) [WITH CARDINALITY <type>] [USING KEY <name>] [WHERE <cond>]",
+      "syntax_generalized": "ADD FOREIGN KEY <entity.field|(f1,f2,..) TO <entity>> REFERENCES <entity>(<field|f1,f2,..>) [WITH CARDINALITY <type>] [USING KEY <name>] [WHERE <cond>]",
       "snippet_specific": "ADD_FOREIGN_KEY ${1:entity}.${2:field} REFERENCES ${3:target_entity}(${4:target_field})$0",
       "snippet_generalized": "ADD FOREIGN KEY ${1:entity}.${2:field} REFERENCES ${3:target_entity}(${4:target_field})$0",
       "template_specific": "ADD_FOREIGN_KEY {entity}.{field} REFERENCES {target_entity}({target_field}){cardinality_clause}",
       "template_generalized": "ADD FOREIGN KEY {entity}.{field} REFERENCES {target_entity}({target_field}){cardinality_clause}",
       "clauses": [
-        {"name": "REFERENCES", "snippet": "REFERENCES ${1:target_entity}(${2:target_field})", "optional": false, "doc": "Target entity and column the FK references"},
+        {"name": "REFERENCES", "snippet": "REFERENCES ${1:target_entity}(${2:target_field})", "optional": false, "doc": "Target entity and column(s) the FK references; for composite FKs use a comma-separated list"},
+        {"name": "TO", "snippet": "TO ${1:entity}", "optional": true, "doc": "Source entity (only required for the composite (col1,col2) form; single-column form takes entity from the dotted path)"},
         {"name": "WITH CARDINALITY", "values_ref": "cardinalityType", "optional": true, "doc": "Reference multiplicity"},
         {"name": "USING KEY", "snippet": "USING KEY ${1:key_name}", "optional": true, "doc": "Name an existing index/key to use"},
         {"name": "WHERE", "snippet": "WHERE ${1:cond}", "optional": true, "doc": "Optional join/predicate clause"}

@@ -81,10 +81,14 @@ withTypeClause: WITH TYPE dataType;
 withDefaultClause: WITH DEFAULT literal;
 notNullClause: NOT_NULL;
 
-// ADD_FOREIGN_KEY: Add foreign key constraint (SQL-style) with explicit entity.field
-// Example: ADD_FOREIGN_KEY address.customer_id REFERENCES customers(customer_id)
-// Example: ADD_FOREIGN_KEY order.customer_id REFERENCES customer(id) WITH CARDINALITY ONE_TO_MANY
-add_foreign_key: ADD_FOREIGN_KEY qualifiedName REFERENCES identifier LPAREN identifier RPAREN constraintClause*;
+// ADD_FOREIGN_KEY: Add foreign key constraint (SQL-style)
+// Single-column form (entity.field implicit):
+//   Example: ADD_FOREIGN_KEY address.customer_id REFERENCES customers(customer_id)
+//   Example: ADD_FOREIGN_KEY orders.customer_id REFERENCES customers(id) WITH CARDINALITY ONE_TO_MANY
+// Composite form ((cols) TO source_entity, target list-of-columns):
+//   Example: ADD_FOREIGN_KEY (tenant_id, item_id) TO sales REFERENCES tenants_items(tenant_id, item_id)
+// Both source and target accept multiple columns; lengths must match in the handler.
+add_foreign_key: ADD_FOREIGN_KEY keyColumns (TO identifier)? REFERENCES identifier LPAREN identifierList RPAREN constraintClause*;
 constraintClause: withCardinalityClause | usingKeyClause | whereClause;
 
 // ADD_EMBEDDED: Add embedded object relationship (MongoDB style)

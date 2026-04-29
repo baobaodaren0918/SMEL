@@ -85,11 +85,13 @@ withTypeClause: WITH TYPE dataType;
 withDefaultClause: WITH DEFAULT literal;
 notNullClause: NOT_NULL;
 
-// Add foreign key: ADD FOREIGN KEY entity.field REFERENCES target_table(target_column)
-// SQL-style foreign key constraint syntax with explicit entity.field
-// Example: ADD FOREIGN KEY address.customer_id REFERENCES customers(customer_id)
-// Example: ADD FOREIGN KEY order.customer_id REFERENCES customer(id) WITH CARDINALITY ONE_TO_MANY
-foreignKeyAdd: FOREIGN KEY qualifiedName REFERENCES identifier LPAREN identifier RPAREN constraintClause*;
+// Add foreign key: ADD FOREIGN KEY <columns> [TO entity] REFERENCES target_table(<columns>)
+// Single-column form (entity.field implicit):
+//   Example: ADD FOREIGN KEY address.customer_id REFERENCES customers(customer_id)
+//   Example: ADD FOREIGN KEY orders.customer_id REFERENCES customers(id) WITH CARDINALITY ONE_TO_MANY
+// Composite form ((cols) TO source_entity, target list-of-columns):
+//   Example: ADD FOREIGN KEY (tenant_id, item_id) TO sales REFERENCES tenants_items(tenant_id, item_id)
+foreignKeyAdd: FOREIGN KEY keyColumns (TO identifier)? REFERENCES identifier LPAREN identifierList RPAREN constraintClause*;
 constraintClause: withCardinalityClause | usingKeyClause | whereClause;
 
 // Add embedded: ADD EMBEDDED address TO Customer WITH CARDINALITY ONE_TO_ONE
