@@ -325,6 +325,74 @@ class CastConstraintParams:
         _require_nonempty(self, "target", "constraint_type")
 
 
+# ============================================================================
+# ADD_CONSTRAINT / DELETE_CONSTRAINT operations
+# ============================================================================
+# These cover the constraint kinds NOT addressed by the narrow operators
+# (PRIMARY KEY / UNIQUE KEY / FOREIGN KEY / PARTITION KEY / CLUSTERING KEY /
+# LABEL). Three sub-bodies, discriminated by ``body_kind``:
+#   "REFERENCE"  -> creates Reference(is_enforced=True|False) and (when enforced)
+#                   a paired ForeignKeyConstraint. Used for Mongo cross-coll
+#                   refs, Cass denormalised columns, and PG soft references.
+#   "CHECK"      -> creates a CheckConstraint carrying a structured AST tree.
+#   "EXISTENCE"  -> creates an ExistenceConstraint (post-hoc NOT NULL).
+
+class ConstraintBodyKind(str, Enum):
+    REFERENCE = "REFERENCE"
+    CHECK = "CHECK"
+    EXISTENCE = "EXISTENCE"
+
+
+@dataclass
+class AddConstraintParams:
+    """Payload for ADD_CONSTRAINT.
+
+    ``target`` is the qualified property the constraint attaches to (e.g.
+    ``orders.customer_id``). ``body_kind`` selects which body fields are
+    relevant:
+
+    * REFERENCE: ``ref_target_table``, ``ref_target_columns``, optional
+      ``ref_cardinality``. The reference is always **logical**
+      (non-enforced); the SQL-traditional enforced FK case goes through
+      ``ADD_FOREIGN_KEY`` (also the only path that supports composite
+      multi-column FKs).
+    * CHECK: ``check_expression`` (a ``CheckExpr`` AST root from
+      ``Schema.unified_meta_schema``).
+    * EXISTENCE: no extra fields (just ``target``).
+    """
+    target: str
+    body_kind: ConstraintBodyKind
+    # REFERENCE body fields
+    ref_target_table: Optional[str] = None
+    ref_target_columns: List[str] = field(default_factory=list)
+    ref_cardinality: Optional[str] = None
+    # CHECK body field — CheckExpr AST root (typed via Any here to avoid a
+    # circular import; the listener stores a Schema.unified_meta_schema.CheckExpr).
+    check_expression: Optional[Any] = None
+
+    def __post_init__(self) -> None:
+        _require_nonempty(self, "target", "body_kind")
+        if self.body_kind == ConstraintBodyKind.REFERENCE:
+            _require_nonempty(self, "ref_target_table", "ref_target_columns")
+        elif self.body_kind == ConstraintBodyKind.CHECK:
+            if self.check_expression is None:
+                raise ValueError(
+                    "AddConstraintParams.check_expression must be set for CHECK body"
+                )
+        # EXISTENCE has no further fields to validate.
+
+
+@dataclass
+class DeleteConstraintParams:
+    """Payload for DELETE_CONSTRAINT. ``target`` is the qualified property
+    whose attached constraint (logical Reference / CheckConstraint /
+    ExistenceConstraint) should be removed."""
+    target: str
+
+    def __post_init__(self) -> None:
+        _require_nonempty(self, "target")
+
+
 @dataclass
 class CastEntityParams:
     target: str
@@ -446,6 +514,7 @@ OpParams = Union[
     CopyPropertyParams, MovePropertyParams,
     AddKeyParams, DeleteKeyParams,
     AddForeignKeyParams, DeleteForeignKeyParams, CastConstraintParams,
+    AddConstraintParams, DeleteConstraintParams,
     CastEntityParams,
     AddEmbeddedParams, DeleteEmbeddedParams,
     AddLabelParams, DeleteLabelParams,

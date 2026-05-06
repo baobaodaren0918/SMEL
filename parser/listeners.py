@@ -28,11 +28,16 @@ from parser.params import (
     CopyPropertyParams, MovePropertyParams,
     AddKeyParams, DeleteKeyParams,
     AddForeignKeyParams, DeleteForeignKeyParams, CastConstraintParams,
+    AddConstraintParams, DeleteConstraintParams, ConstraintBodyKind,
     CastEntityParams,
     AddEmbeddedParams, DeleteEmbeddedParams,
     AddLabelParams, DeleteLabelParams,
     CastPropertyParams, MergeParams, SplitParams,
     RecardParams, TransformParams,
+)
+from Schema.unified_meta_schema import (
+    CheckExpr, CheckCmp, CheckIn, CheckBetween, CheckRegex, CheckIsNull,
+    CheckAnd, CheckOr, CheckNot, CheckRaw,
 )
 
 
@@ -66,6 +71,12 @@ class OpType(str, Enum):
     ADD_FOREIGN_KEY = "add_foreign_key"
     DELETE_FOREIGN_KEY = "delete_foreign_key"
     CAST_CONSTRAINT = "cast_constraint"
+    # ADD_CONSTRAINT / DELETE_CONSTRAINT cover constraint kinds the narrow
+    # operators above don't address: logical references (Mongo cross-collection,
+    # Cass denormalised columns, PG soft references), CHECK predicates, and
+    # post-hoc EXISTENCE (NOT NULL applied after property creation).
+    ADD_CONSTRAINT = "add_constraint"
+    DELETE_CONSTRAINT = "delete_constraint"
     CAST_ENTITY = "cast_entity"
     # Embedded operations
     ADD_EMBEDDED = "add_embedded"
@@ -274,6 +285,148 @@ class BaseSMILEListener:
                 })
 
         return properties, nested
+
+    # ========================================================================
+    # ADD_CONSTRAINT helpers — parse the constraintBody / checkExpr / checkAtom
+    # subtree into a CheckExpr AST and an AddConstraintParams payload. Both
+    # specific and generalized grammars produce identically-named labelled
+    # alternatives for these rules, so the helpers dispatch on the parser
+    # context's class name (e.g. "CmpAtomContext") and work for both grammars.
+    # ========================================================================
+
+    @staticmethod
+    def _strip_string_literal(text: str) -> str:
+        """Strip the outer quotes from an ANTLR STRING_LITERAL token. The
+        grammar admits both single- and double-quoted strings; either has the
+        same opening and closing character."""
+        if len(text) >= 2 and text[0] in ("'", '"') and text[-1] == text[0]:
+            return text[1:-1]
+        return text
+
+    def _parse_literal_value(self, lit_ctx):
+        """Convert a ``literal`` parse-tree node into a Python value.
+
+        STRING_LITERAL → ``str`` (quotes stripped).
+        INTEGER_LITERAL → ``int``. DECIMAL_LITERAL → ``float``.
+        TRUE / FALSE → ``bool``. NULL → ``None``.
+        """
+        if lit_ctx.STRING_LITERAL():
+            return self._strip_string_literal(lit_ctx.STRING_LITERAL().getText())
+        if lit_ctx.INTEGER_LITERAL():
+            return int(lit_ctx.INTEGER_LITERAL().getText())
+        if lit_ctx.DECIMAL_LITERAL():
+            return float(lit_ctx.DECIMAL_LITERAL().getText())
+        if lit_ctx.TRUE():
+            return True
+        if lit_ctx.FALSE():
+            return False
+        if lit_ctx.NULL():
+            return None
+        return lit_ctx.getText()
+
+    def _build_check_expr(self, ctx):
+        """Recursively build a CheckExpr AST from a ``checkExpr`` /
+        ``checkAtom`` parse tree.
+
+        Dispatches on ``type(ctx).__name__`` so the same helper handles both
+        grammar variants — the labelled rule alternatives generate context
+        classes with identical names (e.g. ``CmpAtomContext``,
+        ``CheckAndExprContext``) in both parser modules.
+        """
+        cls_name = type(ctx).__name__
+
+        # Composite expression nodes. ANTLR accessor convention: a sub-rule
+        # invoked once -> ``ctx.checkExpr()`` (no args, single context).
+        # A sub-rule invoked multiple times -> ``ctx.checkExpr(i)`` (indexed).
+        if cls_name == "CheckParenExprContext":
+            return self._build_check_expr(ctx.checkExpr())
+        if cls_name == "CheckNotExprContext":
+            return CheckNot(expr=self._build_check_expr(ctx.checkExpr()))
+        if cls_name == "CheckAndExprContext":
+            return CheckAnd(
+                left=self._build_check_expr(ctx.checkExpr(0)),
+                right=self._build_check_expr(ctx.checkExpr(1)),
+            )
+        if cls_name == "CheckOrExprContext":
+            return CheckOr(
+                left=self._build_check_expr(ctx.checkExpr(0)),
+                right=self._build_check_expr(ctx.checkExpr(1)),
+            )
+        if cls_name == "CheckRawExprContext":
+            return CheckRaw(raw_text=self._strip_string_literal(
+                ctx.STRING_LITERAL().getText()))
+        if cls_name == "CheckAtomExprContext":
+            return self._build_check_expr(ctx.checkAtom())
+
+        # Atomic predicates.
+        if cls_name == "CmpAtomContext":
+            return CheckCmp(
+                field_name=ctx.qualifiedName().getText(),
+                op=ctx.cmpOp().getText(),
+                literal=self._parse_literal_value(ctx.literal()),
+            )
+        if cls_name == "InAtomContext":
+            return CheckIn(
+                field_name=ctx.qualifiedName().getText(),
+                values=[self._parse_literal_value(lit)
+                        for lit in ctx.literalList().literal()],
+            )
+        if cls_name == "BetweenAtomContext":
+            literals = ctx.literal()
+            return CheckBetween(
+                field_name=ctx.qualifiedName().getText(),
+                low=self._parse_literal_value(literals[0]),
+                high=self._parse_literal_value(literals[1]),
+            )
+        if cls_name == "RegexAtomContext":
+            return CheckRegex(
+                field_name=ctx.qualifiedName().getText(),
+                pattern=self._strip_string_literal(
+                    ctx.STRING_LITERAL().getText()),
+            )
+        if cls_name == "IsNullAtomContext":
+            return CheckIsNull(field_name=ctx.qualifiedName().getText(),
+                               is_null=True)
+        if cls_name == "IsNotNullAtomContext":
+            return CheckIsNull(field_name=ctx.qualifiedName().getText(),
+                               is_null=False)
+
+        raise ValueError(f"Unknown CheckExpr context: {cls_name}")
+
+    def _build_add_constraint_params(self, target: str, body_ctx):
+        """Construct AddConstraintParams from a constraintBody parse tree."""
+        cls_name = type(body_ctx).__name__
+
+        if cls_name == "ConstraintBodyReferenceContext":
+            # ADD_CONSTRAINT REFERENCE is always LOGICAL (the grammar no
+            # longer admits ENFORCED — that case is handled by ADD_FOREIGN_KEY).
+            target_table = body_ctx.qualifiedName().getText()
+            target_columns = [i.getText()
+                              for i in body_ctx.identifierList().identifier()]
+            cardinality = (body_ctx.cardinalityType().getText()
+                           if body_ctx.cardinalityType() else None)
+            return AddConstraintParams(
+                target=target,
+                body_kind=ConstraintBodyKind.REFERENCE,
+                ref_target_table=target_table,
+                ref_target_columns=target_columns,
+                ref_cardinality=cardinality,
+            )
+
+        if cls_name == "ConstraintBodyCheckContext":
+            return AddConstraintParams(
+                target=target,
+                body_kind=ConstraintBodyKind.CHECK,
+                check_expression=self._build_check_expr(body_ctx.checkExpr()),
+            )
+
+        if cls_name == "ConstraintBodyExistenceContext":
+            return AddConstraintParams(
+                target=target,
+                body_kind=ConstraintBodyKind.EXISTENCE,
+            )
+
+        raise ValueError(f"Unknown constraintBody context: {cls_name}")
 
 
 # ==============================================================================
@@ -580,6 +733,13 @@ class SMILESpecificListener(SMILE_SpecificListener, BaseSMILEListener):
             entity=ctx.qualifiedName().getText(),
         ), original_keyword="ADD_LABEL"))
 
+    def enterAdd_constraint(self, ctx):
+        # Rule: ADD_CONSTRAINT qualifiedName AS constraintBody
+        target = ctx.qualifiedName().getText()
+        params = self._build_add_constraint_params(target, ctx.constraintBody())
+        self.operations.append(Operation(
+            OpType.ADD_CONSTRAINT, params, original_keyword="ADD_CONSTRAINT"))
+
     # DELETE operations
     def enterDelete_property(self, ctx):
         self.operations.append(Operation(OpType.DELETE_PROPERTY, DeletePropertyParams(
@@ -590,6 +750,14 @@ class SMILESpecificListener(SMILE_SpecificListener, BaseSMILEListener):
         self.operations.append(Operation(OpType.DELETE_FOREIGN_KEY, DeleteForeignKeyParams(
             reference=ctx.qualifiedName().getText(),
         ), original_keyword="DELETE_FOREIGN_KEY"))
+
+    def enterDelete_constraint(self, ctx):
+        # Rule: DELETE_CONSTRAINT qualifiedName
+        self.operations.append(Operation(
+            OpType.DELETE_CONSTRAINT,
+            DeleteConstraintParams(target=ctx.qualifiedName().getText()),
+            original_keyword="DELETE_CONSTRAINT",
+        ))
 
     def enterDelete_embedded(self, ctx):
         self.operations.append(Operation(OpType.DELETE_EMBEDDED, DeleteEmbeddedParams(
@@ -1028,11 +1196,26 @@ class SMILEGeneralizedListener(SMILE_GeneralizedListener, BaseSMILEListener):
             entity=ctx.qualifiedName().getText(),
         ), original_keyword="ADD LABEL"))
 
+    def enterConstraintAdd(self, ctx):
+        # Rule: CONSTRAINT qualifiedName AS constraintBody
+        target = ctx.qualifiedName().getText()
+        params = self._build_add_constraint_params(target, ctx.constraintBody())
+        self.operations.append(Operation(
+            OpType.ADD_CONSTRAINT, params, original_keyword="ADD CONSTRAINT"))
+
     # DELETE operations
     def enterPropertyDelete(self, ctx):
         self.operations.append(Operation(OpType.DELETE_PROPERTY, DeletePropertyParams(
             target=ctx.qualifiedName().getText(),
         ), original_keyword="DELETE PROPERTY"))
+
+    def enterConstraintDelete(self, ctx):
+        # Rule: CONSTRAINT qualifiedName
+        self.operations.append(Operation(
+            OpType.DELETE_CONSTRAINT,
+            DeleteConstraintParams(target=ctx.qualifiedName().getText()),
+            original_keyword="DELETE CONSTRAINT",
+        ))
 
     def enterForeignKeyDelete(self, ctx):
         self.operations.append(Operation(OpType.DELETE_FOREIGN_KEY, DeleteForeignKeyParams(

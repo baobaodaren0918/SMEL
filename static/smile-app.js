@@ -793,6 +793,50 @@
                     html = '<span class="param-key">target:</span> <span class="param-value">' + esc(params.target) + '</span>';
                     html += ' <span class="param-key">TO</span> <span class="param-value">' + esc(params.constraint_type) + '</span>';
                     break;
+                case 'ADD_CONSTRAINT': {
+                    // Compact rendering for the three AS-branches. The body
+                    // discriminator lives in params.body_kind; per-branch
+                    // fields are populated only for that branch.
+                    html = '<span class="param-key">target:</span> <span class="param-value">' + esc(params.target) + '</span>';
+                    const bodyKind = params.body_kind || '';
+                    if (bodyKind === 'REFERENCE') {
+                        const cols = (params.ref_target_columns || []).join(', ');
+                        html += ' <span class="param-key">AS REFERENCE ' + esc(params.ref_kind || '') + ' TO</span> ';
+                        html += '<span class="param-value">' + esc(params.ref_target_table || '') + '(' + esc(cols) + ')</span>';
+                        if (params.ref_cardinality) {
+                            html += ' <span class="param-key">CARDINALITY</span> <span class="param-value">' + esc(params.ref_cardinality) + '</span>';
+                        }
+                    } else if (bodyKind === 'CHECK') {
+                        // check_expression is a CheckExpr AST node serialized
+                        // as a dict; render its top-level kind and a short
+                        // summary of the leaf, falling back to JSON for
+                        // composite expressions.
+                        const expr = params.check_expression || {};
+                        let exprStr = '';
+                        if (expr.kind === 'cmp') {
+                            exprStr = esc(expr.field) + ' ' + esc(expr.op) + ' ' + esc(expr.literal);
+                        } else if (expr.kind === 'in') {
+                            exprStr = esc(expr.field) + ' IN (' + (expr.values || []).map(esc).join(', ') + ')';
+                        } else if (expr.kind === 'between') {
+                            exprStr = esc(expr.field) + ' BETWEEN ' + esc(expr.low) + ' AND ' + esc(expr.high);
+                        } else if (expr.kind === 'regex') {
+                            exprStr = esc(expr.field) + ' MATCHES ' + esc(expr.pattern);
+                        } else if (expr.kind === 'isnull') {
+                            exprStr = esc(expr.field) + (expr.is_null ? ' IS NULL' : ' IS NOT NULL');
+                        } else if (expr.kind === 'raw') {
+                            exprStr = 'RAW "' + esc(expr.raw_text) + '"';
+                        } else {
+                            exprStr = esc(JSON.stringify(expr));
+                        }
+                        html += ' <span class="param-key">AS CHECK</span> <span class="param-value">' + exprStr + '</span>';
+                    } else if (bodyKind === 'EXISTENCE') {
+                        html += ' <span class="param-key">AS EXISTENCE</span>';
+                    }
+                    break;
+                }
+                case 'DELETE_CONSTRAINT':
+                    html = '<span class="param-key">target:</span> <span class="param-value">' + esc(params.target) + '</span>';
+                    break;
                 case 'RECARD':
                     html = '<span class="param-key">target:</span> <span class="param-value">' + esc(params.target) + '</span>';
                     html += ' <span class="param-key">TO</span> <span class="param-value">' + esc(params.cardinality) + '</span>';

@@ -83,9 +83,23 @@ class StructuralHandlersMixin:
                     cardinality = Cardinality.ONE_TO_ONE if not rel.is_optional else Cardinality.ZERO_TO_ONE
                     break
 
-        # Create embedded entity with specified properties (or all non-FK properties if not specified)
+        # Create embedded entity with specified properties (or all non-FK properties if not specified).
+        # Use full-path naming (target_full_path + alias) so that multiple NEST
+        # operations producing same-aliased children under different parents
+        # become distinct entities in the database (e.g. ``customers.address``
+        # vs ``orders.employee.address``). Simple-name (``[alias]``) caused
+        # structural collapse when the same alias appeared in multiple
+        # contexts and broke Mongo round-trip cycles.
         fk_attr_names = {rel.ref_name for rel in source_entity.get_references()}
-        embedded_entity = EntityType(object_name=[alias])
+        target_full_path = target_entity.full_path
+        embedded_full_path = f"{target_full_path}.{alias}"
+        embedded_entity = EntityType(
+            object_name=embedded_full_path.split("."),
+            # NEST always produces a sub-document; ``is_root=False`` keeps
+            # this consistent with the Mongo adapter's parse-time labelling
+            # of nested ``bsonType=object`` properties.
+            is_root=False,
+        )
 
         nested = params.nested
 
@@ -148,7 +162,11 @@ class StructuralHandlersMixin:
                     target_entity.remove_property(fk_attr)
 
         self.database.add_entity_type(embedded_entity)
-        target_entity.add_relationship(Embedded(aggr_name=alias, aggregates=alias, cardinality=cardinality,
+        # Embedded.aggregates points to the embedded entity's full_path so that
+        # database.get_entity_type() finds it deterministically without leaning
+        # on the simple-name lenient fallback.
+        target_entity.add_relationship(Embedded(aggr_name=alias, aggregates=embedded_full_path,
+                                                cardinality=cardinality,
                                                 is_optional=not cardinality.is_required()))
         self._touch(source_name, target_name, alias)
         self.changes.append(f"NEST:{target_name}.{alias}")
@@ -240,8 +258,18 @@ class StructuralHandlersMixin:
         if not entity:
             return OperationResult.skipped("unflatten: precondition not met")
 
-        # Create new embedded entity for the nested object
-        nested_entity = EntityType(object_name=[nested_name])
+        # Create new embedded entity for the nested object. Use full-path
+        # naming (parent.nested_name) — see NEST handler comment for the
+        # structural-collapse rationale. Simple-name caused two
+        # ``orders.employee.address`` and ``customers.address`` UNFLATTEN
+        # results to merge into one shared ``address`` entity.
+        nested_full_path = f"{entity.full_path}.{nested_name}"
+        nested_entity = EntityType(
+            object_name=nested_full_path.split("."),
+            # UNFLATTEN turns previously-flat columns into a sub-document; the
+            # resulting entity is by construction non-root (``is_root=False``).
+            is_root=False,
+        )
 
         # Move specified fields from parent to nested entity
         for field_name in fields:
@@ -255,10 +283,11 @@ class StructuralHandlersMixin:
         # Add nested entity to database
         self.database.add_entity_type(nested_entity)
 
-        # Add embedded relationship from parent to nested
+        # Add embedded relationship from parent to nested. ``aggregates``
+        # carries the embedded entity's full_path for deterministic lookup.
         entity.add_relationship(Embedded(
             aggr_name=nested_name,
-            aggregates=nested_name,
+            aggregates=nested_full_path,
             cardinality=Cardinality.ONE_TO_ONE
         ))
 

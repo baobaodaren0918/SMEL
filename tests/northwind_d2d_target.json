@@ -16,7 +16,8 @@
         "status": { "bsonType": "string" },
         "customer_id": {
           "bsonType": "string",
-          "description": "Cross-collection reference to customers._id"
+          "description": "Cross-collection reference to customers._id",
+          "_smile_logical_ref": {"refs_to": "customers", "column": "_id"}
         },
         "ship_destination": {
           "bsonType": "object",

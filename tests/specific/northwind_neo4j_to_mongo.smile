@@ -37,7 +37,11 @@ ADD_PROPERTY supplier_id TO products WITH TYPE String
 DELETE_ENTITY PART_OF
 ADD_PROPERTY category_id TO products WITH TYPE String
 DELETE_ENTITY PURCHASED
-ADD_PROPERTY customer_id TO orders WITH TYPE String NOT NULL
+ADD_PROPERTY customer_id TO orders WITH TYPE String
+-- Tighten the just-created column post-hoc: the cross-collection ref must
+-- always be present (every order belongs to a customer), but NOT NULL is a
+-- separate constraint from property creation.
+ADD_CONSTRAINT orders.customer_id AS EXISTENCE
 DELETE_ENTITY SOLD
 ADD_PROPERTY employee_id TO orders WITH TYPE String
 DELETE_ENTITY SHIPPED_VIA
@@ -82,6 +86,10 @@ DELETE_ENTITY shippers
 -- Step 8: NEST employees into orders (L1, with nested address at L2)
 -- ============================================
 NEST employees:last_name, first_name, title, birth_date, hire_date, phone, notes, reports_to, address{street, city, region, postal_code, country} IN orders.employee WHERE orders.employee_id = employees.employee_id
+-- Self-reference: reports_to points at another employee in the same nested
+-- collection. Re-declare the logical self-ref so the Meta V2 matches the
+-- Mongo source's `_smile_self_ref` marker.
+ADD_CONSTRAINT orders.employee.reports_to AS REFERENCE LOGICAL TO orders.employee(employee_id) WITH CARDINALITY ZERO_TO_ONE
 DELETE_ENTITY employees
 
 -- ============================================
@@ -98,6 +106,9 @@ RENAME_PROPERTY order_id TO _id IN orders
 CAST_CONSTRAINT orders._id TO DOCUMENT_ID
 RENAME_PROPERTY customer_id TO _id IN customers
 CAST_CONSTRAINT customers._id TO DOCUMENT_ID
+
+-- Logical cross-collection reference orders.customer_id -> customers._id
+ADD_CONSTRAINT orders.customer_id AS REFERENCE LOGICAL TO customers(_id) WITH CARDINALITY ONE_TO_MANY
 
 -- ============================================
 -- Final Result: 2 collections, see northwind_mongodb.json

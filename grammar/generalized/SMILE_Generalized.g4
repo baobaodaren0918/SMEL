@@ -76,7 +76,7 @@ operation: nest_gen | unnest_gen | flatten_gen | unflatten_gen | unwind_gen | wi
 // Example: ADD ENTITY CONTAINS FROM orders TO products WITH PROPERTIES (unitPrice Decimal)
 
 add_gen: ADD (propertyAdd | foreignKeyAdd | embeddedAdd | entityAdd
-        | keyAdd | labelAdd);
+        | keyAdd | labelAdd | constraintAdd);
 
 // Add property: ADD PROPERTY email TO Customer WITH TYPE String NOT NULL
 propertyAdd: PROPERTY identifier (TO qualifiedName)? propertyClause*;
@@ -121,6 +121,45 @@ keyColumns: qualifiedName | LPAREN identifierList RPAREN;
 // Add label (Graph): ADD LABEL Employee TO customers
 labelAdd: LABEL identifier TO qualifiedName;
 
+// Add constraint: covers constraint kinds NOT addressed by the narrow operators
+// (PRIMARY KEY / UNIQUE KEY / FOREIGN KEY / PARTITION KEY / CLUSTERING KEY / LABEL).
+//   ADD CONSTRAINT orders.customer_id AS REFERENCE LOGICAL TO customers(_id) WITH CARDINALITY ONE_TO_MANY
+//   ADD CONSTRAINT products.price AS CHECK price > 0
+//   ADD CONSTRAINT orders.shipped_date AS CHECK RAW "shipped_date IS NULL OR shipped_date >= order_date"
+//   ADD CONSTRAINT customers.contact_name AS EXISTENCE
+constraintAdd: CONSTRAINT qualifiedName AS constraintBody;
+
+constraintBody
+    : REFERENCE LOGICAL TO qualifiedName LPAREN identifierList RPAREN (WITH CARDINALITY cardinalityType)?  # ConstraintBodyReference
+    | CHECK checkExpr                                                                                       # ConstraintBodyCheck
+    | EXISTENCE                                                                                             # ConstraintBodyExistence
+    ;
+// ADD CONSTRAINT REFERENCE only supports LOGICAL — see specific-grammar
+// counterpart for the rationale (enforced FKs go through ADD FOREIGN KEY).
+
+// CHECK expression mini-grammar — operator precedence (low -> high): OR < AND < NOT < atom.
+checkExpr
+    : LPAREN checkExpr RPAREN                       # CheckParenExpr
+    | NOT checkExpr                                  # CheckNotExpr
+    | checkExpr AND checkExpr                        # CheckAndExpr
+    | checkExpr OR checkExpr                         # CheckOrExpr
+    | RAW STRING_LITERAL                             # CheckRawExpr
+    | checkAtom                                      # CheckAtomExpr
+    ;
+
+checkAtom
+    : qualifiedName cmpOp literal                                # CmpAtom
+    | qualifiedName IN LPAREN literalList RPAREN                 # InAtom
+    | qualifiedName BETWEEN literal AND literal                  # BetweenAtom
+    | qualifiedName MATCHES STRING_LITERAL                       # RegexAtom
+    | qualifiedName IS NULL                                      # IsNullAtom
+    | qualifiedName IS NOT_NULL                                  # IsNotNullAtom
+    ;
+
+cmpOp: LT | GT | LTE | GTE | EQ | NEQ;
+
+literalList: literal (COMMA literal)*;
+
 // ============================================================================
 // DELETE - Generalized DELETE operation with type parameter
 // ============================================================================
@@ -136,7 +175,7 @@ labelAdd: LABEL identifier TO qualifiedName;
 // Example: DELETE PRIMARY KEY id FROM Customer
 
 delete_gen: DELETE (propertyDelete | foreignKeyDelete | embeddedDelete | entityDelete
-          | keyDelete | labelDelete);
+          | keyDelete | labelDelete | constraintDelete);
 
 // Delete property: DELETE PROPERTY Customer.email
 propertyDelete: PROPERTY qualifiedName;
@@ -155,6 +194,13 @@ keyDelete: keyType KEY keyColumns (FROM qualifiedName)?;
 
 // Delete label: DELETE LABEL Employee FROM customers
 labelDelete: LABEL identifier FROM qualifiedName;
+
+// Delete constraint: DELETE CONSTRAINT entity.field
+//   Handler inspects the entity to determine which constraint kind
+//   (logical Reference / CheckConstraint / ExistenceConstraint) is currently
+//   attached and removes it.
+// Example: DELETE CONSTRAINT orders.customer_id
+constraintDelete: CONSTRAINT qualifiedName;
 
 // ============================================================================
 // RENAME - Generalized RENAME operation with type parameter
@@ -402,7 +448,20 @@ DATE: 'Date'; DATETIME: 'DateTime'; TIMESTAMP: 'Timestamp'; UUID: 'UUID'; BINARY
 TYPE: 'TYPE'; DEFAULT: 'DEFAULT'; SERIAL: 'SERIAL'; PREFIX: 'PREFIX';
 
 // Constraints
+// NOT_NULL keeps its own multi-word literal form ('NOT NULL' as a single token);
+// ANTLR's longest-match rule means "NOT NULL" is preferred over the shorter NOT
+// token introduced below for CHECK expression composition.
 NOT_NULL: 'NOT NULL';
+NOT: 'NOT';
+OR: 'OR';
+IS: 'IS';
+MATCHES: 'MATCHES';
+RAW: 'RAW';
+
+// ADD CONSTRAINT body keywords
+LOGICAL: 'LOGICAL';
+EXISTENCE: 'EXISTENCE';
+CHECK: 'CHECK';
 
 // Literals
 TRUE: 'true' | 'TRUE'; FALSE: 'false' | 'FALSE'; NULL: 'null' | 'NULL';
@@ -411,6 +470,13 @@ TRUE: 'true' | 'TRUE'; FALSE: 'false' | 'FALSE'; NULL: 'null' | 'NULL';
 COLON: ':'; SEMICOLON: ';'; COMMA: ','; DOT: '.'; LPAREN: '('; RPAREN: ')'; LBRACKET: '['; RBRACKET: ']';
 LBRACE: '{'; RBRACE: '}';
 EQUALS: '=';
+// Comparison operators for CHECK atoms. '==' must come before '=' so longest-match wins.
+EQ: '==';
+NEQ: '!=';
+LTE: '<=';
+GTE: '>=';
+LT: '<';
+GT: '>';
 
 // ----------------------------------------------------------------------------
 // PATTERNS

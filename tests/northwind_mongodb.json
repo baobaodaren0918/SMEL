@@ -7,7 +7,7 @@
       "bsonType": "object",
       "required": ["_id", "customer_id", "employee", "shipper", "details", "ship_destination"],
       "properties": {
-        "_id": { "bsonType": "string", "description": "Primary key (order_id)" },
+        "_id": { "bsonType": "string", "description": "Unique identifier (order_id)" },
         "order_date": { "bsonType": "date" },
         "required_date": { "bsonType": "date" },
         "shipped_date": { "bsonType": "date" },
@@ -15,7 +15,8 @@
         "ship_name": { "bsonType": "string" },
         "customer_id": {
           "bsonType": "string",
-          "description": "Cross-collection reference to customers._id"
+          "description": "Cross-collection reference to customers._id",
+          "_smile_logical_ref": {"refs_to": "customers", "column": "_id"}
         },
         "ship_destination": {
           "bsonType": "object",
@@ -42,7 +43,8 @@
             "notes": { "bsonType": "string" },
             "reports_to": {
               "bsonType": "string",
-              "description": "Self-reference to another employee"
+              "description": "Self-reference to another employee",
+              "_smile_logical_ref": {"refs_to": "orders.employee", "column": "_id"}
             },
             "address": {
               "bsonType": "object",
@@ -120,7 +122,7 @@
       "bsonType": "object",
       "required": ["_id", "address"],
       "properties": {
-        "_id": { "bsonType": "string", "description": "Primary key (customer_id)" },
+        "_id": { "bsonType": "string", "description": "Unique identifier (customer_id)" },
         "company_name": { "bsonType": "string" },
         "contact_name": { "bsonType": "string" },
         "contact_title": { "bsonType": "string" },

@@ -130,6 +130,33 @@ def _serialize_entity(name: str, entity, db: Optional[Database] = None) -> Dict[
                     "references_entity": ref_target,
                     "references_property": _resolve_unique_property_name(db, fkp.points_to_unique_property_id),
                 })
+        elif c.kind == "check":
+            # CHECK constraint serialization. ``target`` is the anchor
+            # property name (resolved from target_property_id); ``expression``
+            # is the structured AST as an emit-able dict.
+            anchor_attr = entity.get_property_by_id(c.target_property_id) \
+                if c.target_property_id else None
+            check_dict = {
+                "type": "CHECK",
+                "target": anchor_attr.name if anchor_attr else "",
+                "expression": c.expression.to_dict() if c.expression else None,
+            }
+            if c.constraint_name:
+                check_dict["constraint_name"] = c.constraint_name
+            constraints.append(check_dict)
+        elif c.kind == "existence":
+            # ExistenceConstraint is a meta-model marker for "NOT NULL applied
+            # post-hoc by ADD_CONSTRAINT ... AS EXISTENCE", distinct from a
+            # property declared NOT NULL on creation. The adapters never
+            # produce these markers when parsing source schemas — they just
+            # set ``Property.is_optional = False`` on the parsed property —
+            # so emitting the marker into the comparison dict would create
+            # spurious Layer 1 / Layer 2 mismatches. The canonical NOT NULL
+            # signal stays on ``Property.is_optional`` (already serialized in
+            # the properties list), and the marker is kept in-memory only
+            # so UI / tooling can distinguish post-hoc EXISTENCE from
+            # declared-on-creation.
+            pass
 
     # Build pk_type_map for Cassandra PARTITION/CLUSTERING key_type
     pk_type_map = {}
@@ -164,6 +191,10 @@ def _serialize_entity(name: str, entity, db: Optional[Database] = None) -> Dict[
                 "name": r.ref_name,
                 "target": r.get_target_entity_name(),
                 "cardinality": r.cardinality.value if hasattr(r, 'cardinality') else '1..1',
+                # ``is_enforced`` is emitted only when False (the non-default)
+                # so that the JSON for every existing enforced Reference stays
+                # byte-identical to the pre-feature serialization.
+                **({"is_enforced": False} if r.is_enforced is False else {}),
                 **({"edge_properties": [
                     {"name": a.name, "type": _get_type_str(a.data_type)}
                     for a in r.edge_properties

@@ -46,3 +46,13 @@ WIND customers.full_name
 
 -- [12 → UNWIND] expand the (now-array) customers.full_name back out (in-place mode)
 UNWIND customers.full_name
+
+-- [13 → ADD_CONSTRAINT (EXISTENCE branch)] tighten orders.amount to NOT NULL
+-- post-hoc — exercises the AS EXISTENCE body. The REFERENCE LOGICAL and
+-- CHECK branches are already exercised by the to-Mongo Northwind scripts
+-- (REFERENCE LOGICAL) and CHECK is intentionally not part of the Northwind
+-- benchmark (it is a supplementary feature).
+ADD_CONSTRAINT orders.amount AS EXISTENCE
+
+-- [14 → DELETE_CONSTRAINT] undo the EXISTENCE constraint just added
+DELETE_CONSTRAINT orders.amount

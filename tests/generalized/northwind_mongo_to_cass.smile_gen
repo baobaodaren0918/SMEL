@@ -9,6 +9,11 @@ USING adapted_northwind_schema VERSION 1
 RENAME PROPERTY _id TO order_id IN orders
 RENAME PROPERTY _id TO customer_id IN customers
 
+-- Mongo source carries a logical cross-collection reference orders.customer_id
+-- -> customers. Cassandra denormalised tables don't model this, drop it so the
+-- meta model matches the target.
+DELETE CONSTRAINT orders.customer_id
+
 -- Step 2: UNNEST details[] -> order_details
 UNNEST orders.details:unit_price, quantity, discount, product{product_name, unit_price, units_in_stock, discontinued, quantity_per_unit, category{category_name, description}, supplier{company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country}} AS order_details WITH orders.order_id TO order_details.order_id
 

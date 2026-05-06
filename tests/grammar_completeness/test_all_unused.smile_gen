@@ -46,3 +46,9 @@ WIND customers.full_name
 
 -- [12 → UNWIND]
 UNWIND customers.full_name
+
+-- [13 → ADD CONSTRAINT (EXISTENCE branch)]
+ADD CONSTRAINT orders.amount AS EXISTENCE
+
+-- [14 → DELETE CONSTRAINT]
+DELETE CONSTRAINT orders.amount

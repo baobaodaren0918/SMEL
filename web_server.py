@@ -229,6 +229,37 @@ class SMILEHandler(SimpleHTTPRequestHandler):
                         from schema_inspector import _build_summary
                         meta_v2_summary = _build_summary(result_db)
 
+                        # Run the same Layer 1 + Layer 2 + blame validation that
+                        # /api/migrate (run_migration) runs, so the canned-Northwind
+                        # path and the user's Run-button path expose an identical
+                        # response shape. For arbitrary user-pasted scripts there
+                        # is no registered ground-truth target file, so the
+                        # validation legitimately reports ``unverifiable`` — that
+                        # is itself useful information (the frontend can render
+                        # the validation panel uniformly instead of branching on
+                        # endpoint identity).
+                        from core import db_to_dict
+                        validation_input = {
+                            "result": db_to_dict(result_db),
+                            "exported_target": exported_text,
+                        }
+                        try:
+                            from validation.pipeline import validate_pipeline
+                            v = validate_pipeline(
+                                validation_input, tgt_type_resolved, config_key="")
+                            validation_meta = v["layer1"]
+                            validation_export = v["layer2"]
+                            validation_blame = v["blame"]
+                            validation_summary = v["summary"]
+                        except Exception as ex:
+                            err_block = {"passed": None,
+                                         "summary": f"Error: {ex}",
+                                         "details": {}}
+                            validation_meta = err_block
+                            validation_export = err_block
+                            validation_blame = "unverifiable"
+                            validation_summary = f"validation crashed: {ex}"
+
                         result = {
                             "ok": True, "stage": "run",
                             "operations_total": len(operations),
@@ -240,6 +271,10 @@ class SMILEHandler(SimpleHTTPRequestHandler):
                             "meta_v2_summary": meta_v2_summary,
                             "exported_target": exported_text,
                             "target_db_type": tgt_type_resolved.upper(),
+                            "validation_meta": validation_meta,
+                            "validation_export": validation_export,
+                            "validation_blame": validation_blame,
+                            "validation_summary": validation_summary,
                         }
                     self.send_response(200)
                     self.send_header('Content-type', 'application/json')

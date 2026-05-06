@@ -65,6 +65,10 @@ DELETE_ENTITY shippers
 -- Step 7: NEST employees into orders (L1, with nested address at L2)
 -- ============================================
 NEST employees:last_name, first_name, title, birth_date, hire_date, phone, notes, reports_to, address{street, city, region, postal_code, country} IN orders.employee WHERE orders.employee_id = employees.employee_id
+-- Self-reference: reports_to points at another employee in the same nested
+-- collection. Mongo source schema marks this with `_smile_self_ref: true`,
+-- so the Meta V2 must carry the matching logical Reference.
+ADD_CONSTRAINT orders.employee.reports_to AS REFERENCE LOGICAL TO orders.employee(employee_id) WITH CARDINALITY ZERO_TO_ONE
 DELETE_ENTITY employees
 
 -- ============================================
@@ -84,6 +88,9 @@ CAST_CONSTRAINT orders._id TO DOCUMENT_ID
 RENAME_PROPERTY customer_id TO _id IN customers
 ADD_PRIMARY_KEY _id TO customers
 CAST_CONSTRAINT customers._id TO DOCUMENT_ID
+
+-- Logical cross-collection reference orders.customer_id -> customers._id
+ADD_CONSTRAINT orders.customer_id AS REFERENCE LOGICAL TO customers(_id) WITH CARDINALITY ONE_TO_MANY
 
 -- ============================================
 -- Final Result: 2 collections, see northwind_mongodb.json

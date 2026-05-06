@@ -15,15 +15,38 @@ Data Flow:
   { "bsonType": "object" }        ->     EntityType (nested)
 """
 import json
-from typing import Dict, Any, Optional, List, Union
+import re
+from typing import Dict, Any, Optional, List, Tuple, Union
 from ..unified_meta_schema import (
     Database, DatabaseType, EntityType, EntityKind, Property,
     UniqueConstraint, UniqueProperty, PKTypeEnum,
-    Embedded, Cardinality, PrimitiveDataType, PrimitiveType,
+    Embedded, Reference, Cardinality, PrimitiveDataType, PrimitiveType,
     ListDataType, SetDataType, MapDataType,
     RelationshipType, TypeMappings
 )
 from ._base import DatabaseAdapter
+
+
+# Canonical SMILE marker for a logical (non-enforced) reference, used for both
+# cross-collection refs *and* self-references. Self-reference is encoded by
+# ``refs_to`` matching the owning entity's own ``full_path``; the parser
+# distinguishes the two cases on that condition. Shape:
+#   "_smile_logical_ref": {"refs_to": "<entity_full_path>", "column": "<field>"}
+# The exporter always writes this canonical form; the parser still accepts the
+# legacy description regex forms below for backward compatibility.
+_SMILE_LOGICAL_REF_KEY = "_smile_logical_ref"
+
+# Legacy: descriptive text MongoDB sources used to mark a column as a logical
+# cross-collection reference. Kept as a fallback so externally-authored
+# schemas without the structured marker still work.
+_CROSS_COLLECTION_REF_RE = re.compile(
+    r"Cross-collection reference to ([\w]+)\.(\w+)",
+    re.IGNORECASE,
+)
+
+# Legacy: descriptive text marking a self-reference. The structured marker
+# above replaces this; the regex is kept as a fallback for older schemas.
+_SELF_REFERENCE_RE = re.compile(r"Self-reference", re.IGNORECASE)
 
 
 class MongoDBAdapter(DatabaseAdapter):
@@ -123,7 +146,11 @@ class MongoDBAdapter(DatabaseAdapter):
         object_name = parent_path + [name]
         entity = EntityType(
             object_name=object_name,
-            entity_kind=EntityKind.DOCUMENT if is_root else EntityKind.EMBEDDED
+            entity_kind=EntityKind.DOCUMENT if is_root else EntityKind.EMBEDDED,
+            # Carry the structural is_root distinction onto the EntityType so
+            # downstream tools can tell a root collection apart from an
+            # embedded sub-document without re-deriving it from entity_kind.
+            is_root=is_root,
         )
 
         properties = schema.get('properties', {})
@@ -209,7 +236,82 @@ class MongoDBAdapter(DatabaseAdapter):
                     )
                     entity.add_constraint(constraint)
 
+                # Logical Reference recognition. Single unified path through
+                # ``_extract_logical_ref_target``, which recognises either
+                # the canonical structured marker or one of two legacy
+                # description regexes (cross-collection or self-reference).
+                # The returned ``target_table`` distinguishes the two flavours:
+                #   * target == owning entity's full_path -> self-reference
+                #     (cardinality follows the 0..1 / 1..1 convention because
+                #     the column points at *another instance* of the same
+                #     entity, not at a multi-row collection)
+                #   * target != owner -> cross-collection reference
+                #     (cardinality follows Mongo's array/non-array convention)
+                if not is_key:
+                    target_table, _target_column = \
+                        self._extract_logical_ref_target(
+                            prop_schema, owner_entity=entity)
+                    if target_table:
+                        is_self_ref = (target_table == entity.full_path)
+                        if is_self_ref:
+                            cardinality = Cardinality.ONE_TO_ONE \
+                                if is_required else Cardinality.ZERO_TO_ONE
+                        else:
+                            cardinality = Cardinality.ZERO_TO_MANY \
+                                if not is_required else Cardinality.ONE_TO_MANY
+                        entity.add_relationship(Reference(
+                            ref_name=prop_name_lower,
+                            refs_to=target_table,
+                            cardinality=cardinality,
+                            is_optional=not is_required,
+                            is_enforced=False,
+                            description=prop_schema.get('description') or None,
+                        ))
+
         return entity
+
+    @staticmethod
+    def _extract_logical_ref_target(prop_schema: Dict[str, Any],
+                                    owner_entity: EntityType) -> Tuple[Optional[str], Optional[str]]:
+        """Identify the target of a logical reference (cross-collection *or*
+        self-reference) from a property schema.
+
+        Recognised forms, in priority order:
+          1. **Canonical structured marker** —
+             ``"_smile_logical_ref": {"refs_to": "<entity_full_path>", "column": "<col>"}``.
+             A self-reference is encoded by ``refs_to`` matching the owning
+             entity's own ``full_path``.
+          2. **Legacy cross-collection description regex** —
+             ``"description": "Cross-collection reference to <table>.<col>"``.
+          3. **Legacy self-reference description regex** —
+             ``"description": "Self-reference ..."``. Returns the owning
+             entity's ``full_path`` as the target (with ``"_id"`` as a
+             placeholder column) so the parse-side branch sees a uniform
+             "I have a target" signal regardless of which marker shape was
+             present in the source.
+
+        The parse-side branch in ``_parse_object_schema`` decides whether
+        the Reference is self vs cross by comparing ``target_table`` to the
+        owning entity's full_path — both shapes funnel through the same
+        ``Reference(...)`` construction afterwards.
+        """
+        marker = prop_schema.get(_SMILE_LOGICAL_REF_KEY)
+        if isinstance(marker, dict):
+            refs_to = marker.get("refs_to")
+            column = marker.get("column", "")
+            if refs_to:
+                return refs_to, column
+
+        description = prop_schema.get('description', '') or ''
+        m = _CROSS_COLLECTION_REF_RE.search(description)
+        if m:
+            return m.group(1), m.group(2)
+
+        # Legacy self-reference: target is implicit (the owning entity).
+        if _SELF_REFERENCE_RE.search(description):
+            return owner_entity.full_path, "_id"
+
+        return None, None
 
     def _parse_primitive_type(self, bson_type: str, schema: Dict[str, Any]) -> PrimitiveDataType:
         """Parse BSON type to PrimitiveDataType."""
@@ -378,6 +480,17 @@ class MongoDBAdapter(DatabaseAdapter):
             schema["title"] = entity.name.replace('_', ' ')
             schema["description"] = f"MongoDB document schema for {entity.name}"
 
+        # Build a lookup from property name -> matching logical Reference,
+        # used to write the cross-collection reference description back into
+        # the JSON Schema. The description is the round-trip signal for the
+        # parse-end recognition; without it the meta-model relationship is
+        # invisible in the exported document.
+        logical_ref_by_prop = {
+            rel.ref_name: rel
+            for rel in entity.relationships
+            if isinstance(rel, Reference) and rel.is_enforced is False
+        }
+
         # Process properties
         for attr in entity.properties:
             prop_name = attr.name
@@ -386,6 +499,27 @@ class MongoDBAdapter(DatabaseAdapter):
                 prop_name = '_id'
 
             prop_schema = cls._export_property_to_bson_type(attr)
+            ref = logical_ref_by_prop.get(attr.name)
+            if ref is not None:
+                # Single canonical marker for both cross-collection and
+                # self-references. ``refs_to`` matching the owning entity's
+                # full_path is what flags it as a self-reference on the
+                # parse side.
+                prop_schema[_SMILE_LOGICAL_REF_KEY] = {
+                    "refs_to": ref.refs_to,
+                    "column": "_id",
+                }
+                # Human-readable description — distinguishes the two cases
+                # for human readers but is not the parser's primary signal.
+                if "description" not in prop_schema:
+                    if ref.refs_to == entity.full_path:
+                        prop_schema["description"] = (
+                            f"Self-reference to another {entity.name}"
+                        )
+                    else:
+                        prop_schema["description"] = (
+                            f"Cross-collection reference to {ref.refs_to}._id"
+                        )
             schema["properties"][prop_name] = prop_schema
 
             if not attr.is_optional:

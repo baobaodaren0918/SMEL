@@ -1,4 +1,4 @@
-# Generated from SMILE_Specific.g4 by ANTLR 4.13.2
+# Generated from C:/Users/baoba/PycharmProjects/MA_Hagen_Lu/schema_evolution_language/grammar/specific/SMILE_Specific.g4 by ANTLR 4.13.1
 from antlr4 import *
 if "." in __name__:
     from .SMILE_SpecificParser import SMILE_SpecificParser
@@ -554,6 +554,177 @@ class SMILE_SpecificListener(ParseTreeListener):
 
     # Exit a parse tree produced by SMILE_SpecificParser#cast_constraint.
     def exitCast_constraint(self, ctx:SMILE_SpecificParser.Cast_constraintContext):
+        pass
+
+
+    # Enter a parse tree produced by SMILE_SpecificParser#add_constraint.
+    def enterAdd_constraint(self, ctx:SMILE_SpecificParser.Add_constraintContext):
+        pass
+
+    # Exit a parse tree produced by SMILE_SpecificParser#add_constraint.
+    def exitAdd_constraint(self, ctx:SMILE_SpecificParser.Add_constraintContext):
+        pass
+
+
+    # Enter a parse tree produced by SMILE_SpecificParser#ConstraintBodyReference.
+    def enterConstraintBodyReference(self, ctx:SMILE_SpecificParser.ConstraintBodyReferenceContext):
+        pass
+
+    # Exit a parse tree produced by SMILE_SpecificParser#ConstraintBodyReference.
+    def exitConstraintBodyReference(self, ctx:SMILE_SpecificParser.ConstraintBodyReferenceContext):
+        pass
+
+
+    # Enter a parse tree produced by SMILE_SpecificParser#ConstraintBodyCheck.
+    def enterConstraintBodyCheck(self, ctx:SMILE_SpecificParser.ConstraintBodyCheckContext):
+        pass
+
+    # Exit a parse tree produced by SMILE_SpecificParser#ConstraintBodyCheck.
+    def exitConstraintBodyCheck(self, ctx:SMILE_SpecificParser.ConstraintBodyCheckContext):
+        pass
+
+
+    # Enter a parse tree produced by SMILE_SpecificParser#ConstraintBodyExistence.
+    def enterConstraintBodyExistence(self, ctx:SMILE_SpecificParser.ConstraintBodyExistenceContext):
+        pass
+
+    # Exit a parse tree produced by SMILE_SpecificParser#ConstraintBodyExistence.
+    def exitConstraintBodyExistence(self, ctx:SMILE_SpecificParser.ConstraintBodyExistenceContext):
+        pass
+
+
+    # Enter a parse tree produced by SMILE_SpecificParser#delete_constraint.
+    def enterDelete_constraint(self, ctx:SMILE_SpecificParser.Delete_constraintContext):
+        pass
+
+    # Exit a parse tree produced by SMILE_SpecificParser#delete_constraint.
+    def exitDelete_constraint(self, ctx:SMILE_SpecificParser.Delete_constraintContext):
+        pass
+
+
+    # Enter a parse tree produced by SMILE_SpecificParser#CheckParenExpr.
+    def enterCheckParenExpr(self, ctx:SMILE_SpecificParser.CheckParenExprContext):
+        pass
+
+    # Exit a parse tree produced by SMILE_SpecificParser#CheckParenExpr.
+    def exitCheckParenExpr(self, ctx:SMILE_SpecificParser.CheckParenExprContext):
+        pass
+
+
+    # Enter a parse tree produced by SMILE_SpecificParser#CheckAtomExpr.
+    def enterCheckAtomExpr(self, ctx:SMILE_SpecificParser.CheckAtomExprContext):
+        pass
+
+    # Exit a parse tree produced by SMILE_SpecificParser#CheckAtomExpr.
+    def exitCheckAtomExpr(self, ctx:SMILE_SpecificParser.CheckAtomExprContext):
+        pass
+
+
+    # Enter a parse tree produced by SMILE_SpecificParser#CheckAndExpr.
+    def enterCheckAndExpr(self, ctx:SMILE_SpecificParser.CheckAndExprContext):
+        pass
+
+    # Exit a parse tree produced by SMILE_SpecificParser#CheckAndExpr.
+    def exitCheckAndExpr(self, ctx:SMILE_SpecificParser.CheckAndExprContext):
+        pass
+
+
+    # Enter a parse tree produced by SMILE_SpecificParser#CheckOrExpr.
+    def enterCheckOrExpr(self, ctx:SMILE_SpecificParser.CheckOrExprContext):
+        pass
+
+    # Exit a parse tree produced by SMILE_SpecificParser#CheckOrExpr.
+    def exitCheckOrExpr(self, ctx:SMILE_SpecificParser.CheckOrExprContext):
+        pass
+
+
+    # Enter a parse tree produced by SMILE_SpecificParser#CheckNotExpr.
+    def enterCheckNotExpr(self, ctx:SMILE_SpecificParser.CheckNotExprContext):
+        pass
+
+    # Exit a parse tree produced by SMILE_SpecificParser#CheckNotExpr.
+    def exitCheckNotExpr(self, ctx:SMILE_SpecificParser.CheckNotExprContext):
+        pass
+
+
+    # Enter a parse tree produced by SMILE_SpecificParser#CheckRawExpr.
+    def enterCheckRawExpr(self, ctx:SMILE_SpecificParser.CheckRawExprContext):
+        pass
+
+    # Exit a parse tree produced by SMILE_SpecificParser#CheckRawExpr.
+    def exitCheckRawExpr(self, ctx:SMILE_SpecificParser.CheckRawExprContext):
+        pass
+
+
+    # Enter a parse tree produced by SMILE_SpecificParser#CmpAtom.
+    def enterCmpAtom(self, ctx:SMILE_SpecificParser.CmpAtomContext):
+        pass
+
+    # Exit a parse tree produced by SMILE_SpecificParser#CmpAtom.
+    def exitCmpAtom(self, ctx:SMILE_SpecificParser.CmpAtomContext):
+        pass
+
+
+    # Enter a parse tree produced by SMILE_SpecificParser#InAtom.
+    def enterInAtom(self, ctx:SMILE_SpecificParser.InAtomContext):
+        pass
+
+    # Exit a parse tree produced by SMILE_SpecificParser#InAtom.
+    def exitInAtom(self, ctx:SMILE_SpecificParser.InAtomContext):
+        pass
+
+
+    # Enter a parse tree produced by SMILE_SpecificParser#BetweenAtom.
+    def enterBetweenAtom(self, ctx:SMILE_SpecificParser.BetweenAtomContext):
+        pass
+
+    # Exit a parse tree produced by SMILE_SpecificParser#BetweenAtom.
+    def exitBetweenAtom(self, ctx:SMILE_SpecificParser.BetweenAtomContext):
+        pass
+
+
+    # Enter a parse tree produced by SMILE_SpecificParser#RegexAtom.
+    def enterRegexAtom(self, ctx:SMILE_SpecificParser.RegexAtomContext):
+        pass
+
+    # Exit a parse tree produced by SMILE_SpecificParser#RegexAtom.
+    def exitRegexAtom(self, ctx:SMILE_SpecificParser.RegexAtomContext):
+        pass
+
+
+    # Enter a parse tree produced by SMILE_SpecificParser#IsNullAtom.
+    def enterIsNullAtom(self, ctx:SMILE_SpecificParser.IsNullAtomContext):
+        pass
+
+    # Exit a parse tree produced by SMILE_SpecificParser#IsNullAtom.
+    def exitIsNullAtom(self, ctx:SMILE_SpecificParser.IsNullAtomContext):
+        pass
+
+
+    # Enter a parse tree produced by SMILE_SpecificParser#IsNotNullAtom.
+    def enterIsNotNullAtom(self, ctx:SMILE_SpecificParser.IsNotNullAtomContext):
+        pass
+
+    # Exit a parse tree produced by SMILE_SpecificParser#IsNotNullAtom.
+    def exitIsNotNullAtom(self, ctx:SMILE_SpecificParser.IsNotNullAtomContext):
+        pass
+
+
+    # Enter a parse tree produced by SMILE_SpecificParser#cmpOp.
+    def enterCmpOp(self, ctx:SMILE_SpecificParser.CmpOpContext):
+        pass
+
+    # Exit a parse tree produced by SMILE_SpecificParser#cmpOp.
+    def exitCmpOp(self, ctx:SMILE_SpecificParser.CmpOpContext):
+        pass
+
+
+    # Enter a parse tree produced by SMILE_SpecificParser#literalList.
+    def enterLiteralList(self, ctx:SMILE_SpecificParser.LiteralListContext):
+        pass
+
+    # Exit a parse tree produced by SMILE_SpecificParser#literalList.
+    def exitLiteralList(self, ctx:SMILE_SpecificParser.LiteralListContext):
         pass
 
 

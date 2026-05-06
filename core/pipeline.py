@@ -36,6 +36,7 @@ from core.normalization import (
     _calculate_changes,
     normalize_entity_kinds,
     normalize_document_cardinality,
+    normalize_document_full_paths,
 )
 
 logger = logging.getLogger(__name__)
@@ -64,13 +65,18 @@ SMILE_SYNTAX = {
         'ADD_PROPERTY', 'ADD_EMBEDDED', 'ADD_ENTITY', 'ADD_LABEL',
         'ADD_PRIMARY_KEY', 'ADD_FOREIGN_KEY', 'ADD_UNIQUE_KEY',
         'ADD_PARTITION_KEY', 'ADD_CLUSTERING_KEY',
+        'ADD_CONSTRAINT',
         'DELETE_PROPERTY', 'DELETE_EMBEDDED', 'DELETE_ENTITY', 'DELETE_LABEL',
         'DELETE_PRIMARY_KEY', 'DELETE_UNIQUE_KEY', 'DELETE_FOREIGN_KEY',
         'DELETE_PARTITION_KEY', 'DELETE_CLUSTERING_KEY',
+        'DELETE_CONSTRAINT',
         'RENAME_PROPERTY', 'RENAME_ENTITY',
         'COPY_PROPERTY', 'COPY_ENTITY', 'MOVE_PROPERTY',
         'CAST_PROPERTY', 'CAST_CONSTRAINT',
         'NODE', 'DOCUMENT_ID',
+        # ADD_CONSTRAINT body keywords (REFERENCE/CHECK/EXISTENCE branches)
+        'LOGICAL', 'EXISTENCE', 'CHECK', 'MATCHES', 'RAW',
+        'NOT', 'OR', 'IS',
     ],
     "types": [
         'String', 'Text', 'Int', 'Integer', 'Long', 'Double', 'Float',
@@ -271,6 +277,15 @@ def run_export(transformer: 'SchemaTransformer', source_type: str, target_type: 
     # cardinality promotion, which made the call site read ambiguously.
     normalize_entity_kinds(result_db, target_type)
     normalize_document_cardinality(result_db, source_type)
+    # Document-specific: promote any simple-name embedded entities (left
+    # behind by NEST / UNFLATTEN when source-side embedded chains were
+    # carried forward) to canonical ``parent.child`` full paths. This is
+    # the structural counterpart of the Mongo adapter's parse-time
+    # ``parent_path=object_name`` recursion and closes the round-trip
+    # cycle ``Mongo -> X -> Mongo'`` that previously diverged on entity
+    # full_path naming.
+    if target_type == SOURCE_TYPE_DOCUMENT:
+        normalize_document_full_paths(result_db)
     exported_target = target_adapter.export(result_db)
     return result_db, exported_target, target_adapter
 

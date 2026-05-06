@@ -93,7 +93,7 @@ python -m pytest tests/test_full_flow.py -k r2d -q
 - Off-diagonal = **cross-model migration**
 - Each direction has both **Specific** (`.smile`) and **Generalized** (`.smile_gen`) grammar variants = **32 Northwind configs**
 
-In addition to the 32 Northwind configs, the registry includes 1 **grammar-completeness** script that exercises the operations not naturally hit by the Northwind matrix — **33 configs in total**.
+In addition to the 32 Northwind configs, the registry includes a **grammar-completeness** pair (specific + generalized) that exercises the operations not naturally hit by the Northwind matrix — **34 configs in total**.
 
 ### Test Dataset: Northwind
 
@@ -117,7 +117,7 @@ SMILE/
 │   ├── generalized/                   # Generalized grammar (verb + object composition)
 │   │   ├── SMILE_Generalized.g4
 │   │   └── generate_parser.bat
-│   ├── smile_operations.json          # Single source of truth for all 36 ops
+│   ├── smile_operations.json          # Single source of truth for all 38 ops
 │   │                                  #   (used by editor autocomplete)
 │   └── antlr-4.13.2-complete.jar
 ├── Schema/
@@ -169,7 +169,7 @@ SMILE/
 │   └── __init__.py
 ├── schema_inspector.py                # Reverse-engineer any source DDL → Meta V1 (web UI only)
 ├── script_renderer.py                 # Emits SMILE header for /api/generate_script (body left to user)
-├── config.py                          # Migration registry (33 configs: 32 Northwind + 1 grammar-completeness)
+├── config.py                          # Migration registry (34 configs: 32 Northwind + 2 grammar-completeness)
 ├── main.py                            # CLI entry point
 └── web_server.py                      # Web interface (http.server, port 5601)
 ```
@@ -244,9 +244,9 @@ Database
               └── Edge (graph relationship)
 ```
 
-## SMILE Operations (36 surface ops)
+## SMILE Operations (38 surface ops)
 
-The grammar exposes 36 named operations grouped as **9 structural + 6 property + 4 entity + 11 key/constraint + 2 type/cardinality + 4 embedded/label**. Many of them collapse at the IR level — e.g. `ADD_PRIMARY_KEY` / `ADD_UNIQUE_KEY` / `ADD_PARTITION_KEY` / `ADD_CLUSTERING_KEY` all dispatch through a single `_handle_add_key` — so the four mixin files in `core/handlers/` (`structural.py`, `crud.py`, `keys_constraints.py`, `reshape.py`) jointly register 30 unique handler methods via the `@register_handler` decorator. The single source of truth for the surface op set is `grammar/smile_operations.json` (also consumed by the web-UI Ace autocomplete).
+The grammar exposes 38 named operations grouped as **9 structural + 6 property + 4 entity + 13 key/constraint + 2 type/cardinality + 4 embedded/label**. Many of them collapse at the IR level — e.g. `ADD_PRIMARY_KEY` / `ADD_UNIQUE_KEY` / `ADD_PARTITION_KEY` / `ADD_CLUSTERING_KEY` all dispatch through a single `_handle_add_key` — so the four mixin files in `core/handlers/` (`structural.py`, `crud.py`, `keys_constraints.py`, `reshape.py`) jointly register the unique handler methods via the `@register_handler` decorator. The single source of truth for the surface op set is `grammar/smile_operations.json` (also consumed by the web-UI Ace autocomplete).
 
 ### Structural Operations (9)
 
@@ -282,7 +282,7 @@ The grammar exposes 36 named operations grouped as **9 structural + 6 property +
 | `RENAME_ENTITY` | Rename entity (updates all references) |
 | `COPY_ENTITY` | Deep-copy entity structure |
 
-### Key & Constraint Operations (11)
+### Key & Constraint Operations (13)
 
 | Operation | Description |
 |-----------|-------------|
@@ -292,6 +292,8 @@ The grammar exposes 36 named operations grouped as **9 structural + 6 property +
 | `ADD_PARTITION_KEY` / `DELETE_PARTITION_KEY` | Cassandra-specific partition key |
 | `ADD_CLUSTERING_KEY` / `DELETE_CLUSTERING_KEY` | Cassandra-specific clustering key |
 | `CAST_CONSTRAINT` | Change constraint type (e.g., `UNIQUE` → `PARTITION`) |
+| `ADD_CONSTRAINT` | Generic constraint creator covering the kinds the narrow operators don't address. Three `AS` branches: `REFERENCE LOGICAL TO <target>(<col>)` for non-enforced cross-entity refs (Mongo cross-collection, Cassandra denormalised columns, self-references — enforced FKs use `ADD_FOREIGN_KEY` instead), `CHECK <expr>` for value-domain predicates with structured atoms (`>`, `<`, `==`, `!=`, `IN`, `BETWEEN`, `MATCHES`, `IS [NOT] NULL`) plus `AND` / `OR` / `NOT` composition and a `RAW "..."` escape hatch, and `EXISTENCE` for post-hoc `NOT NULL`. |
+| `DELETE_CONSTRAINT` | Remove the `ADD_CONSTRAINT`-produced object (logical Reference, CheckConstraint, ExistenceConstraint) anchored at `<entity.field>`. Narrow-operator constraints (`PK`/`FK`/`UNIQUE`/`PARTITION`/`CLUSTERING`/`LABEL`) are managed by their own `DELETE_*` siblings. |
 
 ### Type & Cardinality Operations (2)
 

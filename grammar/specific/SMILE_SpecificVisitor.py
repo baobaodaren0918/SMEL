@@ -1,4 +1,4 @@
-# Generated from SMILE_Specific.g4 by ANTLR 4.13.2
+# Generated from C:/Users/baoba/PycharmProjects/MA_Hagen_Lu/schema_evolution_language/grammar/specific/SMILE_Specific.g4 by ANTLR 4.13.1
 from antlr4 import *
 if "." in __name__:
     from .SMILE_SpecificParser import SMILE_SpecificParser
@@ -311,6 +311,101 @@ class SMILE_SpecificVisitor(ParseTreeVisitor):
 
     # Visit a parse tree produced by SMILE_SpecificParser#cast_constraint.
     def visitCast_constraint(self, ctx:SMILE_SpecificParser.Cast_constraintContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by SMILE_SpecificParser#add_constraint.
+    def visitAdd_constraint(self, ctx:SMILE_SpecificParser.Add_constraintContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by SMILE_SpecificParser#ConstraintBodyReference.
+    def visitConstraintBodyReference(self, ctx:SMILE_SpecificParser.ConstraintBodyReferenceContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by SMILE_SpecificParser#ConstraintBodyCheck.
+    def visitConstraintBodyCheck(self, ctx:SMILE_SpecificParser.ConstraintBodyCheckContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by SMILE_SpecificParser#ConstraintBodyExistence.
+    def visitConstraintBodyExistence(self, ctx:SMILE_SpecificParser.ConstraintBodyExistenceContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by SMILE_SpecificParser#delete_constraint.
+    def visitDelete_constraint(self, ctx:SMILE_SpecificParser.Delete_constraintContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by SMILE_SpecificParser#CheckParenExpr.
+    def visitCheckParenExpr(self, ctx:SMILE_SpecificParser.CheckParenExprContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by SMILE_SpecificParser#CheckAtomExpr.
+    def visitCheckAtomExpr(self, ctx:SMILE_SpecificParser.CheckAtomExprContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by SMILE_SpecificParser#CheckAndExpr.
+    def visitCheckAndExpr(self, ctx:SMILE_SpecificParser.CheckAndExprContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by SMILE_SpecificParser#CheckOrExpr.
+    def visitCheckOrExpr(self, ctx:SMILE_SpecificParser.CheckOrExprContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by SMILE_SpecificParser#CheckNotExpr.
+    def visitCheckNotExpr(self, ctx:SMILE_SpecificParser.CheckNotExprContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by SMILE_SpecificParser#CheckRawExpr.
+    def visitCheckRawExpr(self, ctx:SMILE_SpecificParser.CheckRawExprContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by SMILE_SpecificParser#CmpAtom.
+    def visitCmpAtom(self, ctx:SMILE_SpecificParser.CmpAtomContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by SMILE_SpecificParser#InAtom.
+    def visitInAtom(self, ctx:SMILE_SpecificParser.InAtomContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by SMILE_SpecificParser#BetweenAtom.
+    def visitBetweenAtom(self, ctx:SMILE_SpecificParser.BetweenAtomContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by SMILE_SpecificParser#RegexAtom.
+    def visitRegexAtom(self, ctx:SMILE_SpecificParser.RegexAtomContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by SMILE_SpecificParser#IsNullAtom.
+    def visitIsNullAtom(self, ctx:SMILE_SpecificParser.IsNullAtomContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by SMILE_SpecificParser#IsNotNullAtom.
+    def visitIsNotNullAtom(self, ctx:SMILE_SpecificParser.IsNotNullAtomContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by SMILE_SpecificParser#cmpOp.
+    def visitCmpOp(self, ctx:SMILE_SpecificParser.CmpOpContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by SMILE_SpecificParser#literalList.
+    def visitLiteralList(self, ctx:SMILE_SpecificParser.LiteralListContext):
         return self.visitChildren(ctx)
 
 

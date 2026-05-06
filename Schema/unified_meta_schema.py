@@ -670,6 +670,10 @@ class Constraint(ABC):
             return UniqueConstraint.from_dict(data)
         elif constraint_type == "foreign_key":
             return ForeignKeyConstraint.from_dict(data)
+        elif constraint_type == "check":
+            return CheckConstraint.from_dict(data)
+        elif constraint_type == "existence":
+            return ExistenceConstraint.from_dict(data)
         raise ValueError(f"Unknown constraint type: {constraint_type}")
 
 
@@ -731,6 +735,245 @@ class ForeignKeyConstraint(Constraint):
 
 
 # ============================================================================
+# CHECK EXPRESSION AST
+# ============================================================================
+# Tree representation of CHECK predicates produced by the ADD_CONSTRAINT AS
+# CHECK grammar branch. Atoms (Cmp / In / Between / Regex / IsNull) carry the
+# structured form for clean cross-paradigm translation; And / Or / Not compose
+# them; Raw is the escape hatch for predicates the structured grammar cannot
+# represent.
+
+@dataclass
+class CheckExpr(ABC):
+    """Abstract base for CHECK expression nodes."""
+
+    @abstractmethod
+    def to_dict(self) -> Dict[str, Any]:
+        pass
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'CheckExpr':
+        kind = data.get("kind")
+        if kind == "cmp":     return CheckCmp.from_dict(data)
+        elif kind == "in":    return CheckIn.from_dict(data)
+        elif kind == "between": return CheckBetween.from_dict(data)
+        elif kind == "regex": return CheckRegex.from_dict(data)
+        elif kind == "isnull": return CheckIsNull.from_dict(data)
+        elif kind == "and":   return CheckAnd.from_dict(data)
+        elif kind == "or":    return CheckOr.from_dict(data)
+        elif kind == "not":   return CheckNot.from_dict(data)
+        elif kind == "raw":   return CheckRaw.from_dict(data)
+        raise ValueError(f"Unknown CheckExpr kind: {kind}")
+
+
+@dataclass
+class CheckCmp(CheckExpr):
+    """Atomic comparison: <field_name> <op> <literal>. op in {<, >, <=, >=, ==, !=}."""
+    field_name: str = ""
+    op: str = "=="
+    literal: Any = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {"kind": "cmp", "field": self.field_name, "op": self.op, "literal": self.literal}
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'CheckCmp':
+        return cls(field_name=data["field"], op=data["op"], literal=data.get("literal"))
+
+
+@dataclass
+class CheckIn(CheckExpr):
+    """Membership: <field_name> IN (v1, v2, ...)."""
+    field_name: str = ""
+    values: List[Any] = field(default_factory=list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {"kind": "in", "field": self.field_name, "values": list(self.values)}
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'CheckIn':
+        return cls(field_name=data["field"], values=list(data.get("values", [])))
+
+
+@dataclass
+class CheckBetween(CheckExpr):
+    """Range: <field_name> BETWEEN <low> AND <high>."""
+    field_name: str = ""
+    low: Any = None
+    high: Any = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {"kind": "between", "field": self.field_name, "low": self.low, "high": self.high}
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'CheckBetween':
+        return cls(field_name=data["field"], low=data.get("low"), high=data.get("high"))
+
+
+@dataclass
+class CheckRegex(CheckExpr):
+    """Pattern match: <field_name> MATCHES "<pattern>"."""
+    field_name: str = ""
+    pattern: str = ""
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {"kind": "regex", "field": self.field_name, "pattern": self.pattern}
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'CheckRegex':
+        return cls(field_name=data["field"], pattern=data.get("pattern", ""))
+
+
+@dataclass
+class CheckIsNull(CheckExpr):
+    """Null check: <field_name> IS NULL or IS NOT NULL (is_null flips meaning)."""
+    field_name: str = ""
+    is_null: bool = True
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {"kind": "isnull", "field": self.field_name, "is_null": self.is_null}
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'CheckIsNull':
+        return cls(field_name=data["field"], is_null=data.get("is_null", True))
+
+
+@dataclass
+class CheckAnd(CheckExpr):
+    """Conjunction: <left> AND <right>."""
+    left: Optional[CheckExpr] = None
+    right: Optional[CheckExpr] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {"kind": "and",
+                "left": self.left.to_dict() if self.left else None,
+                "right": self.right.to_dict() if self.right else None}
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'CheckAnd':
+        l = CheckExpr.from_dict(data["left"]) if data.get("left") else None
+        r = CheckExpr.from_dict(data["right"]) if data.get("right") else None
+        return cls(left=l, right=r)
+
+
+@dataclass
+class CheckOr(CheckExpr):
+    """Disjunction: <left> OR <right>."""
+    left: Optional[CheckExpr] = None
+    right: Optional[CheckExpr] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {"kind": "or",
+                "left": self.left.to_dict() if self.left else None,
+                "right": self.right.to_dict() if self.right else None}
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'CheckOr':
+        l = CheckExpr.from_dict(data["left"]) if data.get("left") else None
+        r = CheckExpr.from_dict(data["right"]) if data.get("right") else None
+        return cls(left=l, right=r)
+
+
+@dataclass
+class CheckNot(CheckExpr):
+    """Negation: NOT <expr>."""
+    expr: Optional[CheckExpr] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {"kind": "not", "expr": self.expr.to_dict() if self.expr else None}
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'CheckNot':
+        e = CheckExpr.from_dict(data["expr"]) if data.get("expr") else None
+        return cls(expr=e)
+
+
+@dataclass
+class CheckRaw(CheckExpr):
+    """Escape hatch: arbitrary predicate text. Adapter visitors fall back to
+    paradigm-specific tunnelling (PG: original text; Mongo: ``$expr`` + raw
+    string preserved in description; Neo4j/Cass: comment)."""
+    raw_text: str = ""
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {"kind": "raw", "raw_text": self.raw_text}
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'CheckRaw':
+        return cls(raw_text=data.get("raw_text", ""))
+
+
+# ============================================================================
+# CHECK + EXISTENCE CONSTRAINTS
+# ============================================================================
+# These cover the gaps left by the narrow constraint operators
+# (ADD_PRIMARY_KEY / ADD_UNIQUE_KEY / ADD_FOREIGN_KEY / ADD_PARTITION_KEY /
+# ADD_CLUSTERING_KEY / ADD_LABEL). They are produced by the ADD_CONSTRAINT
+# operator's CHECK and EXISTENCE branches respectively. Logical references
+# (the third ADD_CONSTRAINT branch) re-use the existing ``Reference`` object
+# with ``is_enforced=False``, not a dedicated Constraint subclass.
+
+@dataclass
+class CheckConstraint(Constraint):
+    """CHECK predicate over one or more properties of an entity.
+
+    ``expression`` holds the structured AST tree; ``target_property_id`` is the
+    meta_id of the property the constraint is anchored to (the property named
+    in the ``ADD_CONSTRAINT entity.field AS CHECK ...`` statement) — used to
+    locate and remove the constraint by qualified name on DELETE_CONSTRAINT
+    even though the predicate itself may reference multiple properties.
+    ``constraint_name`` is an optional human-friendly name used by paradigms
+    (e.g. PostgreSQL) that name CHECK constraints in DDL.
+    """
+    kind: ClassVar[str] = "check"
+    expression: Optional[CheckExpr] = None
+    target_property_id: str = ""
+    constraint_name: str = ""
+
+    def to_dict(self) -> Dict[str, Any]:
+        d: Dict[str, Any] = {"constraint_type": "check"}
+        if self.expression is not None:
+            d["expression"] = self.expression.to_dict()
+        if self.target_property_id:
+            d["target_property_id"] = self.target_property_id
+        if self.constraint_name:
+            d["constraint_name"] = self.constraint_name
+        return d
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'CheckConstraint':
+        expr_data = data.get("expression")
+        expr = CheckExpr.from_dict(expr_data) if expr_data else None
+        return cls(expression=expr,
+                   target_property_id=data.get("target_property_id", ""),
+                   constraint_name=data.get("constraint_name", ""))
+
+
+@dataclass
+class ExistenceConstraint(Constraint):
+    """A property must always have a value. Equivalent to NOT NULL but expressed
+    as a first-class constraint so it can be added to an already-existing
+    property after creation. Adapters map this to: PG ``SET NOT NULL``, Mongo
+    ``required`` array entry, Neo4j ``IS NOT NULL`` constraint, Cassandra
+    implicit non-null on key columns (warning otherwise)."""
+    kind: ClassVar[str] = "existence"
+    target_property_id: str = ""
+    constraint_name: str = ""
+
+    def to_dict(self) -> Dict[str, Any]:
+        d: Dict[str, Any] = {"constraint_type": "existence",
+                             "target_property_id": self.target_property_id}
+        if self.constraint_name:
+            d["constraint_name"] = self.constraint_name
+        return d
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'ExistenceConstraint':
+        return cls(target_property_id=data.get("target_property_id", ""),
+                   constraint_name=data.get("constraint_name", ""))
+
+
+# ============================================================================
 # RELATIONSHIPS
 # ============================================================================
 
@@ -783,6 +1026,13 @@ class Reference(Relationship):
     ref_name: str = ""
     refs_to: str = ""  # Entity name (string only, not object reference)
     edge_properties: List[Property] = field(default_factory=list)
+    # ``True`` (default) = Reference is paired with a ForeignKeyConstraint and the
+    # target paradigm enforces referential integrity (PostgreSQL FK).
+    # ``False`` = logical-only reference: the relationship exists in the meta model
+    # but no paradigm-level enforcement is requested (Mongo cross-collection
+    # ObjectId reference, Cassandra denormalised column pointing at another table,
+    # PostgreSQL soft references that cross schemas/databases).
+    is_enforced: bool = True
 
     def get_target_entity_name(self) -> str:
         return self.refs_to
@@ -796,6 +1046,11 @@ class Reference(Relationship):
             "cardinality": self.cardinality.value,
             "is_optional": self.is_optional
         }
+        # Emit ``is_enforced`` only when the reference is logical so that JSON
+        # output for every existing Reference (which all default to enforced)
+        # remains byte-identical to the pre-feature serialization.
+        if not self.is_enforced:
+            d["is_enforced"] = False
         if self.edge_properties:
             d["edge_properties"] = [a.to_dict() for a in self.edge_properties]
         if self.description:
@@ -812,7 +1067,8 @@ class Reference(Relationship):
             is_optional=data.get("is_optional", True),
             description=data.get("description"),
             meta_id=data.get("meta_id", _uid()),
-            edge_properties=edge_props
+            edge_properties=edge_props,
+            is_enforced=data.get("is_enforced", True)
         )
 
 

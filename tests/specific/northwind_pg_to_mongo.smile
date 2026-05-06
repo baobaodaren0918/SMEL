@@ -69,6 +69,11 @@ DELETE_ENTITY shippers
 -- Step 6: NEST employees into orders (L1, with nested address at L2)
 -- ============================================
 NEST employees:last_name, first_name, title, birth_date, hire_date, phone, notes, reports_to, address{street, city, region, postal_code, country} IN orders.employee WHERE orders.employee_id = employees.employee_id
+-- The nested employee carries reports_to as a self-reference (each manager is
+-- another employee inside the same denormalised collection). NEST itself does
+-- not promote the column to a Reference, so re-declare the logical self-ref
+-- explicitly here.
+ADD_CONSTRAINT orders.employee.reports_to AS REFERENCE LOGICAL TO orders.employee(employee_id) WITH CARDINALITY ZERO_TO_ONE
 DELETE_ENTITY employees
 
 -- ============================================
@@ -89,6 +94,7 @@ CAST_CONSTRAINT customers._id TO DOCUMENT_ID
 RENAME_PROPERTY order_id TO _id IN orders
 CAST_CONSTRAINT orders._id TO DOCUMENT_ID
 DELETE_FOREIGN_KEY orders.customer_id
+ADD_CONSTRAINT orders.customer_id AS REFERENCE LOGICAL TO customers(_id) WITH CARDINALITY ONE_TO_MANY
 
 -- ============================================
 -- Final Result (2 collections, max L3):

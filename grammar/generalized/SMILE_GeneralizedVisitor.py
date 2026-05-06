@@ -1,4 +1,4 @@
-# Generated from SMILE_Generalized.g4 by ANTLR 4.13.2
+# Generated from C:/Users/baoba/PycharmProjects/MA_Hagen_Lu/schema_evolution_language/grammar/generalized/SMILE_Generalized.g4 by ANTLR 4.13.1
 from antlr4 import *
 if "." in __name__:
     from .SMILE_GeneralizedParser import SMILE_GeneralizedParser
@@ -139,6 +139,96 @@ class SMILE_GeneralizedVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
+    # Visit a parse tree produced by SMILE_GeneralizedParser#constraintAdd.
+    def visitConstraintAdd(self, ctx:SMILE_GeneralizedParser.ConstraintAddContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by SMILE_GeneralizedParser#ConstraintBodyReference.
+    def visitConstraintBodyReference(self, ctx:SMILE_GeneralizedParser.ConstraintBodyReferenceContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by SMILE_GeneralizedParser#ConstraintBodyCheck.
+    def visitConstraintBodyCheck(self, ctx:SMILE_GeneralizedParser.ConstraintBodyCheckContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by SMILE_GeneralizedParser#ConstraintBodyExistence.
+    def visitConstraintBodyExistence(self, ctx:SMILE_GeneralizedParser.ConstraintBodyExistenceContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by SMILE_GeneralizedParser#CheckParenExpr.
+    def visitCheckParenExpr(self, ctx:SMILE_GeneralizedParser.CheckParenExprContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by SMILE_GeneralizedParser#CheckAtomExpr.
+    def visitCheckAtomExpr(self, ctx:SMILE_GeneralizedParser.CheckAtomExprContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by SMILE_GeneralizedParser#CheckAndExpr.
+    def visitCheckAndExpr(self, ctx:SMILE_GeneralizedParser.CheckAndExprContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by SMILE_GeneralizedParser#CheckOrExpr.
+    def visitCheckOrExpr(self, ctx:SMILE_GeneralizedParser.CheckOrExprContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by SMILE_GeneralizedParser#CheckNotExpr.
+    def visitCheckNotExpr(self, ctx:SMILE_GeneralizedParser.CheckNotExprContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by SMILE_GeneralizedParser#CheckRawExpr.
+    def visitCheckRawExpr(self, ctx:SMILE_GeneralizedParser.CheckRawExprContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by SMILE_GeneralizedParser#CmpAtom.
+    def visitCmpAtom(self, ctx:SMILE_GeneralizedParser.CmpAtomContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by SMILE_GeneralizedParser#InAtom.
+    def visitInAtom(self, ctx:SMILE_GeneralizedParser.InAtomContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by SMILE_GeneralizedParser#BetweenAtom.
+    def visitBetweenAtom(self, ctx:SMILE_GeneralizedParser.BetweenAtomContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by SMILE_GeneralizedParser#RegexAtom.
+    def visitRegexAtom(self, ctx:SMILE_GeneralizedParser.RegexAtomContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by SMILE_GeneralizedParser#IsNullAtom.
+    def visitIsNullAtom(self, ctx:SMILE_GeneralizedParser.IsNullAtomContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by SMILE_GeneralizedParser#IsNotNullAtom.
+    def visitIsNotNullAtom(self, ctx:SMILE_GeneralizedParser.IsNotNullAtomContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by SMILE_GeneralizedParser#cmpOp.
+    def visitCmpOp(self, ctx:SMILE_GeneralizedParser.CmpOpContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by SMILE_GeneralizedParser#literalList.
+    def visitLiteralList(self, ctx:SMILE_GeneralizedParser.LiteralListContext):
+        return self.visitChildren(ctx)
+
+
     # Visit a parse tree produced by SMILE_GeneralizedParser#delete_gen.
     def visitDelete_gen(self, ctx:SMILE_GeneralizedParser.Delete_genContext):
         return self.visitChildren(ctx)
@@ -171,6 +261,11 @@ class SMILE_GeneralizedVisitor(ParseTreeVisitor):
 
     # Visit a parse tree produced by SMILE_GeneralizedParser#labelDelete.
     def visitLabelDelete(self, ctx:SMILE_GeneralizedParser.LabelDeleteContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by SMILE_GeneralizedParser#constraintDelete.
+    def visitConstraintDelete(self, ctx:SMILE_GeneralizedParser.ConstraintDeleteContext):
         return self.visitChildren(ctx)
 
 

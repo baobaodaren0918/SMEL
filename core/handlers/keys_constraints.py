@@ -15,6 +15,7 @@ from typing import List
 from Schema.unified_meta_schema import (
     EntityType, EntityKind, Property,
     UniqueConstraint, ForeignKeyConstraint, UniqueProperty, ForeignKeyProperty, PKTypeEnum,
+    CheckConstraint, ExistenceConstraint,
     Reference, Edge, Cardinality,
     PrimitiveDataType, PrimitiveType,
     CARDINALITY_MAP, KEY_TYPE_MAP, TYPE_STR_MAP,
@@ -23,6 +24,7 @@ from parser.params import (
     OperationResult,
     AddKeyParams, DeleteKeyParams,
     AddForeignKeyParams, DeleteForeignKeyParams, CastConstraintParams,
+    AddConstraintParams, DeleteConstraintParams, ConstraintBodyKind,
     AddLabelParams, DeleteLabelParams,
     RecardParams, TransformParams,
 )
@@ -118,6 +120,16 @@ class KeysConstraintsHandlersMixin:
             if existing_ref:
                 existing_ref.refs_to = target_table
                 existing_ref.cardinality = cardinality
+                # ADD_FOREIGN_KEY always produces an *enforced* reference. If
+                # the existing Reference came from a previous logical-only
+                # declaration (e.g. parsed from a Mongo cross-collection
+                # description, or set by ADD_CONSTRAINT REFERENCE LOGICAL),
+                # this op upgrades it. Without this flip the FKConstraint
+                # below would be created on top of a Reference still flagged
+                # as logical, leaving the meta model in an inconsistent
+                # "FK enforcement enabled but Reference still labelled
+                # logical" state.
+                existing_ref.is_enforced = True
             else:
                 entity.add_relationship(Reference(
                     ref_name=src_col, refs_to=target_table,
@@ -153,6 +165,247 @@ class KeysConstraintsHandlersMixin:
         # Change description: name the columns for diff readability.
         cols_str = ",".join(field_names) if len(field_names) > 1 else field_names[0]
         self.changes.append(f"ADD_REF:{entity_name}.{cols_str}")
+        return OperationResult.ok()
+
+    # ------------------------------------------------------------------
+    # ADD_CONSTRAINT / DELETE_CONSTRAINT
+    # ------------------------------------------------------------------
+    # ADD_CONSTRAINT covers the constraint kinds NOT addressed by the narrow
+    # operators (PK / UNIQUE / FK / PARTITION / CLUSTERING / LABEL):
+    #   * REFERENCE LOGICAL  -> Reference(is_enforced=False) — non-enforced
+    #     cross-entity reference (Mongo cross-collection, Cass denormalised
+    #     columns, self-references). The enforced FK case is intentionally
+    #     not covered here: ``ADD_FOREIGN_KEY`` is the SQL-traditional path
+    #     and the only one that supports composite multi-column FKs.
+    #   * CHECK <expr>       -> CheckConstraint(expression=<AST>, target_property_id=<id>)
+    #   * EXISTENCE          -> Property.is_optional=False (+ ExistenceConstraint marker)
+    # DELETE_CONSTRAINT inspects the entity at ``entity.field`` and removes
+    # whichever logical Reference / CheckConstraint / ExistenceConstraint
+    # is currently anchored there.
+
+    @register_handler(OpType.ADD_CONSTRAINT)
+    def _handle_add_constraint(self, params: AddConstraintParams) -> OperationResult:
+        """Dispatcher for ADD_CONSTRAINT. Delegates to a body-kind-specific
+        sub-handler depending on whether the user wrote AS REFERENCE / CHECK
+        / EXISTENCE."""
+        if params.body_kind == ConstraintBodyKind.REFERENCE:
+            return self._handle_add_constraint_reference(params)
+        if params.body_kind == ConstraintBodyKind.CHECK:
+            return self._handle_add_constraint_check(params)
+        if params.body_kind == ConstraintBodyKind.EXISTENCE:
+            return self._handle_add_constraint_existence(params)
+        return OperationResult.skipped(
+            f"add_constraint: unknown body kind {params.body_kind!r}")
+
+    def _handle_add_constraint_reference(self, params: AddConstraintParams) -> OperationResult:
+        """ADD_CONSTRAINT entity.field AS REFERENCE LOGICAL TO target(col).
+
+        Creates a single ``Reference(is_enforced=False)`` on the source entity
+        — a logical (non-enforced) cross-entity reference. No
+        ``ForeignKeyConstraint`` is created (that path belongs to
+        ``ADD_FOREIGN_KEY``, which is also the only operator that supports
+        composite multi-column FKs).
+
+        If an existing Reference is already present for this column, this op
+        upserts it: refs_to and cardinality are updated and ``is_enforced``
+        is forced back to ``False``. This makes ``ADD_CONSTRAINT REFERENCE
+        LOGICAL`` a clean "downgrade enforced -> logical" path; any FK
+        constraint covering the same column is also dropped to keep the
+        meta-model state consistent with the new logical-only intent.
+        """
+        entity_name, field_name = self._split_path(params.target)
+        if not entity_name or not field_name:
+            return OperationResult.skipped(
+                "add_constraint: target must be entity.field")
+        entity = self._get_entity(entity_name, "ADD_CONSTRAINT")
+        if not entity:
+            return OperationResult.skipped(
+                "add_constraint: precondition not met")
+        target_table = params.ref_target_table
+        target_columns = params.ref_target_columns
+        if not target_table or not target_columns:
+            return OperationResult.skipped(
+                "add_constraint: REFERENCE body needs target table and columns")
+        target_entity = self._get_entity(target_table)
+
+        # Resolve the source-property data type. Carry the target property's
+        # type if available so the meta model is consistent with the
+        # equivalent ADD_FOREIGN_KEY behaviour.
+        fk_type = PrimitiveDataType(PrimitiveType.INTEGER)
+        if target_entity:
+            tgt_attr = target_entity.get_property(target_columns[0])
+            if tgt_attr is not None:
+                fk_type = tgt_attr.data_type
+            else:
+                target_pk = target_entity.get_primary_key()
+                if target_pk and target_pk.unique_properties:
+                    pk_attr = target_entity.get_property_by_id(
+                        target_pk.unique_properties[0].property_id)
+                    if pk_attr:
+                        fk_type = pk_attr.data_type
+
+        cardinality = Cardinality.ONE_TO_ONE
+        if params.ref_cardinality:
+            cardinality = CARDINALITY_MAP.get(
+                params.ref_cardinality, Cardinality.ONE_TO_ONE)
+
+        # Ensure the source property exists.
+        if not entity.get_property(field_name):
+            entity.add_property(Property(field_name, fk_type, False, True))
+
+        # Upsert the Reference. If one already exists for this column,
+        # update its target / cardinality and force ``is_enforced=False``
+        # so this op cleanly downgrades a previously-enforced reference.
+        existing_ref = next(
+            (r for r in entity.relationships
+             if isinstance(r, Reference) and r.ref_name == field_name),
+            None,
+        )
+        if existing_ref:
+            existing_ref.refs_to = target_table
+            existing_ref.cardinality = cardinality
+            existing_ref.is_enforced = False
+        else:
+            entity.add_relationship(Reference(
+                ref_name=field_name,
+                refs_to=target_table,
+                cardinality=cardinality,
+                is_optional=not cardinality.is_required(),
+                is_enforced=False,
+            ))
+
+        # Drop any FK constraint covering this column — logical-only state.
+        fk_attr = entity.get_property(field_name)
+        if fk_attr is not None:
+            entity.constraints = [
+                c for c in entity.constraints
+                if not (c.kind == "foreign_key"
+                        and any(fkp.property_id == fk_attr.meta_id
+                                for fkp in c.foreign_key_properties))
+            ]
+
+        self._touch(entity_name)
+        self.changes.append(
+            f"ADD_CONSTRAINT:{entity_name}.{field_name}=REFERENCE_LOGICAL->"
+            f"{target_table}({target_columns[0]})")
+        return OperationResult.ok()
+
+    def _handle_add_constraint_check(self, params: AddConstraintParams) -> OperationResult:
+        """ADD_CONSTRAINT entity.field AS CHECK <expr>.
+
+        Anchors the CheckConstraint to the named property's meta_id so
+        DELETE_CONSTRAINT can locate it later by qualified name. The CHECK
+        expression itself may reference multiple properties of the entity;
+        the anchor only controls which property the constraint is *attached
+        to* in the meta model."""
+        entity, field_name = self._resolve_entity_attr(
+            params.target, "ADD_CONSTRAINT")
+        if not entity or not field_name:
+            return OperationResult.skipped(
+                "add_constraint: precondition not met")
+        anchor_attr = entity.get_property(field_name)
+        if anchor_attr is None:
+            return OperationResult.skipped(
+                f"add_constraint: anchor property {params.target!r} not found")
+
+        entity.add_constraint(CheckConstraint(
+            expression=params.check_expression,
+            target_property_id=anchor_attr.meta_id,
+        ))
+        self._touch(entity.full_path)
+        self.changes.append(
+            f"ADD_CONSTRAINT:{params.target}=CHECK")
+        return OperationResult.ok()
+
+    def _handle_add_constraint_existence(self, params: AddConstraintParams) -> OperationResult:
+        """ADD_CONSTRAINT entity.field AS EXISTENCE.
+
+        Sets the property's ``is_optional`` flag to ``False`` (the in-memory
+        equivalent of NOT NULL) and records an ExistenceConstraint marker so
+        the meta model can express "constraint added post-hoc" distinctly
+        from "property declared NOT NULL on creation"."""
+        entity, field_name = self._resolve_entity_attr(
+            params.target, "ADD_CONSTRAINT")
+        if not entity or not field_name:
+            return OperationResult.skipped(
+                "add_constraint: precondition not met")
+        attr = entity.get_property(field_name)
+        if attr is None:
+            return OperationResult.skipped(
+                f"add_constraint: property {params.target!r} not found")
+        attr.is_optional = False
+
+        already = any(
+            c.kind == "existence" and c.target_property_id == attr.meta_id
+            for c in entity.constraints
+        )
+        if not already:
+            entity.add_constraint(ExistenceConstraint(
+                target_property_id=attr.meta_id,
+            ))
+        self._touch(entity.full_path)
+        self.changes.append(f"ADD_CONSTRAINT:{params.target}=EXISTENCE")
+        return OperationResult.ok()
+
+    @register_handler(OpType.DELETE_CONSTRAINT)
+    def _handle_delete_constraint(self, params: DeleteConstraintParams) -> OperationResult:
+        """DELETE_CONSTRAINT entity.field.
+
+        Removes whichever ADD_CONSTRAINT-produced object is currently anchored
+        at the named property — in priority order: a logical Reference (the
+        Reference.ref_name == field_name and is_enforced=False), a
+        CheckConstraint with target_property_id == property.meta_id, or an
+        ExistenceConstraint (which also restores ``is_optional=True``).
+
+        Constraints from the narrow operators (PK / FK / UNIQUE / PARTITION
+        / CLUSTERING / LABEL) are NOT deleted by this handler; use
+        DELETE_PRIMARY_KEY / DELETE_FOREIGN_KEY / etc. for those.
+        """
+        entity, field_name = self._resolve_entity_attr(
+            params.target, "DELETE_CONSTRAINT")
+        if not entity or not field_name:
+            return OperationResult.skipped(
+                "delete_constraint: precondition not met")
+
+        removed_kinds = []
+
+        # 1. Logical references (Reference.is_enforced == False).
+        new_relationships = []
+        for rel in entity.relationships:
+            if (isinstance(rel, Reference)
+                    and rel.ref_name == field_name
+                    and rel.is_enforced is False):
+                removed_kinds.append("REFERENCE_LOGICAL")
+                continue
+            new_relationships.append(rel)
+        entity.relationships = new_relationships
+
+        # 2. CheckConstraint and ExistenceConstraint anchored to this property.
+        attr = entity.get_property(field_name)
+        if attr is not None:
+            anchor_id = attr.meta_id
+            kept = []
+            for c in entity.constraints:
+                if c.kind == "check" and c.target_property_id == anchor_id:
+                    removed_kinds.append("CHECK")
+                    continue
+                if c.kind == "existence" and c.target_property_id == anchor_id:
+                    removed_kinds.append("EXISTENCE")
+                    # Restore is_optional default — symmetric with how the
+                    # EXISTENCE handler set it to False.
+                    attr.is_optional = True
+                    continue
+                kept.append(c)
+            entity.constraints = kept
+
+        if not removed_kinds:
+            return OperationResult.skipped(
+                f"delete_constraint: no ADD_CONSTRAINT object anchored at "
+                f"{params.target!r}")
+
+        self._touch(entity.full_path)
+        self.changes.append(
+            f"DELETE_CONSTRAINT:{params.target}={'+'.join(removed_kinds)}")
         return OperationResult.ok()
 
     @register_handler(OpType.DELETE_KEY)

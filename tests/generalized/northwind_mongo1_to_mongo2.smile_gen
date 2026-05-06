@@ -64,6 +64,8 @@ ADD PROPERTY region_description TO sales_region WITH TYPE String
 DELETE PROPERTY employee.birth_date
 DELETE PROPERTY employee.notes
 ADD PROPERTY email TO employee WITH TYPE String
+-- V2 design drops the self-reference semantics on reports_to.
+DELETE CONSTRAINT orders.employee.reports_to
 
 -- ============================================
 -- Phase 6: product + orders -- RENAME + ADD

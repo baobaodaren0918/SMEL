@@ -59,10 +59,12 @@ operation: add_property | add_foreign_key | add_embedded | add_entity
          | add_primary_key | add_unique_key
          | add_partition_key | add_clustering_key
          | add_label
+         | add_constraint
          | delete_property | delete_foreign_key | delete_embedded | delete_entity
          | delete_primary_key | delete_unique_key
          | delete_partition_key | delete_clustering_key
          | delete_label
+         | delete_constraint
          | rename_property | rename_entity
          | flatten | unflatten | unwind | wind | nest | unnest
          | copy_property | copy_entity | move_property | merge | split | cast_property | cast_constraint | cast_entity | recard
@@ -297,6 +299,64 @@ cast_property: CAST_PROPERTY qualifiedName TO dataType;
 // Example: CAST_CONSTRAINT customers.city TO PARTITION KEY
 cast_constraint: CAST_CONSTRAINT qualifiedName TO constraintKeyType;
 
+// ADD_CONSTRAINT: Add a constraint that is NOT covered by the narrow operators
+// (i.e. ADD_PRIMARY_KEY / ADD_UNIQUE_KEY / ADD_FOREIGN_KEY / ADD_PARTITION_KEY /
+//  ADD_CLUSTERING_KEY / ADD_LABEL). Three branches:
+//   AS REFERENCE LOGICAL  -> Reference(is_enforced=False)  (Mongo cross-coll, Cass denorm)
+//   AS REFERENCE ENFORCED -> Reference(is_enforced=True) + ForeignKeyConstraint
+//   AS CHECK <expr>       -> CheckConstraint with structured AST
+//   AS EXISTENCE          -> ExistenceConstraint (post-hoc NOT NULL)
+// Examples:
+//   ADD_CONSTRAINT orders.customer_id AS REFERENCE LOGICAL TO customers(_id) WITH CARDINALITY ONE_TO_MANY
+//   ADD_CONSTRAINT products.price AS CHECK price > 0
+//   ADD_CONSTRAINT orders.shipped_date AS CHECK RAW "shipped_date IS NULL OR shipped_date >= order_date"
+//   ADD_CONSTRAINT customers.contact_name AS EXISTENCE
+add_constraint: ADD_CONSTRAINT qualifiedName AS constraintBody;
+
+constraintBody
+    : REFERENCE LOGICAL TO qualifiedName LPAREN identifierList RPAREN (WITH CARDINALITY cardinalityType)?  # ConstraintBodyReference
+    | CHECK checkExpr                                                                                       # ConstraintBodyCheck
+    | EXISTENCE                                                                                             # ConstraintBodyExistence
+    ;
+// ADD_CONSTRAINT REFERENCE only supports LOGICAL — non-enforced cross-entity
+// references. Enforced references are the SQL-traditional FK case and use
+// ``ADD_FOREIGN_KEY`` directly (also the only path that supports composite
+// keys). Keeping a single ``LOGICAL`` keyword here removes a previously-
+// redundant ``ENFORCED`` alias that produced byte-identical output but
+// confused the user-facing semantics.
+
+// DELETE_CONSTRAINT: Remove the constraint attached to entity.field. Handler
+// inspects the entity to determine which constraint kind (logical Reference,
+// CheckConstraint, ExistenceConstraint) is currently attached and removes it.
+// Example: DELETE_CONSTRAINT orders.customer_id
+delete_constraint: DELETE_CONSTRAINT qualifiedName;
+
+// CHECK expression mini-grammar.
+// Operator precedence (low -> high): OR < AND < NOT < atom.
+// RAW gives the user a string-literal escape hatch that adapter visitors may
+// pass through verbatim (PG) or wrap in $expr / description (Mongo / others).
+checkExpr
+    : LPAREN checkExpr RPAREN                       # CheckParenExpr
+    | NOT checkExpr                                  # CheckNotExpr
+    | checkExpr AND checkExpr                        # CheckAndExpr
+    | checkExpr OR checkExpr                         # CheckOrExpr
+    | RAW STRING_LITERAL                             # CheckRawExpr
+    | checkAtom                                      # CheckAtomExpr
+    ;
+
+checkAtom
+    : qualifiedName cmpOp literal                                # CmpAtom
+    | qualifiedName IN LPAREN literalList RPAREN                 # InAtom
+    | qualifiedName BETWEEN literal AND literal                  # BetweenAtom
+    | qualifiedName MATCHES STRING_LITERAL                       # RegexAtom
+    | qualifiedName IS NULL                                      # IsNullAtom
+    | qualifiedName IS NOT_NULL                                  # IsNotNullAtom
+    ;
+
+cmpOp: LT | GT | LTE | GTE | EQ | NEQ;
+
+literalList: literal (COMMA literal)*;
+
 // CAST_ENTITY: Change the entity_kind of an entity type (cross-paradigm type conversion)
 // Example: CAST_ENTITY orders TO DOCUMENT
 // Example: CAST_ENTITY customers TO GRAPH
@@ -398,6 +458,7 @@ ADD_UNIQUE_KEY: 'ADD_UNIQUE_KEY';
 ADD_PARTITION_KEY: 'ADD_PARTITION_KEY';
 ADD_CLUSTERING_KEY: 'ADD_CLUSTERING_KEY';
 ADD_LABEL: 'ADD_LABEL';
+ADD_CONSTRAINT: 'ADD_CONSTRAINT';
 
 // DELETE operations - specific keywords
 DELETE_PROPERTY: 'DELETE_PROPERTY';
@@ -409,6 +470,7 @@ DELETE_UNIQUE_KEY: 'DELETE_UNIQUE_KEY';
 DELETE_PARTITION_KEY: 'DELETE_PARTITION_KEY';
 DELETE_CLUSTERING_KEY: 'DELETE_CLUSTERING_KEY';
 DELETE_LABEL: 'DELETE_LABEL';
+DELETE_CONSTRAINT: 'DELETE_CONSTRAINT';
 
 // RENAME operations - specific keywords
 RENAME_PROPERTY: 'RENAME_PROPERTY';
@@ -447,7 +509,20 @@ DATE: 'Date'; DATETIME: 'DateTime'; TIMESTAMP: 'Timestamp'; UUID: 'UUID'; BINARY
 TYPE: 'TYPE'; DEFAULT: 'DEFAULT'; SERIAL: 'SERIAL'; PREFIX: 'PREFIX';
 
 // Constraints
+// NOT_NULL keeps its own multi-word literal form ('NOT NULL' as a single
+// token); ANTLR's longest-match rule means "NOT NULL" is preferred over
+// the shorter NOT token introduced below for CHECK expression composition.
 NOT_NULL: 'NOT NULL';
+NOT: 'NOT';
+OR: 'OR';
+IS: 'IS';
+MATCHES: 'MATCHES';
+RAW: 'RAW';
+
+// ADD_CONSTRAINT body keywords
+LOGICAL: 'LOGICAL';
+EXISTENCE: 'EXISTENCE';
+CHECK: 'CHECK';
 
 // Literals
 TRUE: 'true' | 'TRUE'; FALSE: 'false' | 'FALSE'; NULL: 'null' | 'NULL';
@@ -456,6 +531,14 @@ TRUE: 'true' | 'TRUE'; FALSE: 'false' | 'FALSE'; NULL: 'null' | 'NULL';
 COLON: ':'; SEMICOLON: ';'; COMMA: ','; DOT: '.'; LPAREN: '('; RPAREN: ')'; LBRACKET: '['; RBRACKET: ']';
 LBRACE: '{'; RBRACE: '}';
 EQUALS: '=';
+// Comparison operators for CHECK atoms. Note: '==' must be declared before '=' so the
+// lexer picks the longer match for "==".
+EQ: '==';
+NEQ: '!=';
+LTE: '<=';
+GTE: '>=';
+LT: '<';
+GT: '>';
 
 // ----------------------------------------------------------------------------
 // PATTERNS
