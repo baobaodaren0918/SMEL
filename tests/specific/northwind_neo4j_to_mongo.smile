@@ -11,6 +11,12 @@ MIGRATION northwind_neo4j_to_mongo:1.0
 FROM GRAPH TO DOCUMENT
 USING adapted_northwind_schema VERSION 1
 
+-- Declare the two surviving document roots explicitly.
+-- CAST_ENTITY locks entity_kind so the auto-normalize step doesn't override.
+-- Aligned with northwind_pg_to_mongo / northwind_cass_to_mongo for byte-stable output.
+CAST_ENTITY orders TO DOCUMENT
+CAST_ENTITY customers TO DOCUMENT
+
 -- ============================================
 -- Source: 7 nodes + 7 relationships — see northwind_neo4j.cypher
 -- Target: 2 collections (orders + customers, max L3)

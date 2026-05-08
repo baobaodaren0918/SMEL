@@ -98,7 +98,7 @@ CREATE TABLE customer_contacts (
     contact_title TEXT,
     phone TEXT,
     fax TEXT,
-    contact_id INT,
+    contact_id TEXT,
     PRIMARY KEY ((customer_id), contact_id)
 );
 

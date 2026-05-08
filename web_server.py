@@ -1,6 +1,6 @@
 """
 SMILE Web Server - Web interface for schema migration visualization.
-Run this file and open http://localhost:5594 in your browser.
+Run this file and open http://localhost:5601 in your browser.
 """
 import sys
 import json
@@ -239,14 +239,27 @@ class SMILEHandler(SimpleHTTPRequestHandler):
                         # the validation panel uniformly instead of branching on
                         # endpoint identity).
                         from core import db_to_dict
+                        # Layer 0 needs ``execution_stats`` and ``operations_detail``
+                        # to derive its pass/fail verdict and the failed-step
+                        # listing the frontend renders. Without them Layer 0
+                        # would always pass on a zero-op assumption — masking
+                        # genuine handler errors / skips behind a green badge.
                         validation_input = {
                             "result": db_to_dict(result_db),
                             "exported_target": exported_text,
+                            "execution_stats": {
+                                "total": len(operations),
+                                "success": applied,
+                                "skipped": skipped_ct,
+                                "error": error_ct,
+                            },
+                            "operations_detail": ops_detail,
                         }
                         try:
                             from validation.pipeline import validate_pipeline
                             v = validate_pipeline(
                                 validation_input, tgt_type_resolved, config_key="")
+                            validation_layer0 = v["layer0"]
                             validation_meta = v["layer1"]
                             validation_export = v["layer2"]
                             validation_blame = v["blame"]
@@ -255,6 +268,7 @@ class SMILEHandler(SimpleHTTPRequestHandler):
                             err_block = {"passed": None,
                                          "summary": f"Error: {ex}",
                                          "details": {}}
+                            validation_layer0 = err_block
                             validation_meta = err_block
                             validation_export = err_block
                             validation_blame = "unverifiable"
@@ -271,6 +285,7 @@ class SMILEHandler(SimpleHTTPRequestHandler):
                             "meta_v2_summary": meta_v2_summary,
                             "exported_target": exported_text,
                             "target_db_type": tgt_type_resolved.upper(),
+                            "validation_layer0": validation_layer0,
                             "validation_meta": validation_meta,
                             "validation_export": validation_export,
                             "validation_blame": validation_blame,
@@ -1763,6 +1778,11 @@ def get_html():
 
                     <div id="composeEditor"></div>
                     <div id="composeStatus" class="compose-status"></div>
+                    <!-- Holds the three-layer validation panel (Layer 0 / 1 / 2 +
+                         blame) the backend returns for /api/run_script. Without
+                         this hook, runComposeScript would render only a plain-
+                         text banner and discard validation_layer0/meta/export. -->
+                    <div id="composeValidation"></div>
                 </div>
             </div>
 

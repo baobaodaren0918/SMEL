@@ -17,15 +17,203 @@ Data Flow:
 Design: from André Conrad
 """
 import re
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from ..unified_meta_schema import (
     Database, DatabaseType, EntityType, EntityKind, Property,
     UniqueConstraint, ForeignKeyConstraint, UniqueProperty, ForeignKeyProperty, PKTypeEnum,
+    CheckConstraint,
+    CheckExpr, CheckCmp, CheckIn, CheckBetween, CheckIsNull,
+    CheckAnd, CheckOr, CheckNot, CheckRaw,
     Reference, Cardinality, PrimitiveDataType, PrimitiveType,
     ListDataType, SetDataType, MapDataType,
     RelationshipType, TypeMappings
 )
 from ._base import DatabaseAdapter
+
+
+class _CheckParseError(Exception):
+    """Raised internally by the CHECK expression parser to signal that the
+    input cannot be decoded into the structured CheckExpr atoms.
+
+    Caught by ``PostgreSQLAdapter._parse_check_expression`` which converts
+    any parse failure into a ``CheckRaw`` carrying the original text — so
+    a malformed-or-exotic CHECK constraint is preserved verbatim rather
+    than silently dropped. Never escapes this module.
+    """
+    pass
+
+
+class _CheckExprParser:
+    """Recursive-descent parser for SQL CHECK boolean expressions.
+
+    Operates on the token stream produced by
+    ``PostgreSQLAdapter._tokenize_check`` and yields a ``CheckExpr`` AST
+    matching the meta-model atoms (``CheckCmp``, ``CheckIn``,
+    ``CheckBetween``, ``CheckIsNull`` plus ``CheckAnd`` / ``CheckOr`` /
+    ``CheckNot``). Anything not in this whitelist throws
+    ``_CheckParseError`` so the caller can fall back to ``CheckRaw``.
+
+    Precedence (lowest → highest, mirroring SQL):
+        OR  →  AND  →  NOT  →  primary (paren / atomic predicate)
+    """
+
+    def __init__(self, tokens: List[Tuple[str, Any]], original: str) -> None:
+        self.tokens = tokens
+        self.pos = 0
+        self.original = original
+
+    # ── token cursor helpers ──────────────────────────────────────────
+    def at_end(self) -> bool:
+        return self.pos >= len(self.tokens)
+
+    def _peek(self, offset: int = 0) -> Optional[Tuple[str, Any]]:
+        idx = self.pos + offset
+        if idx >= len(self.tokens):
+            return None
+        return self.tokens[idx]
+
+    def _advance(self) -> Tuple[str, Any]:
+        tok = self.tokens[self.pos]
+        self.pos += 1
+        return tok
+
+    def _match_ident(self, *names: str) -> bool:
+        """Peek; if next token is an ident matching (case-insensitive) any of
+        the given names, consume it and return True. Otherwise leave pos and
+        return False. Used for keyword recognition (AND, OR, NOT, etc.)."""
+        tok = self._peek()
+        if tok is None or tok[0] != 'ident':
+            return False
+        if any(tok[1].upper() == n.upper() for n in names):
+            self._advance()
+            return True
+        return False
+
+    # ── grammar productions ──────────────────────────────────────────
+    def parse_expr(self) -> CheckExpr:
+        """Top-level entry: the OR layer (lowest precedence)."""
+        left = self._parse_and()
+        while self._match_ident('OR'):
+            right = self._parse_and()
+            left = CheckOr(left=left, right=right)
+        return left
+
+    def _parse_and(self) -> CheckExpr:
+        left = self._parse_not()
+        while self._match_ident('AND'):
+            right = self._parse_not()
+            left = CheckAnd(left=left, right=right)
+        return left
+
+    def _parse_not(self) -> CheckExpr:
+        if self._match_ident('NOT'):
+            return CheckNot(expr=self._parse_not())
+        return self._parse_primary()
+
+    def _parse_primary(self) -> CheckExpr:
+        """Either ``( expr )`` or an atomic predicate."""
+        tok = self._peek()
+        if tok is None:
+            raise _CheckParseError("unexpected end of input")
+        if tok == ('punct', '('):
+            self._advance()
+            inner = self.parse_expr()
+            if self._peek() != ('punct', ')'):
+                raise _CheckParseError("missing closing paren")
+            self._advance()
+            return inner
+        return self._parse_predicate()
+
+    def _parse_predicate(self) -> CheckExpr:
+        """One of: ``ident IS [NOT] NULL``, ``ident IN (...)``,
+        ``ident BETWEEN lo AND hi``, ``ident op literal``."""
+        tok = self._peek()
+        if tok is None or tok[0] != 'ident':
+            raise _CheckParseError(f"expected column identifier, got {tok!r}")
+        field_name = tok[1]
+        self._advance()
+
+        # IS [NOT] NULL
+        if self._match_ident('IS'):
+            is_null = True
+            if self._match_ident('NOT'):
+                is_null = False
+            if not self._match_ident('NULL'):
+                raise _CheckParseError("expected NULL after IS [NOT]")
+            return CheckIsNull(field_name=field_name, is_null=is_null)
+
+        # NOT IN / NOT BETWEEN — accept both ``NOT IN`` and the SQL form
+        # where NOT is at predicate-level — for our purposes wrap in CheckNot.
+        negate = False
+        if self._match_ident('NOT'):
+            negate = True
+
+        # IN (...)
+        if self._match_ident('IN'):
+            if self._peek() != ('punct', '('):
+                raise _CheckParseError("expected ( after IN")
+            self._advance()
+            values: List[Any] = []
+            if self._peek() != ('punct', ')'):
+                values.append(self._parse_literal())
+                while self._peek() == ('punct', ','):
+                    self._advance()
+                    values.append(self._parse_literal())
+            if self._peek() != ('punct', ')'):
+                raise _CheckParseError("missing closing paren in IN list")
+            self._advance()
+            node: CheckExpr = CheckIn(field_name=field_name, values=values)
+            return CheckNot(expr=node) if negate else node
+
+        # BETWEEN lo AND hi
+        if self._match_ident('BETWEEN'):
+            low = self._parse_literal()
+            if not self._match_ident('AND'):
+                raise _CheckParseError("expected AND in BETWEEN")
+            high = self._parse_literal()
+            node = CheckBetween(field_name=field_name, low=low, high=high)
+            return CheckNot(expr=node) if negate else node
+
+        if negate:
+            # ``ident NOT <op> ...`` is not standard SQL; bail to raw.
+            raise _CheckParseError("unexpected NOT after column")
+
+        # ident op literal
+        op_tok = self._peek()
+        if op_tok is None or op_tok[0] != 'op':
+            raise _CheckParseError(f"expected comparison op, got {op_tok!r}")
+        self._advance()
+        op = op_tok[1]
+        # Normalise ``=`` to ``==`` so the AST matches what the SMILE grammar
+        # produces from ``CHECK <field> == <lit>``. The exporter rewrites
+        # both back to SQL ``=``.
+        if op == '=':
+            op = '=='
+        if op == '<>':
+            op = '!='
+        literal = self._parse_literal()
+        return CheckCmp(field_name=field_name, op=op, literal=literal)
+
+    def _parse_literal(self) -> Any:
+        """Parse one literal token: int / float / string / TRUE / FALSE / NULL."""
+        tok = self._peek()
+        if tok is None:
+            raise _CheckParseError("expected literal")
+        if tok[0] in ('int', 'float', 'string'):
+            self._advance()
+            return tok[1]
+        if tok[0] == 'ident':
+            up = tok[1].upper()
+            if up == 'TRUE':
+                self._advance()
+                return True
+            if up == 'FALSE':
+                self._advance()
+                return False
+            if up == 'NULL':
+                self._advance()
+                return None
+        raise _CheckParseError(f"expected literal, got {tok!r}")
 
 
 class PostgreSQLAdapter(DatabaseAdapter):
@@ -53,9 +241,15 @@ class PostgreSQLAdapter(DatabaseAdapter):
     def __init__(self):
         """Initialize adapter with empty state."""
         self.database: Optional[Database] = None
-        # Pending references: (source_entity, fk_column, target_entity)
-        # Stored during parsing, resolved after all tables are created
+        # Pending references (column-level): (source_entity, fk_column, target_entity).
+        # Stored during parsing, resolved after all tables are created.
+        # Each tuple becomes one Reference + one single-column ForeignKeyConstraint.
         self._pending_references: List[Tuple[str, str, str]] = []
+        # Pending table-level composite FKs: (source_entity, [src_cols], target_table, [tgt_cols]).
+        # Stored separately because all columns of one FOREIGN KEY (a,b) REFERENCES t(x,y)
+        # must fold into a SINGLE ForeignKeyConstraint with N ForeignKeyProperty
+        # entries — distinguishing them from N independent single-column FKs.
+        self._pending_table_fks: List[Tuple[str, List[str], str, List[str]]] = []
 
     # =========================================================================
     # PARSE METHODS (DDL -> Unified Meta Schema)
@@ -107,9 +301,10 @@ class PostgreSQLAdapter(DatabaseAdapter):
         """
         self.database = Database(db_name=db_name, db_type=DatabaseType.RELATIONAL)
         self._pending_references = []
+        self._pending_table_fks = []
 
-        # Step 1: Remove comments
-        ddl = self._remove_comments(ddl_content)
+        # Step 1: Remove comments (helper inherited from DatabaseAdapter)
+        ddl = self._remove_sql_comments(ddl_content)
 
         # Step 2: Extract CREATE TABLE statements
         tables = self._extract_create_tables(ddl)
@@ -124,20 +319,6 @@ class PostgreSQLAdapter(DatabaseAdapter):
         self._resolve_references()
 
         return self.database
-
-    def _remove_comments(self, ddl: str) -> str:
-        """
-        Remove SQL comments from DDL.
-
-        Handles:
-          - Single-line comments: -- comment
-          - Multi-line comments: /* comment */
-        """
-        # Remove single-line comments (-- ...)
-        ddl = re.sub(r'--.*$', '', ddl, flags=re.MULTILINE)
-        # Remove multi-line comments (/* ... */)
-        ddl = re.sub(r'/\*.*?\*/', '', ddl, flags=re.DOTALL)
-        return ddl
 
     def _extract_create_tables(self, ddl: str) -> List[Tuple[str, str]]:
         """
@@ -191,7 +372,7 @@ class PostgreSQLAdapter(DatabaseAdapter):
                 continue
 
             # Parse column definition
-            attr, ref_info = self._parse_column(col_def)
+            attr, ref_info, check_ast = self._parse_column(col_def)
             if attr:
                 entity.add_property(attr)
 
@@ -210,13 +391,35 @@ class PostgreSQLAdapter(DatabaseAdapter):
                 if ref_info:
                     self._pending_references.append((entity.name, ref_info[0], ref_info[1]))
 
-        # Parse table-level constraints
-        # e.g., "PRIMARY KEY (customer_id, knows_customer_id)"
+                # Inline CHECK clause attached to this column. Anchor the
+                # CheckConstraint to the column's own meta_id — for
+                # column-level CHECK the anchor is unambiguous.
+                if check_ast is not None:
+                    entity.add_constraint(CheckConstraint(
+                        expression=check_ast,
+                        target_property_id=attr.meta_id,
+                    ))
+
+        # Parse table-level constraints. The four supported branches mirror
+        # the keyword set collected on line 189: PRIMARY KEY, FOREIGN KEY,
+        # UNIQUE, CHECK. Generic ``CONSTRAINT <name> ...`` is normalised by
+        # stripping the leading ``CONSTRAINT <name>`` prefix before
+        # dispatching, so user-named constraints follow the same paths.
         for constraint_def in table_level_constraints:
-            upper = constraint_def.upper().strip()
+            stripped = constraint_def.strip()
+            # Strip the optional ``CONSTRAINT <name>`` preamble so
+            # ``CONSTRAINT pk_orders PRIMARY KEY (...)`` dispatches the same
+            # way as a bare ``PRIMARY KEY (...)``.
+            named_match = re.match(
+                r'^CONSTRAINT\s+\w+\s+(.*)$', stripped, re.IGNORECASE | re.DOTALL,
+            )
+            if named_match:
+                stripped = named_match.group(1).strip()
+            upper = stripped.upper()
+
             if upper.startswith('PRIMARY KEY') and not entity.get_primary_key():
-                # Extract column names from PRIMARY KEY (col1, col2, ...)
-                pk_match = re.search(r'PRIMARY\s+KEY\s*\(([^)]+)\)', constraint_def, re.IGNORECASE)
+                # PRIMARY KEY (col1, col2, ...)
+                pk_match = re.search(r'PRIMARY\s+KEY\s*\(([^)]+)\)', stripped, re.IGNORECASE)
                 if pk_match:
                     pk_col_names = [c.strip() for c in pk_match.group(1).split(',')]
                     unique_props = []
@@ -229,12 +432,77 @@ class PostgreSQLAdapter(DatabaseAdapter):
                                 property_id=attr.meta_id
                             ))
                     if unique_props:
-                        constraint = UniqueConstraint(
+                        entity.add_constraint(UniqueConstraint(
                             is_primary_key=True,
                             is_managed=True,
-                            unique_properties=unique_props
-                        )
-                        entity.add_constraint(constraint)
+                            unique_properties=unique_props,
+                        ))
+
+            elif upper.startswith('FOREIGN KEY'):
+                # FOREIGN KEY (a, b) REFERENCES target(x, y) [ON DELETE/UPDATE ...]
+                # Length-1 lists express single-column FKs; longer lists are true
+                # composite FKs that must fold into ONE ForeignKeyConstraint with
+                # N ForeignKeyProperty entries (mirrors ADD_FOREIGN_KEY composite
+                # semantics in core.handlers.keys_constraints._handle_add_foreign_key).
+                fk_match = re.search(
+                    r'FOREIGN\s+KEY\s*\(([^)]+)\)\s+REFERENCES\s+(?:\w+\.)?(\w+)\s*\(([^)]+)\)',
+                    stripped, re.IGNORECASE,
+                )
+                if fk_match:
+                    src_cols = [c.strip().lower() for c in fk_match.group(1).split(',')]
+                    target_table = fk_match.group(2).lower()
+                    tgt_cols = [c.strip().lower() for c in fk_match.group(3).split(',')]
+                    # Defer to _resolve_references so target entity (which may
+                    # be defined later in the DDL) can be looked up after all
+                    # CREATE TABLE statements have been parsed.
+                    self._pending_table_fks.append(
+                        (entity.name, src_cols, target_table, tgt_cols)
+                    )
+
+            elif upper.startswith('UNIQUE'):
+                # UNIQUE (a, b, ...) — table-level multi-column UNIQUE constraint.
+                u_match = re.search(r'UNIQUE\s*\(([^)]+)\)', stripped, re.IGNORECASE)
+                if u_match:
+                    u_col_names = [c.strip().lower() for c in u_match.group(1).split(',')]
+                    unique_props = []
+                    for col_name in u_col_names:
+                        attr = entity.get_property(col_name)
+                        if attr:
+                            unique_props.append(UniqueProperty(
+                                primary_key_type=PKTypeEnum.SIMPLE,
+                                property_id=attr.meta_id,
+                            ))
+                    if unique_props:
+                        entity.add_constraint(UniqueConstraint(
+                            is_primary_key=False,
+                            is_managed=True,
+                            unique_properties=unique_props,
+                        ))
+
+            elif upper.startswith('CHECK'):
+                # CHECK (<expr>) — parse the SQL boolean expression into a
+                # CheckExpr AST. Recognised atoms map cleanly: ``col op lit``,
+                # ``col IN (...)``, ``col BETWEEN lo AND hi``, ``col IS [NOT]
+                # NULL``, plus AND/OR/NOT compositions and parenthesisation.
+                # Anything outside this whitelist (function calls, multi-column
+                # arithmetic etc.) falls back to ``CheckRaw(<original text>)``
+                # so the constraint at least round-trips intact rather than
+                # being silently dropped.
+                m_chk = re.search(r'CHECK\s*\((.*)\)\s*$', stripped, re.IGNORECASE | re.DOTALL)
+                if m_chk:
+                    expr_text = m_chk.group(1).strip()
+                    expr_ast = self._parse_check_expression(expr_text)
+                    # Anchor the constraint to the *first* property the
+                    # expression references — gives DELETE_CONSTRAINT a
+                    # qualified name to find it by. Falls back to the first
+                    # entity property if expression analysis didn't yield a
+                    # candidate (e.g. a CheckRaw fallback).
+                    anchor_attr = self._find_check_anchor(entity, expr_ast)
+                    if anchor_attr is not None:
+                        entity.add_constraint(CheckConstraint(
+                            expression=expr_ast,
+                            target_property_id=anchor_attr.meta_id,
+                        ))
 
         # Auto-create primary key constraint for SERIAL columns
         # (SERIAL implies PRIMARY KEY even without explicit declaration)
@@ -251,41 +519,262 @@ class PostgreSQLAdapter(DatabaseAdapter):
 
         return entity
 
-    def _split_columns(self, body: str) -> List[str]:
+    # ``_split_columns`` is inherited from DatabaseAdapter (shared with Cassandra).
+
+    # ----------------------------------------------------------------------
+    # SQL CHECK expression parsing — ``_parse_check_expression`` turns a SQL
+    # boolean expression into the meta-model CheckExpr AST. Implemented as a
+    # tiny recursive-descent parser over a hand-rolled tokeniser.
+    #
+    # Recognised atoms (mapped to specific AST nodes):
+    #   ident op literal                         → CheckCmp   (=, ==, !=, <>, <, >, <=, >=)
+    #   ident IN (lit, lit, ...)                 → CheckIn
+    #   ident BETWEEN lit AND lit                → CheckBetween
+    #   ident IS [NOT] NULL                      → CheckIsNull
+    # Composition: NOT, AND, OR, parentheses.
+    # Anything outside this whitelist (function calls, multi-column
+    # arithmetic, string concatenation, etc.) falls back to ``CheckRaw``
+    # carrying the original text so the constraint is preserved verbatim
+    # rather than being silently dropped.
+    # ----------------------------------------------------------------------
+
+    @staticmethod
+    def _parse_check_expression(text: str) -> CheckExpr:
+        """Parse a SQL boolean expression into a CheckExpr AST.
+
+        Returns a ``CheckRaw`` carrying the original text when the parser
+        cannot decode the expression — so any CHECK constraint round-trips
+        intact even if its predicate falls outside the structured atoms.
         """
-        Split column definitions, handling nested parentheses.
+        try:
+            tokens = PostgreSQLAdapter._tokenize_check(text)
+            parser = _CheckExprParser(tokens, text)
+            ast = parser.parse_expr()
+            if not parser.at_end():
+                # Unconsumed tokens → treat as malformed → raw fallback.
+                return CheckRaw(raw_text=text.strip())
+            return ast
+        except _CheckParseError:
+            return CheckRaw(raw_text=text.strip())
 
-        Problem: Simple split by ',' fails for types like DECIMAL(15,2)
-        Solution: Track parenthesis depth, only split at depth 0
+    @staticmethod
+    def _tokenize_check(text: str) -> List[Tuple[str, Any]]:
+        """Split a SQL CHECK expression into a stream of typed tokens.
 
-        Example:
-            "id INT, price DECIMAL(15,2), name VARCHAR(100)"
-            -> ["id INT", "price DECIMAL(15,2)", "name VARCHAR(100)"]
+        Tokens are ``(kind, value)`` pairs where ``kind`` is one of:
+          ``ident``  - bare identifier (column or keyword)
+          ``int``    - integer literal (Python int)
+          ``float``  - decimal literal (Python float)
+          ``string`` - quoted string literal (quotes stripped)
+          ``op``     - comparison operator string (=, ==, !=, <>, <, >, <=, >=)
+          ``punct``  - one of ``(``, ``)``, ``,``
         """
-        result = []
-        current = ""
-        depth = 0
-
-        for char in body:
-            if char == '(':
-                depth += 1
-                current += char
-            elif char == ')':
-                depth -= 1
-                current += char
-            elif char == ',' and depth == 0:
-                # Only split when not inside parentheses
-                result.append(current.strip())
-                current = ""
+        tokens: List[Tuple[str, Any]] = []
+        i = 0
+        n = len(text)
+        while i < n:
+            ch = text[i]
+            if ch.isspace():
+                i += 1
+                continue
+            # Single-quoted string literal — '' inside is an escape for '.
+            if ch == "'":
+                j = i + 1
+                buf = []
+                while j < n:
+                    if text[j] == "'":
+                        if j + 1 < n and text[j + 1] == "'":
+                            buf.append("'")
+                            j += 2
+                            continue
+                        break
+                    buf.append(text[j])
+                    j += 1
+                if j >= n:
+                    raise _CheckParseError("unterminated string literal")
+                tokens.append(('string', ''.join(buf)))
+                i = j + 1
+                continue
+            # Double-quoted identifier (PG quoted name) — treat as identifier
+            if ch == '"':
+                j = i + 1
+                buf = []
+                while j < n and text[j] != '"':
+                    buf.append(text[j])
+                    j += 1
+                if j >= n:
+                    raise _CheckParseError("unterminated quoted identifier")
+                tokens.append(('ident', ''.join(buf)))
+                i = j + 1
+                continue
+            # Numeric literal (int or float)
+            if ch.isdigit() or (ch == '-' and i + 1 < n and text[i + 1].isdigit()):
+                j = i + 1
+                while j < n and (text[j].isdigit() or text[j] == '.'):
+                    j += 1
+                num_str = text[i:j]
+                if '.' in num_str:
+                    tokens.append(('float', float(num_str)))
+                else:
+                    tokens.append(('int', int(num_str)))
+                i = j
+                continue
+            # Multi-char operators first so longest-match wins
+            for op in ('<=', '>=', '!=', '<>', '=='):
+                if text.startswith(op, i):
+                    tokens.append(('op', op))
+                    i += len(op)
+                    break
             else:
-                current += char
+                if ch in '<>':
+                    tokens.append(('op', ch))
+                    i += 1
+                    continue
+                if ch == '=':
+                    tokens.append(('op', '='))
+                    i += 1
+                    continue
+                if ch in '(),':
+                    tokens.append(('punct', ch))
+                    i += 1
+                    continue
+                # Identifier (covers keywords AND, OR, NOT, IS, NULL, IN, BETWEEN, TRUE/FALSE)
+                if ch.isalpha() or ch == '_':
+                    j = i + 1
+                    while j < n and (text[j].isalnum() or text[j] == '_'):
+                        j += 1
+                    tokens.append(('ident', text[i:j]))
+                    i = j
+                    continue
+                # Anything else — bail out to raw fallback.
+                raise _CheckParseError(f"unexpected character {ch!r} at offset {i}")
+        return tokens
 
-        if current.strip():
-            result.append(current.strip())
+    @staticmethod
+    def _check_expr_to_sql(expr: CheckExpr) -> str:
+        """Render a CheckExpr AST back to a SQL boolean expression string.
 
-        return result
+        Symmetric inverse of ``_parse_check_expression``. Used by the table
+        export path to emit ``CHECK (...)`` clauses for CheckConstraint
+        objects in the meta model. ``CheckRaw`` round-trips verbatim — that's
+        the whole point of the raw escape hatch.
+        """
+        if isinstance(expr, CheckRaw):
+            return expr.raw_text
+        if isinstance(expr, CheckCmp):
+            return f"{expr.field_name} {PostgreSQLAdapter._cmp_op_to_sql(expr.op)} {PostgreSQLAdapter._literal_to_sql(expr.literal)}"
+        if isinstance(expr, CheckIn):
+            vals = ", ".join(PostgreSQLAdapter._literal_to_sql(v) for v in expr.values)
+            return f"{expr.field_name} IN ({vals})"
+        if isinstance(expr, CheckBetween):
+            return (f"{expr.field_name} BETWEEN "
+                    f"{PostgreSQLAdapter._literal_to_sql(expr.low)} AND "
+                    f"{PostgreSQLAdapter._literal_to_sql(expr.high)}")
+        if isinstance(expr, CheckIsNull):
+            return f"{expr.field_name} IS {'NULL' if expr.is_null else 'NOT NULL'}"
+        if isinstance(expr, CheckNot):
+            inner = PostgreSQLAdapter._check_expr_to_sql(expr.expr) if expr.expr else ""
+            return f"NOT ({inner})"
+        if isinstance(expr, CheckAnd):
+            l = PostgreSQLAdapter._check_expr_to_sql(expr.left) if expr.left else ""
+            r = PostgreSQLAdapter._check_expr_to_sql(expr.right) if expr.right else ""
+            return f"({l}) AND ({r})"
+        if isinstance(expr, CheckOr):
+            l = PostgreSQLAdapter._check_expr_to_sql(expr.left) if expr.left else ""
+            r = PostgreSQLAdapter._check_expr_to_sql(expr.right) if expr.right else ""
+            return f"({l}) OR ({r})"
+        return ""
 
-    def _parse_column(self, col_def: str) -> Tuple[Optional[Property], Optional[Tuple[str, str]]]:
+    @staticmethod
+    def _cmp_op_to_sql(op: str) -> str:
+        """Normalise a CheckCmp op back to a SQL comparison operator.
+
+        SMILE atoms accept both ``=`` and ``==`` for equality (matching the
+        grammar's tolerance); SQL only accepts ``=``. Inequality is always
+        rendered as ``<>`` (SQL standard) rather than ``!=``.
+        """
+        if op in ('=', '=='):
+            return '='
+        if op in ('!=', '<>'):
+            return '<>'
+        return op
+
+    @staticmethod
+    def _literal_to_sql(lit: Any) -> str:
+        """Render a Python literal as SQL: strings get quoted with `` ' ``
+        (single quote escaped by doubling), booleans become TRUE/FALSE,
+        None becomes NULL, numbers render via ``str()``."""
+        if lit is None:
+            return 'NULL'
+        if isinstance(lit, bool):
+            return 'TRUE' if lit else 'FALSE'
+        if isinstance(lit, (int, float)):
+            return str(lit)
+        if isinstance(lit, str):
+            escaped = lit.replace("'", "''")
+            return f"'{escaped}'"
+        return str(lit)
+
+    @staticmethod
+    def _find_check_anchor(entity: EntityType, expr: CheckExpr) -> Optional[Property]:
+        """Pick which entity property to anchor a CheckConstraint to.
+
+        SMILE's ADD_CONSTRAINT requires a target property name (e.g.
+        ``ADD_CONSTRAINT entity.field AS CHECK ...``) so DELETE_CONSTRAINT
+        can find the constraint by qualified name later. The expression
+        itself may reference multiple columns; ``target_property_id`` only
+        names the *anchor*. Strategy:
+
+        1. Walk the AST and collect the field names it mentions.
+        2. Return the first one that exists on the entity.
+        3. If no field names are visible (CheckRaw fallback) or none match
+           an entity property, anchor to the entity's first property — any
+           existing column is a valid anchor for delete-by-name.
+        4. Return ``None`` only if the entity has no properties at all
+           (in which case the constraint can't be attached anywhere).
+        """
+        names = PostgreSQLAdapter._collect_field_names(expr)
+        for name in names:
+            attr = entity.get_property(name)
+            if attr is not None:
+                return attr
+        # No field reference visible — fall back to the first property so the
+        # constraint is at least round-trippable rather than dropped.
+        if entity.properties:
+            return entity.properties[0]
+        return None
+
+    @staticmethod
+    def _collect_field_names(expr: CheckExpr) -> List[str]:
+        """Walk a CheckExpr AST and return the field names it references in
+        order of first appearance. Used to pick a CheckConstraint anchor
+        column. CheckRaw contributes no structured field names (the raw
+        text is opaque to the analyser)."""
+        out: List[str] = []
+        seen = set()
+
+        def add(name: str) -> None:
+            if name and name not in seen:
+                seen.add(name)
+                out.append(name)
+
+        def walk(node: CheckExpr) -> None:
+            if isinstance(node, (CheckCmp, CheckIn, CheckBetween, CheckIsNull)):
+                add(node.field_name)
+            elif isinstance(node, CheckNot):
+                if node.expr is not None:
+                    walk(node.expr)
+            elif isinstance(node, (CheckAnd, CheckOr)):
+                if node.left is not None:
+                    walk(node.left)
+                if node.right is not None:
+                    walk(node.right)
+            # CheckRaw contributes nothing — opaque to the analyser.
+
+        walk(expr)
+        return out
+
+    def _parse_column(self, col_def: str) -> Tuple[Optional[Property], Optional[Tuple[str, str]], Optional[CheckExpr]]:
         """
         Parse a single column definition.
 
@@ -294,10 +783,19 @@ class PostgreSQLAdapter(DatabaseAdapter):
 
         Example Output:
             Property("customer_id", INTEGER, is_key=False, is_optional=False)
-            ref_info = ("customer_id", "customers")
+            ref_info  = ("customer_id", "customers")
+            check_ast = None
+
+        With a column-level CHECK clause:
+            "amount DECIMAL CHECK (amount > 0)"
+            -> Property("amount", DECIMAL, ...)
+               ref_info  = None
+               check_ast = CheckCmp("amount", ">", 0)
 
         Returns:
-            (Property, ref_info) where ref_info is (fk_column, target_table) or None
+            (Property, ref_info, check_ast) where ref_info is
+            ``(fk_column, target_table)`` or None, and check_ast is a
+            CheckExpr for any inline CHECK clause or None when absent.
         """
         # Normalize whitespace (handle multi-line definitions)
         col_def = ' '.join(col_def.split())
@@ -308,7 +806,7 @@ class PostgreSQLAdapter(DatabaseAdapter):
         match = re.match(pattern, col_def.strip(), re.IGNORECASE)
 
         if not match:
-            return None, None
+            return None, None, None
 
         col_name = match.group(1).lower()          # "customer_id"
         col_type = match.group(2).upper()          # "INTEGER"
@@ -323,12 +821,20 @@ class PostgreSQLAdapter(DatabaseAdapter):
         is_key = 'PRIMARY KEY' in constraints.upper() or col_type in ('SERIAL', 'BIGSERIAL')
         # is_optional: NOT NULL not present AND not a primary key
         is_optional = 'NOT NULL' not in constraints.upper() and not is_key
+        # is_auto_generated: source said SERIAL/BIGSERIAL (PG auto-increment).
+        # Carries forward into the meta model so the export side can decide
+        # whether to emit ``SERIAL`` or plain ``INTEGER`` instead of guessing
+        # from ``is_key + INTEGER`` — which would mis-flag any user-supplied
+        # INTEGER PK (business IDs, foreign-system IDs, composite-PK members)
+        # as auto-increment.
+        is_auto_generated = col_type in ('SERIAL', 'BIGSERIAL')
 
         attr = Property(
             name=col_name,
             data_type=data_type,
             is_key=is_key,
-            is_optional=is_optional
+            is_optional=is_optional,
+            is_auto_generated=is_auto_generated,
         )
 
         # Check for REFERENCES clause (foreign key)
@@ -338,7 +844,60 @@ class PostgreSQLAdapter(DatabaseAdapter):
         if ref_match:
             ref_info = (col_name, ref_match.group(1).lower())
 
-        return attr, ref_info
+        # Column-level CHECK clause: ``CHECK (<expr>)``. The expression is
+        # parsed via the same path as table-level CHECK so the AST shape is
+        # identical regardless of where the constraint was declared.
+        # Re-uses the paren-balanced extractor below — naive ``)`` matching
+        # would clip too early on expressions like ``CHECK (LOWER(x) = 'y')``.
+        check_ast: Optional[CheckExpr] = None
+        check_text = self._extract_inline_check(constraints)
+        if check_text is not None:
+            check_ast = self._parse_check_expression(check_text)
+
+        return attr, ref_info, check_ast
+
+    @staticmethod
+    def _extract_inline_check(constraints: str) -> Optional[str]:
+        """Pull the body of an inline ``CHECK (...)`` clause from the trailing
+        column-constraint text.
+
+        Returns the inner expression text (without the outer parens) or
+        ``None`` when no CHECK clause is present. Handles nested parens by
+        tracking depth, so ``CHECK (LOWER(name) = 'a')`` extracts
+        ``LOWER(name) = 'a'`` rather than clipping at the inner ``)``.
+        """
+        m = re.search(r'CHECK\s*\(', constraints, re.IGNORECASE)
+        if not m:
+            return None
+        # Walk forward from the opening paren of the CHECK clause to find
+        # its matching close, ignoring parens inside string literals.
+        depth = 0
+        i = m.end() - 1  # index of '('
+        n = len(constraints)
+        in_string = False
+        start_inner = m.end()
+        while i < n:
+            ch = constraints[i]
+            if in_string:
+                if ch == "'":
+                    # Doubled '' is an escape, not the close.
+                    if i + 1 < n and constraints[i + 1] == "'":
+                        i += 2
+                        continue
+                    in_string = False
+            else:
+                if ch == "'":
+                    in_string = True
+                elif ch == '(':
+                    depth += 1
+                elif ch == ')':
+                    depth -= 1
+                    if depth == 0:
+                        return constraints[start_inner:i].strip()
+            i += 1
+        # Unbalanced — bail; the caller falls back to no CHECK rather than
+        # corrupting state.
+        return None
 
     def _parse_data_type(self, type_name: str, params: Optional[str]) -> PrimitiveDataType:
         """
@@ -441,6 +1000,76 @@ class PostgreSQLAdapter(DatabaseAdapter):
                             is_managed=True,
                             foreign_key_properties=[fk_prop]
                         ))
+
+        # Resolve table-level composite/single FOREIGN KEY clauses. Unlike the
+        # per-column path above (one tuple → one Reference + one single-column
+        # ForeignKeyConstraint), each entry here may have N source/target
+        # columns and must fold into ONE ForeignKeyConstraint with N
+        # ForeignKeyProperty entries — matching the composite semantics of
+        # ADD_FOREIGN_KEY in core.handlers.keys_constraints.
+        for entity_name, src_cols, target_name, tgt_cols in self._pending_table_fks:
+            entity = self.database.get_entity_type(entity_name)
+            target = self.database.get_entity_type(target_name)
+            if not entity or not target:
+                continue
+
+            # Per-column Reference relationships (one per src column).
+            # Cardinality follows the same rule used above for column-level FK.
+            target_pk = target.get_primary_key()
+            target_up_lookup = {}
+            if target_pk:
+                for up in target_pk.unique_properties:
+                    up_attr = target.get_property_by_id(up.property_id)
+                    if up_attr:
+                        target_up_lookup[up_attr.name] = up.meta_id
+
+            fk_props: List[ForeignKeyProperty] = []
+            for src_col, tgt_col in zip(src_cols, tgt_cols):
+                src_attr = entity.get_property(src_col)
+                if not src_attr:
+                    # Source column missing — skip silently; this is the same
+                    # behaviour as malformed inline REFERENCES on a missing column.
+                    continue
+                src_optional = src_attr.is_optional
+                # Cardinality heuristic — column has its own UNIQUE? Composite-FK
+                # member columns are rarely marked UNIQUE individually, so the
+                # default falls into ZERO/ONE_TO_MANY which matches typical
+                # junction-table semantics (e.g. order_details.order_id).
+                is_unique = False
+                for c in entity.constraints:
+                    if (c.kind == "unique" and not c.is_primary_key
+                            and len(c.unique_properties) == 1
+                            and c.unique_properties[0].property_id == src_attr.meta_id):
+                        is_unique = True
+                        break
+                if is_unique:
+                    cardinality = (Cardinality.ONE_TO_ONE if not src_optional
+                                   else Cardinality.ZERO_TO_ONE)
+                else:
+                    cardinality = (Cardinality.ONE_TO_MANY if not src_optional
+                                   else Cardinality.ZERO_TO_MANY)
+
+                entity.add_relationship(Reference(
+                    ref_name=src_col,
+                    refs_to=target_name,
+                    cardinality=cardinality,
+                    is_optional=src_optional,
+                ))
+
+                target_up_id = target_up_lookup.get(tgt_col, "")
+                fk_props.append(ForeignKeyProperty(
+                    property_id=src_attr.meta_id,
+                    points_to_unique_property_id=target_up_id,
+                ))
+
+            # ONE ForeignKeyConstraint per FOREIGN KEY clause — gathers every
+            # (src_col, tgt_col) pair as a ForeignKeyProperty. Length-1 lists
+            # collapse to the single-column case naturally.
+            if fk_props:
+                entity.add_constraint(ForeignKeyConstraint(
+                    is_managed=True,
+                    foreign_key_properties=fk_props,
+                ))
 
     @staticmethod
     def load_from_file(file_path: str, db_name: str = None) -> Database:
@@ -574,10 +1203,23 @@ class PostgreSQLAdapter(DatabaseAdapter):
         columns = []
         constraints = []
 
-        # Build FK lookup: column_name -> Reference relationship
+        # Build FK lookup: column_name -> Reference relationship.
+        # Columns that are part of a *composite* FK (≥2 columns folded into
+        # one ForeignKeyConstraint) are excluded from the column-level
+        # REFERENCES emission; the composite FK is emitted as a table-level
+        # FOREIGN KEY (a, b) REFERENCES ... clause further down. Inlining
+        # both forms would produce a redundant duplicate FK declaration.
+        composite_fk_cols = set()
+        for c in entity.constraints:
+            if c.kind == "foreign_key" and len(c.foreign_key_properties) >= 2:
+                for fkp in c.foreign_key_properties:
+                    fk_attr = entity.get_property_by_id(fkp.property_id)
+                    if fk_attr:
+                        composite_fk_cols.add(fk_attr.name)
+
         fk_refs = {}
         for rel in entity.relationships:
-            if isinstance(rel, Reference):
+            if isinstance(rel, Reference) and rel.ref_name not in composite_fk_cols:
                 fk_refs[rel.ref_name] = rel
 
         # Check for composite primary key (e.g., M:N join tables)
@@ -602,10 +1244,99 @@ class PostgreSQLAdapter(DatabaseAdapter):
             pk_constraint_str = f"    PRIMARY KEY ({', '.join(pk_columns)})"
             columns.append(pk_constraint_str)
 
+        # Emit non-PK UNIQUE constraints. Single-column UNIQUE could in
+        # principle be inlined on the column ("col TYPE UNIQUE"), but emitting
+        # them as table-level keeps the export uniform and handles composite
+        # UNIQUE (a, b) the same way. Anything that round-trips through the
+        # parse-side table-level UNIQUE branch comes out symmetrically.
+        for c in entity.constraints:
+            if c.kind != "unique" or c.is_primary_key:
+                continue
+            uq_cols = []
+            for up in c.unique_properties:
+                up_attr = entity.get_property_by_id(up.property_id)
+                if up_attr:
+                    uq_cols.append(up_attr.name)
+            if uq_cols:
+                columns.append(f"    UNIQUE ({', '.join(uq_cols)})")
+
+        # Emit CHECK constraints. The meta-model holds a structured
+        # CheckExpr AST plus an optional human-friendly name; render the AST
+        # back to a SQL boolean expression via ``_check_expr_to_sql`` (which
+        # is the inverse of the parse-time expression decoder above).
+        for c in entity.constraints:
+            if c.kind != "check" or c.expression is None:
+                continue
+            sql_expr = cls._check_expr_to_sql(c.expression)
+            if not sql_expr:
+                continue
+            if c.constraint_name:
+                columns.append(f"    CONSTRAINT {c.constraint_name} CHECK ({sql_expr})")
+            else:
+                columns.append(f"    CHECK ({sql_expr})")
+
+        # Emit composite/multi-column FOREIGN KEYs as table-level constraints.
+        # Single-column FKs continue to be inlined on the column via
+        # ``_export_property_to_column``'s REFERENCES clause; this branch only
+        # fires when a ForeignKeyConstraint covers ≥2 properties (true
+        # composite FK), which the column-level form cannot express.
+        for c in entity.constraints:
+            if c.kind != "foreign_key":
+                continue
+            if len(c.foreign_key_properties) < 2:
+                continue  # single-col FK already emitted column-level
+            src_cols = []
+            tgt_cols = []
+            target_entity_name = ""
+            for fkp in c.foreign_key_properties:
+                src_attr = entity.get_property_by_id(fkp.property_id)
+                if not src_attr:
+                    continue
+                src_cols.append(src_attr.name)
+                # Locate target entity + column from any matching Reference.
+                # Composite FKs always share one target table across all members.
+                if not target_entity_name:
+                    for rel in entity.relationships:
+                        if isinstance(rel, Reference) and rel.ref_name == src_attr.name:
+                            target_entity_name = rel.get_target_entity_name()
+                            break
+                tgt_cols.append(cls._resolve_fk_target_col(
+                    fkp.points_to_unique_property_id, target_entity_name, database,
+                ))
+            if src_cols and target_entity_name and len(src_cols) == len(tgt_cols):
+                columns.append(
+                    f"    FOREIGN KEY ({', '.join(src_cols)}) "
+                    f"REFERENCES {target_entity_name}({', '.join(tgt_cols)})"
+                )
+
         lines.append(",\n".join(columns))
         lines.append(");")
 
         return "\n".join(lines)
+
+    @classmethod
+    def _resolve_fk_target_col(cls, target_up_id: str, target_entity_name: str,
+                               database: Database) -> str:
+        """Look up the property name behind a ForeignKeyProperty.points_to_unique_property_id.
+
+        Returns ``""`` if the lookup fails (target entity gone, stale id, etc.).
+        Used by the table-level composite FK exporter so it can emit
+        ``REFERENCES target(col1, col2)`` with the right target column names.
+        """
+        if not target_up_id or not target_entity_name or database is None:
+            return ""
+        target = database.get_entity_type(target_entity_name)
+        if not target:
+            return ""
+        for c in target.constraints:
+            if c.kind != "unique":
+                continue
+            for up in c.unique_properties:
+                if up.meta_id == target_up_id:
+                    up_attr = target.get_property_by_id(up.property_id)
+                    if up_attr:
+                        return up_attr.name
+        return ""
 
     @classmethod
     def _export_property_to_column(cls, attr: Property, fk_ref: Reference = None, database: Database = None, is_composite_pk: bool = False) -> str:
@@ -649,11 +1380,12 @@ class PostgreSQLAdapter(DatabaseAdapter):
         Get SQL type string from property.
 
         Examples:
-            STRING with max_length=100  -> "VARCHAR(100)"
-            STRING without max_length   -> "VARCHAR(255)" (default)
-            DECIMAL(15,2)              -> "DECIMAL(15,2)"
-            INTEGER with is_key=True   -> "SERIAL" (auto-increment)
-            INTEGER with is_key=False  -> "INTEGER"
+            STRING with max_length=100             -> "VARCHAR(100)"
+            STRING without max_length              -> "VARCHAR(255)" (default)
+            DECIMAL(15,2)                          -> "DECIMAL(15,2)"
+            INTEGER with is_auto_generated=True    -> "SERIAL"
+            BIGINT  with is_auto_generated=True    -> "BIGSERIAL"
+            INTEGER with is_auto_generated=False   -> "INTEGER" (user-supplied PK)
         """
         # Complex types -> JSONB in PostgreSQL
         if isinstance(attr.data_type, ListDataType):
@@ -679,9 +1411,17 @@ class PostgreSQLAdapter(DatabaseAdapter):
             scale = attr.data_type.scale or 2
             return f"DECIMAL({precision},{scale})"
 
-        # Use SERIAL for integer PKs (auto-increment)
-        if base_type == 'INTEGER' and attr.is_key:
-            return 'SERIAL'
+        # SERIAL / BIGSERIAL only when the source explicitly flagged the column
+        # as auto-generated. The previous heuristic ``is_key + INTEGER`` over-
+        # promoted *every* INTEGER PK to SERIAL — which corrupted the semantics
+        # of business-supplied PKs (e.g. order numbers), Mongo integer ``_id``
+        # values arriving via a Mongo→PG migration, and members of composite
+        # PKs (each marked ``is_key=True`` but never auto-generated).
+        if attr.is_auto_generated:
+            if base_type == 'INTEGER':
+                return 'SERIAL'
+            if base_type == 'BIGINT':
+                return 'BIGSERIAL'
 
         return base_type
 

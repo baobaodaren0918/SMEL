@@ -136,21 +136,91 @@ def print_exported_target(result):
 
 
 def print_validation(result):
-    """Print two-layer validation results."""
+    """Print three-layer validation results.
+
+    Layer 0 (script execution) is rendered first because it dominates blame:
+    if the SMILE script didn't run cleanly, Layer 1 / Layer 2 verdicts on
+    the partial Meta V2 are downstream consequences. The failed-step list
+    under Layer 0 answers the user's "where did it fail?" question
+    directly — each failed step is shown with its index, op type, status,
+    and the reason the handler reported.
+
+    Validation-crash detection: if ``validate_pipeline`` itself raised
+    (caught by ``core.run_migration``'s outer try/except), all three
+    layers come back with ``passed=None`` *and* ``validation_summary``
+    starting with ``"validation crashed:"``. We surface that explicitly
+    rather than silently hiding the entire panel, so users (and thesis
+    evaluators) can never mistake a crashed validation pipeline for a
+    successful run.
+    """
+    v_layer0 = result.get("validation_layer0", {})
     v_meta = result.get("validation_meta", {})
     v_export = result.get("validation_export", {})
+    v_summary = result.get("validation_summary", "")
 
-    # Skip if both are N/A
-    if v_meta.get("passed") is None and v_export.get("passed") is None:
+    # Detect the validation-crashed state explicitly. The fallback in
+    # ``core.run_migration`` sets every layer to ``passed=None`` AND prefixes
+    # ``validation_summary`` with ``"validation crashed:"`` — that prefix is
+    # the unambiguous signal (a legitimately N/A run just says
+    # ``"validation skipped (no expected target file or adapter)"``).
+    crashed = (
+        v_layer0.get("passed") is None
+        and v_meta.get("passed") is None
+        and v_export.get("passed") is None
+        and v_summary.startswith("validation crashed:")
+    )
+
+    # Skip if all three are legitimately N/A (no target file + no adapter)
+    # AND we're not in the crashed state. The crashed state still gets a
+    # rendered panel below.
+    if (not crashed
+            and v_layer0.get("passed") is None
+            and v_meta.get("passed") is None
+            and v_export.get("passed") is None):
         return
 
     print(f"\n{BOLD}{'=' * 50}")
     print(" VALIDATION")
     print(f"{'=' * 50}{RESET}")
 
+    if crashed:
+        print(f"  {RED}{BOLD}VALIDATION CRASHED{RESET}: "
+              f"{v_summary[len('validation crashed:'):].strip()}")
+        print(f"  {YELLOW}The validation pipeline raised an exception before "
+              f"producing layer reports. Treat this run's correctness as "
+              f"UNKNOWN, not as a successful validation.{RESET}")
+        return
+
+    # ── Script Execution check ────────────────────────────────────────
+    # User-facing label is "Script Execution" rather than "Layer 0" —
+    # plain English reads better in CLI / Web cards than the internal
+    # numbering. The variable name still tracks the layer 0 / 1 / 2
+    # ordering for code readability.
+    l0_passed = v_layer0.get("passed")
+    l0_summary = v_layer0.get("summary", "Other reasons")
+    if l0_passed is True:
+        print(f"  Script Execution: {GREEN}{BOLD}{l0_summary}{RESET}")
+    elif l0_passed is False:
+        print(f"  Script Execution: {RED}{BOLD}{l0_summary}{RESET}")
+        # List every failed step so the user can locate the SMILE line that
+        # broke. ``failed_steps`` is populated by ``derive_layer0`` for both
+        # ``error`` (handler exception) and ``skipped`` (deliberate skip)
+        # statuses — both are surfaced here because they're both signals
+        # the user typically needs to act on.
+        for step in v_layer0.get("details", {}).get("failed_steps", []):
+            keyword = step.get("original_keyword") or step.get("type", "?")
+            status = (step.get("status") or "").upper()
+            reason = step.get("reason", "")
+            step_idx = step.get("step", "?")
+            print(f"    {YELLOW}Step {step_idx}{RESET} [{status}] "
+                  f"{keyword}: {reason}")
+    else:
+        print(f"  Script Execution: {l0_summary}")
+
+    # ── Layer 1 + Layer 2: existing two-layer rendering ────────────────
     for label, v in [("Layer 1 (SMILE Script)", v_meta), ("Layer 2 (Adapter Export)", v_export)]:
         passed = v.get("passed")
-        summary = v.get("summary", "N/A")
+        summary = v.get("summary", "Other reasons")
         if passed is True:
             print(f"  {label}: {GREEN}{BOLD}{summary}{RESET}")
         elif passed is False:

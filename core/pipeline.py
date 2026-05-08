@@ -362,17 +362,22 @@ def run_migration(direction: str) -> Dict[str, Any]:
         "smile_syntax": SMILE_SYNTAX,
     }
 
-    # Unified pipeline validation: Layer 1 + Layer 2 + blame attribution.
-    # Top-level keys validation_meta / validation_export stay for the web UI.
+    # Unified three-layer pipeline validation + blame attribution.
+    # Top-level keys validation_layer0 / validation_meta / validation_export
+    # are surfaced for the CLI / web UI / tests; ``validation_meta`` and
+    # ``validation_export`` keep their pre-Layer-0 names for backwards
+    # compatibility with existing front-end code that reads them directly.
     try:
         from validation.pipeline import validate_pipeline
         v = validate_pipeline(result_dict, target_type, direction)
+        result_dict["validation_layer0"] = v["layer0"]
         result_dict["validation_meta"] = v["layer1"]
         result_dict["validation_export"] = v["layer2"]
         result_dict["validation_blame"] = v["blame"]
         result_dict["validation_summary"] = v["summary"]
     except Exception as e:
         err = {"passed": None, "summary": f"Error: {e}", "details": {}}
+        result_dict["validation_layer0"] = err
         result_dict["validation_meta"] = err
         result_dict["validation_export"] = err
         result_dict["validation_blame"] = "unverifiable"

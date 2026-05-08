@@ -37,16 +37,23 @@ from ._base import DatabaseAdapter
 _SMILE_LOGICAL_REF_KEY = "_smile_logical_ref"
 
 # Legacy: descriptive text MongoDB sources used to mark a column as a logical
-# cross-collection reference. Kept as a fallback so externally-authored
-# schemas without the structured marker still work.
+# cross-collection reference. Kept as a fallback for externally-authored
+# schemas without the structured ``_smile_logical_ref`` marker.
+#
+# The regex is anchored to the START of the description (``\A\s*``) so a
+# longer human-readable description that just *mentions* the phrase mid-string
+# (e.g. ``"This field is *not* a cross-collection reference to legacy data"``)
+# does not get misinterpreted as a real logical reference. New schemas should
+# use the structured marker instead — this fallback is for back-compat only.
 _CROSS_COLLECTION_REF_RE = re.compile(
-    r"Cross-collection reference to ([\w]+)\.(\w+)",
+    r"\A\s*Cross-collection reference to ([\w]+)\.(\w+)",
     re.IGNORECASE,
 )
 
-# Legacy: descriptive text marking a self-reference. The structured marker
-# above replaces this; the regex is kept as a fallback for older schemas.
-_SELF_REFERENCE_RE = re.compile(r"Self-reference", re.IGNORECASE)
+# Legacy: descriptive text marking a self-reference. Same start-of-string
+# anchor as above — only descriptions that *begin* with "Self-reference" are
+# treated as the marker; the phrase in the middle of a longer text is ignored.
+_SELF_REFERENCE_RE = re.compile(r"\A\s*Self-reference", re.IGNORECASE)
 
 
 class MongoDBAdapter(DatabaseAdapter):

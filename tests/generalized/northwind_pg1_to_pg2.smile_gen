@@ -5,7 +5,7 @@
 -- Structural changes:
 --   MERGE:      Denormalize categories into products (eliminate JOIN)
 --   SPLIT:      Separate customer identity from contact info (CRM)
---   ADD_ENTITY: Create region, territories, employee_territories (sales territory tracking)
+--   ADD_ENTITY: Create sales_region, territories, employee_territories (sales territory tracking)
 
 EVOLUTION northwind_pg1_to_pg2:1.0
 FROM RELATIONAL TO RELATIONAL
@@ -93,8 +93,8 @@ ADD PROPERTY status TO orders WITH TYPE String
 -- customer_contacts:     { contact_id [PK], customer_id [FK], contact_name, contact_title, phone, fax }
 -- orders:                { order_id [PK], order_date, required_date, shipped_date, shipping_cost, ship_name, ship_address, ship_city, ship_region, ship_postal_code, ship_country, customer_id [FK], employee_id [FK], shipper_id [FK], status }
 -- order_details:         { order_id [PK,FK], product_id [PK,FK], unit_price, quantity, discount }
--- region:                { region_id [PK], region_description }
--- territories:           { territory_id [PK], territory_description, region_id [FK->region] }
+-- sales_region:          { region_id [PK], region_description }
+-- territories:           { territory_id [PK], territory_description, region_id [FK->sales_region] }
 -- employee_territories:  { employee_id [PK,FK], territory_id [PK,FK] }
 -- ============================================
 

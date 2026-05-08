@@ -1,0 +1,120 @@
+\chapter{Introduction}
+\label{ch:background}
+In 2017, The Economist declared data to be the world's most valuable resource, surpassing oil \cite{economist2017data}. As the volume and variety of data continue to grow, diverse SQL and NoSQL database systems are increasingly adopted to address different application requirements. However, these requirements evolve over time, often necessitating transitions between database systems, which in turn demands systematic approaches to schema migration and evolution across heterogeneous data models. To address this challenge, this master thesis develops a domain-specific language for schema migration and evolution across relational and NoSQL database systems.
+
+This chapter introduces the background, problem statement, and research objectives, concluding with an overview of the thesis structure.
+
+%
+% Section: Der erste Abschnitt
+%
+\section{Motivation and Background}
+\label{sec:background:first_section}
+The relational model, introduced by Codd in 1970~\cite{codd1970relational}, dominated structured data storage for nearly three decades. However, the rise of Web 2.0 applications in the late 2000s and the need for greater database flexibility led to the emergence of NoSQL systems such as MongoDB (document store, 2009)\footnote{\url{https://www.mongodb.com/}}, Cassandra (wide-column store, 2008)\footnote{\url{https://cassandra.apache.org/}}, Neo4j (graph database, 2007)\footnote{\url{https://neo4j.com/}} and Redis (key-value store, 2009)\footnote{\url{https://redis.io/}}, which challenged the dominant position of classic SQL databases.
+
+This shift has created numerous use cases for migrating from SQL to various NoSQL data stores. Real-world migrations illustrate this trend. Sega, for instance, moved from an RDBMS to MongoDB to improve performance and reduce response times. Other organizations have transitioned from MySQL to Riak for better fault tolerance and geographic redundancy~\cite{bansal2021journey}. Such migrations require comprehensive schema migrations, as these constitute the prerequisite for data migration among heterogeneous database technologies. At the same time, each database system varies widely in its data models, schema requirements, and approaches to schema changes. A formal grammar that enables developers to express schema migrations and evolutions across diverse systems is therefore needed.
+
+Existing tools such as Darwin~\cite{storl2022darwin} and Orion~\cite{chillon2022taxonomy} focus on schema evolution within individual database systems\footnote{Darwin can also be used for data migration between different NoSQL systems as a side effect, e.g., from MongoDB to ArangoDB~\cite{storl2022darwin}.}. Building upon these established approaches, the present work develops SMILE  (Schema Migration and Evolution Language), a domain-specific language (DSL) designed to extend the scope to schema migration between heterogeneous database systems including both relational and NoSQL databases.
+
+% Section: Problem Statement
+%
+\section{Problem Statement}
+\label{sec:intro:Problem Statement}
+%\graffito{Note: The content of this chapter is just some dummy text. It is not a real language.}
+The primary challenge in schema migration and evolution lies in the structural incompatibility between data models. The heterogeneity of relational tables, document collections, column families, and graph structures creates a paradigm mismatch that makes schema transformation particularly complex ~\cite{ googlecloud2024heterogeneous}.
+
+Informed by the current research achievements of Darwin, Orion, U-Schema, and the M-Model, this master's thesis addresses the following research questions:
+
+\textbf{RQ1: Unified Meta Schema and Operation Formalization}
+
+How can a meta schema be designed to represent schemas from heterogeneous data models, enabling any-to-any schema migrations and evolution across successive versions? How should operations for migration and evolution be formally defined to serve as the foundation for a domain-specific language (DSL)?
+
+\textbf{RQ2: Domain-Specific Language Design}
+
+How can a formal grammar be developed using ANTLR4 that is sufficiently expressive to describe schema migrations and evolution across heterogeneous database models? The language should support embedded structures in document databases; composite partition and clustering keys in columnar databases; node-relationship transformations and label management in graph databases; and foreign keys and constraints in relational databases.
+
+\textbf{RQ3: Validation and Visualization}
+
+How should representative use cases and test scripts be designed to validate the expressiveness and correctness of the proposed domain-specific language? How can a user interface be developed to visualize and trace scenarios of schema migration and evolution?
+%
+% Section: Ziele
+%
+\section{Research Objectives}
+\label{sec:objectivesl}
+To address these research questions, this thesis establishes the following objectives:
+
+\textbf{RO1 to RQ1: Unified Meta Schema and Formal Operation Taxonomy}
+
+A meta schema is developed to represent schemas from heterogeneous databases, including PostgreSQL (relational), MongoDB (document-oriented), Neo4j (graph), and Cassandra (wide-column). This unified meta schema serves as the foundation for schema migrations and evolutions across the four target database technologies.
+
+All applicable migration and evolution operations are to be identified and formally defined. This thesis selectively adopts and extends the operation definitions proposed in Orion ~\cite{chillon2022taxonomy} and in Bianca Meier's master thesis ~\cite{meier2023datenmigration}, adapting them as necessary for schema migration and evolution scenarios.
+
+\textbf{RO2 to RQ2: Design and Implementation of SMILE }
+
+The core contribution is the design of a domain-specific language, named SMILE  (Schema Migration and Evolution Language), featuring a formal grammar defined using ANTLR4. The language covers diverse use cases of schema migrations and evolutions, including embedded structures in document databases, composite partition and clustering keys in columnar databases, node-relationship transformations and label management in graph databases, and foreign keys and constraints in relational databases.
+
+SMILE  will support both schema migration (cross-database) and schema evolution (within the same database type) operations. The scope is illustrated in the following matrix:
+
+\begin{table}[htbp]
+\centering
+\caption{Scope of SMILE : Migration and Evolution Matrix}
+\label{tab:migration-matrix}
+\begin{tabular}{l c c c c}
+\toprule
+\textbf{Source $\rightarrow$} & \multirow{2}{*}{\textbf{RELATIONAL}} & \multirow{2}{*}{\textbf{DOCUMENT}} & \multirow{2}{*}{\textbf{GRAPH}} & \multirow{2}{*}{\textbf{COLUMNAR}} \\
+\textbf{$\downarrow$ Target} & & & & \\
+\midrule
+\textbf{RELATIONAL} & \cellcolor{evocolor}$\text{Evo}_{rr}$ & \cellcolor{migcolor}$\text{Mig}_{dr}$ & \cellcolor{migcolor}$\text{Mig}_{gr}$ & \cellcolor{migcolor}$\text{Mig}_{cr}$ \\
+\textbf{DOCUMENT}   & \cellcolor{migcolor}$\text{Mig}_{rd}$ & \cellcolor{evocolor}$\text{Evo}_{dd}$ & \cellcolor{migcolor}$\text{Mig}_{gd}$ & \cellcolor{migcolor}$\text{Mig}_{cd}$ \\
+\textbf{GRAPH}      & \cellcolor{migcolor}$\text{Mig}_{rg}$ & \cellcolor{migcolor}$\text{Mig}_{dg}$ & \cellcolor{evocolor}$\text{Evo}_{gg}$ & \cellcolor{migcolor}$\text{Mig}_{cg}$ \\
+\textbf{COLUMNAR}   & \cellcolor{migcolor}$\text{Mig}_{rc}$ & \cellcolor{migcolor}$\text{Mig}_{dc}$ & \cellcolor{migcolor}$\text{Mig}_{gc}$ & \cellcolor{evocolor}$\text{Evo}_{cc}$ \\
+\bottomrule
+\end{tabular}
+
+\vspace{0.5em}
+\begin{minipage}{\linewidth}
+\raggedright
+\footnotesize
+\textit{Note:} Evo = Evolution (within same database model); Mig = Migration (cross-database model).
+Subscripts denote source and target: r = Relational, d = Document, g = Graph, c = Columnar.
+\end{minipage}
+\end{table}
+
+\textbf{RO3 to RQ3: Use Case Validation and User Interface Development}
+
+Following the design of SMILE , validation will be conducted through representative use cases covering a range of migration and evolution scenarios across heterogeneous database models. These use cases demonstrate that SMILE  can express practical migration scenarios. A user interface should be developed to visualize these migration use cases.
+
+
+\section{Research Methodology}
+
+This thesis follows a practice-oriented approach to develop
+a DSL for schema migration and evolution. The research is structured
+into the following phases:
+
+\textbf{Phase 1: Problem Analysis and Requirements Engineering}
+
+A systematic literature review is conducted to identify existing approaches to schema migration and evolution. Relevant languages and tools are compared with respect to their expressiveness, scope, and formal grounding. The findings inform the design requirements for SMILE .
+
+\textbf{Phase 2: Language Design}\\
+The SMILE  grammar is defined in ANTLR4 based on a unified meta schema. It targets a comprehensive set of operations for schema migration and evolution across relational, document, graph, and columnar databases, with constructs suitable for each database model.
+
+\textbf{Phase 3: Implementation}\\
+A prototype of the SMILE  parser and interpreter is implemented in Python using ANTLR4. Corresponding adapters are developed for each target system to translate SMILE  operations into executable schema changes. A user interface is developed to visualize the migration and evolution process, allowing users to inspect the source schema, the applied operations, and the resulting target schema.
+
+\textbf{Phase 4: Evaluation}\\
+The language is validated through representative migration and evolution scenarios across all four database models. The correctness of the schema transformations and the resulting target schemas is verified against predefined reference schemas.
+
+
+\section{Thesis Structure}
+The remainder of this thesis is organized into six chapters, progressing from foundational concepts and operation design through grammar implementation and validation. The individual chapters are organized as follows:
+
+\vspace{1em}
+\begin{longtable}{@{}p{5.5cm}p{8cm}@{}}
+1. Introduction & Introduces the background of schema migration and evolution, explains why a unified language is needed, and outlines the goals and contributions of this thesis. \\[1em]
+2. State of the Art & Identifies challenges and needs for schema changes in migration and evolution scenarios, and analyzes existing languages and frameworks. \\[1em]
+3. Concept & Presents the conceptual design of SMILE , covering the unified meta schema, operation taxonomy, and formal grammar. \\[1em]
+4. Implementation & Implements a parser and interpreter for the designed language. \\[1em]
+5. Evaluation & Validates and demonstrates the designed language through exemplary migration scenarios. \\[1em]
+6. Conclusion and Future Work & Summarizes results and outlines future work. \\
+\end{longtable}
+
+

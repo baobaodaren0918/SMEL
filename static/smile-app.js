@@ -264,14 +264,61 @@
         }
 
         function renderValidation(data) {
+            var vLayer0 = data.validation_layer0 || {};
             var vMeta = data.validation_meta || {};
             var vExport = data.validation_export || {};
-            // Skip if both N/A
-            if (vMeta.passed == null && vExport.passed == null) return '';
+            var vSummary = data.validation_summary || '';
+
+            // Detect the validation-crashed state explicitly: all three layers
+            // come back with ``passed=null`` AND validation_summary is prefixed
+            // with "validation crashed:" (set by the outer try/except in
+            // core.run_migration). We surface this loudly instead of silently
+            // skipping the panel — otherwise a crashed validation pipeline
+            // would look indistinguishable from a successful run, which is
+            // exactly the silent-failure mode we don't want.
+            var crashed = (vLayer0.passed == null
+                && vMeta.passed == null
+                && vExport.passed == null
+                && vSummary.indexOf('validation crashed:') === 0);
+
+            // Skip if all three are legitimately N/A (no expected target +
+            // no adapter, e.g. grammar_completeness suite). Crashed runs are
+            // *not* skipped — they get a red error card below.
+            if (!crashed
+                && vLayer0.passed == null
+                && vMeta.passed == null
+                && vExport.passed == null) return '';
 
             var html = '<div class="validation-section">';
             html += '<div class="validation-section-title">Validation</div>';
 
+            if (crashed) {
+                var errMsg = vSummary.substring('validation crashed:'.length).trim();
+                html += '<div class="validation-layer">'
+                      + '<span class="validation-layer-label">'
+                      + '<strong style="color:#D32F2F;">VALIDATION CRASHED</strong>'
+                      + '</span>'
+                      + '<span class="validation-badge fail">ERROR</span>'
+                      + '<span style="font-size:12px;color:#8E8E93;">'
+                      + escapeHtml(errMsg)
+                      + '</span>'
+                      + '</div>';
+                html += '<div class="validation-details" '
+                      + 'style="background:#FFF4F4;border-left:3px solid #D32F2F;'
+                      + 'padding:8px 12px;color:#8B1A1A;">'
+                      + 'The validation pipeline raised an exception before '
+                      + 'producing layer reports. Treat this run\'s correctness '
+                      + 'as <strong>UNKNOWN</strong> — not as a successful validation.'
+                      + '</div>';
+                html += '</div>';
+                return html;
+            }
+
+            // Layer 0 (script execution) is rendered first — failed steps are
+            // the user's most actionable signal ("which line of my script
+            // broke?"). When Layer 0 fails it dominates blame, but Layer 1
+            // and Layer 2 are still rendered below for completeness.
+            html += renderValidationLayer0(vLayer0);
             html += renderValidationLayer('Layer 1 — SMILE Script', vMeta);
             html += renderValidationLayer('Layer 2 — Adapter Export', vExport);
 
@@ -279,11 +326,64 @@
             return html;
         }
 
+        function renderValidationLayer0(v) {
+            // Backwards-compat: results that pre-date the Layer 0 surfacing
+            // arrive without ``validation_layer0``. Render nothing rather than
+            // an "N/A" card so older history entries don't gain a confusing
+            // blank row when reloaded.
+            if (!v || v.passed == null) return '';
+
+            // User-facing label is just "Script Execution" — no "Layer 0"
+            // prefix in the UI. Internal data keys still use ``validation_layer0``
+            // for code readability, but the visible card title reads cleanly.
+            var label = 'Script Execution';
+            var badge = v.passed
+                ? '<span class="validation-badge pass">PASS</span>'
+                : '<span class="validation-badge fail">FAIL</span>';
+            var html = '<div class="validation-layer">' +
+                '<span class="validation-layer-label">' + label + '</span>' +
+                badge +
+                '<span style="font-size:12px;color:#8E8E93;">' + escapeHtml(v.summary || '') + '</span>' +
+                '</div>';
+
+            // Failed-step listing — the user-facing answer to "where did it
+            // fail?". Each row carries: step number, original SMILE keyword,
+            // status (ERROR / SKIPPED), and the reason the handler reported.
+            // Layer 0 details have a different shape from Layer 1/2 (no
+            // missing_entities/entity_diffs), so we render it separately
+            // rather than reusing the entity-diff layout.
+            if (!v.passed && v.details && v.details.failed_steps && v.details.failed_steps.length) {
+                html += '<div class="validation-details">';
+                html += '<ul class="vd-item-list">';
+                v.details.failed_steps.forEach(function(s) {
+                    var keyword = s.original_keyword || s.type || '?';
+                    var status = (s.status || '').toUpperCase();
+                    var step = (s.step != null ? s.step : '?');
+                    var reason = s.reason || '';
+                    html += '<li>'
+                          + '<strong>Step ' + escapeHtml(String(step)) + '</strong>'
+                          + ' [<span class="vd-tag vd-tag-' + (status === 'ERROR' ? 'missing' : 'extra') + '">' + escapeHtml(status) + '</span>]'
+                          + ' <code>' + escapeHtml(keyword) + '</code>'
+                          + (reason ? ': ' + escapeHtml(reason) : '')
+                          + '</li>';
+                });
+                html += '</ul></div>';
+            }
+            return html;
+        }
+
         function renderValidationLayer(label, v) {
             if (!v || v.passed == null) {
+                // Layer is skipped due to *external* state (no expected target
+                // file or no adapter), not because of a script/adapter bug.
+                // Use "OTHER" badge text + the descriptive summary so the
+                // user immediately sees this is not a failure they caused.
+                // CSS class stays "na" for backwards-compatible styling.
+                var summaryText = (v && v.summary) ? v.summary : 'Other reasons';
                 return '<div class="validation-layer">' +
                     '<span class="validation-layer-label">' + label + '</span>' +
-                    '<span class="validation-badge na">' + (v && v.summary ? v.summary : 'N/A') + '</span>' +
+                    '<span class="validation-badge na">OTHER</span>' +
+                    '<span style="font-size:12px;color:#8E8E93;">' + escapeHtml(summaryText) + '</span>' +
                     '</div>';
             }
             var badge = v.passed
@@ -2443,6 +2543,11 @@
         async function runComposeScript() {
             if (!composeEditor) return;
             const status = document.getElementById('composeStatus');
+            const valHost = document.getElementById('composeValidation');
+            // Clear any stale validation panel from a previous run before
+            // starting — otherwise users would see the old run's verdict
+            // alongside the new run's status banner, which is misleading.
+            if (valHost) valHost.innerHTML = '';
             const text = composeEditor.getValue();
             if (!text.trim()) { alert('Editor is empty.'); return; }
             const srcText = document.getElementById('genSrcText').value.trim();
@@ -2500,9 +2605,23 @@
                 }
                 status.className = hasErrors ? 'compose-status err' : 'compose-status ok';
                 status.textContent = msg;
+
+                // Render the three-layer validation panel (Script Execution +
+                // Layer 1 + Layer 2 + blame). The backend always returns these
+                // fields for /api/run_script — without this call they were
+                // previously discarded, making the Compose tab silent about
+                // validation outcomes. The same renderValidation helper that
+                // /api/migrate uses keeps the rendering identical between the
+                // canned-Northwind path and the user-script path.
+                const valHost = document.getElementById('composeValidation');
+                if (valHost) {
+                    valHost.innerHTML = renderValidation(data) || '';
+                }
             } catch (e) {
                 status.className = 'compose-status err';
                 status.textContent = 'Run request failed: ' + e.message;
+                const valHost = document.getElementById('composeValidation');
+                if (valHost) valHost.innerHTML = '';
             }
         }
 

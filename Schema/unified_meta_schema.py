@@ -572,6 +572,19 @@ class Property:
     is_key: bool = False
     is_optional: bool = True
     description: Optional[str] = None
+    # ``is_auto_generated`` flags database-side generated values (PG SERIAL,
+    # MySQL AUTO_INCREMENT, SQL Server IDENTITY, Oracle SEQUENCE-default,
+    # etc.). Source adapters set this when reverse-engineering an
+    # auto-generated PK; the PostgreSQL forward-engineering path uses it to
+    # decide between ``SERIAL`` and ``INTEGER``. Without this flag the meta
+    # model cannot distinguish "DB generates the value" from "user provides
+    # the value" — both look like ``INTEGER + is_key=True`` — and any
+    # cross-paradigm migration into PG would have to assume one of them and
+    # silently change the other's semantics. Defaults to ``False`` so all
+    # existing constructions (handlers, other adapters, manual instantiation)
+    # behave exactly as before; only adapters that explicitly understand the
+    # concept opt in.
+    is_auto_generated: bool = False
     meta_id: str = field(default_factory=_uid)
 
     def to_dict(self) -> Dict[str, Any]:
@@ -585,6 +598,11 @@ class Property:
         }
         if self.description:
             d["description"] = self.description
+        # Emit only when True so all existing JSON snapshots stay
+        # byte-identical for non-auto-generated properties (which are the
+        # vast majority — only PG SERIAL columns flip this flag today).
+        if self.is_auto_generated:
+            d["is_auto_generated"] = True
         return d
 
     @classmethod
@@ -596,6 +614,10 @@ class Property:
             is_key=data.get("is_key", False),
             is_optional=data.get("is_optional", True),
             description=data.get("description"),
+            # Default to False so older JSON snapshots (pre-Patch-7) that
+            # do not carry this key round-trip cleanly. Symmetric with
+            # ``to_dict`` which emits the key only when True.
+            is_auto_generated=data.get("is_auto_generated", False),
             meta_id=data.get("meta_id", _uid())
         )
 
@@ -611,14 +633,28 @@ class UniqueProperty:
     """
     primary_key_type: PKTypeEnum
     property_id: str  # References Property.meta_id
+    # ``clustering_order`` is meaningful only when ``primary_key_type ==
+    # CLUSTERING`` (Cassandra). It captures whether the row order within
+    # a partition is ascending or descending (``WITH CLUSTERING ORDER BY
+    # (col DESC)``). Without this field the order would silently default
+    # to ASC on round-trip — affecting query physical plans (newest-first
+    # reads become slower). Default ``None`` preserves byte-stable output
+    # for every non-Cassandra case and for Cassandra columns without an
+    # explicit ORDER BY clause (CQL's own default is ASC).
+    clustering_order: Optional[str] = None  # None | 'asc' | 'desc'
     meta_id: str = field(default_factory=_uid)
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        d = {
             "meta_id": self.meta_id,
             "primary_key_type": self.primary_key_type.value,
-            "property_id": self.property_id
+            "property_id": self.property_id,
         }
+        # Emit only when set (non-None) so existing JSON snapshots stay
+        # byte-identical for non-Cassandra UniqueProperties.
+        if self.clustering_order is not None:
+            d["clustering_order"] = self.clustering_order
+        return d
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'UniqueProperty':
@@ -629,6 +665,7 @@ class UniqueProperty:
         return cls(
             primary_key_type=pk_type,
             property_id=data.get("property_id", ""),
+            clustering_order=data.get("clustering_order"),
             meta_id=data.get("meta_id", _uid())
         )
 

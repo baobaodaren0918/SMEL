@@ -320,6 +320,41 @@ Two functionally equivalent grammars — same abstract syntax, different concret
 
 The Generalized grammar reduces keyword count by ~29% through verb+object composition (6 verbs × 5 object types + modifiers). Structural operations (`NEST`, `UNNEST`, `FLATTEN`, `UNFLATTEN`, `WIND`, `UNWIND`, `MERGE`, `SPLIT`, `TRANSFORM`) are identical in both variants.
 
+## Canonical Script Style for Key Operations
+
+The grammar accepts several syntactic forms for the same semantic key operation (e.g. `AS Type` versus `WITH TYPE Type`, dotted `entity.field` versus `field TO entity`). The 32 Northwind scripts shipped with this project follow a single self-consistent convention based on **whether the column already exists** at the point the key is declared. New scripts are recommended to follow the same convention; the alternative forms remain valid for backward compatibility but are not used in canonical examples.
+
+### Primary Key
+
+| Situation | Specific | Generalized |
+|-----------|----------|-------------|
+| New entity / column does not yet exist | `ADD_PRIMARY_KEY entity.field AS Type` | `ADD KEY entity.field AS Type` |
+| Existing entity, existing column (promote to PK) | `ADD_PRIMARY_KEY field TO entity` | `ADD KEY field TO entity` |
+| Composite primary key | `ADD_PRIMARY_KEY (col1, col2) TO entity` | `ADD KEY (col1, col2) TO entity` |
+
+The `AS Type` form auto-creates the property when the named column is absent, using the supplied data type. The `TO entity` form attaches a primary-key constraint to columns that already exist on the entity (typically added earlier in the script via `ADD_PROPERTY`, `SPLIT`, or `WITH PROPERTIES` on `ADD_ENTITY`).
+
+### Cassandra Partition / Clustering Keys
+
+The same column-existence rule applies. `AS Type` is omitted in current scripts because Cassandra key columns are always pre-declared:
+
+```smile
+ADD_PARTITION_KEY field TO entity
+ADD_PARTITION_KEY (col1, col2) TO entity
+ADD_CLUSTERING_KEY field TO entity
+```
+
+Generalized form replaces the underscore prefix with a space: `ADD PARTITION KEY ...`, `ADD CLUSTERING KEY ...`.
+
+### Foreign Key
+
+```smile
+ADD_FOREIGN_KEY entity.field REFERENCES target(col)                    -- single column
+ADD_FOREIGN_KEY (col1, col2) TO entity REFERENCES target(c1, c2)       -- composite
+```
+
+The composite form requires the explicit `TO entity` because the parenthesised column list is not dotted. Single-column FKs use the dotted `entity.field` form and need no `TO` clause. Add `WITH CARDINALITY <ZERO|ONE>_TO_<ONE|MANY>` after the `REFERENCES(...)` clause to make the relationship multiplicity explicit.
+
 ## SMILE Script Examples
 
 ### Cross-Model: Relational → Document (R2D)

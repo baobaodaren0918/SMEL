@@ -5,7 +5,7 @@
 -- Structural changes:
 --   MERGE:      Denormalize categories into products (eliminate JOIN)
 --   SPLIT:      Separate customer identity from contact info (CRM)
---   ADD_ENTITY: Create region, territories, employee_territories (sales territory tracking)
+--   ADD_ENTITY: Create sales_region, territories, employee_territories (sales territory tracking)
 
 EVOLUTION northwind_pg1_to_pg2:1.0
 FROM RELATIONAL TO RELATIONAL

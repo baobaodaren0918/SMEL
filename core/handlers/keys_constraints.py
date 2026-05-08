@@ -433,9 +433,19 @@ class KeysConstraintsHandlersMixin:
             entity = EntityType(object_name=[entity_name] if entity_name else ["unnamed"])
             self.database.add_entity_type(entity)
 
-        key_attrs = self._upsert_key_properties(
+        key_attrs, reject_reason = self._upsert_key_properties(
             entity, key_columns, key_data_type, bool(params.data_type)
         )
+        # Strict explicit-type rule — ``_upsert_key_properties`` returns a
+        # non-None ``reject_reason`` when the script tries to (a) name a
+        # property that does not exist *without* declaring its type via
+        # AS, or (b) re-declare an existing property's type with a
+        # different value. Both cases used to silently mutate the meta
+        # model (silent INTEGER fallback / silent type rewrite); we now
+        # surface them as user-facing ``OperationResult.skipped`` so
+        # Layer 0 reports them with an actionable next step.
+        if reject_reason:
+            return OperationResult.skipped(reject_reason)
         key_type_str, pk_type_enum = self._resolve_pk_type(params.key_type)
         constraint = self._build_key_constraint(
             key_attrs, key_type_str, pk_type_enum, params.clauses
@@ -458,25 +468,90 @@ class KeysConstraintsHandlersMixin:
         return OperationResult.ok()
 
     def _upsert_key_properties(self, entity, key_columns, key_data_type, data_type_explicit):
-        """Look up or create a Property for each column of a composite key.
+        """Look up or create a Property for each member of a (possibly
+        composite) key, enforcing the strict explicit-type rule.
 
-        When a property already exists it is promoted to key (is_key=True,
-        is_optional=False); its data type is only overwritten when the SMILE
-        script provided an explicit `AS dataType` clause.
+        Decision matrix on ``(property exists?, AS provided?)``:
+
+        * **(exists, no AS)** — case ①: promote to key, keep existing type.
+        * **(exists, AS matches)** — case ②a: AS is redundant; keep existing
+          type unchanged. The AS is silently accepted because re-declaring
+          the same type is harmless.
+        * **(exists, AS differs)** — case ②b: REJECT. Silent rewrite of an
+          existing property's type is the worst-possible outcome (it
+          changes meta-model semantics without the user seeing it). Return
+          a non-None reason; the caller surfaces it as a Layer 0 skip.
+        * **(absent, AS provided)** — case ③: create the property with the
+          declared type.
+        * **(absent, no AS)** — case ④: REJECT. The previous default-INTEGER
+          fallback caused cross-paradigm divergence (the contact_id incident
+          documented in N5-1: Cassandra evolution silently created INTEGER
+          while the relational counterpart used VARCHAR). Forcing an
+          explicit declaration eliminates that whole class of silent bug.
+
+        Returns ``(key_attrs, None)`` on success, or ``([], reason)`` on
+        rejection — the caller decides how to surface the rejection.
+        Wording in the reasons is paradigm-neutral ("property" rather than
+        "column") so the same handler serves all four database paradigms.
         """
         key_attrs = []
         for col_name in key_columns:
             attr = entity.get_property(col_name)
             if not attr:
+                # Property does not exist — case ③ or case ④.
+                if not data_type_explicit:
+                    # Case ④: silent INTEGER fallback would invent a type.
+                    # Refuse rather than guess; tell the user the two
+                    # explicit paths that resolve the situation.
+                    return [], (
+                        f"property '{col_name}' does not exist on "
+                        f"'{entity.name}'; ADD_KEY requires either an "
+                        f"explicit type via 'AS <Type>' or a preceding "
+                        f"'ADD_PROPERTY {col_name} TO {entity.name} "
+                        f"WITH TYPE <Type>'"
+                    )
+                # Case ③: create with the explicitly declared type.
                 attr = Property(col_name, key_data_type, True, False)
                 entity.add_property(attr)
             else:
+                # Property exists — case ① (no AS) or case ② (AS provided).
+                if data_type_explicit:
+                    # Case ②: AS clause given on a property that already
+                    # has a type. Compare to detect silent rewrite.
+                    old_primitive = (
+                        attr.data_type.primitive_type.value
+                        if hasattr(attr.data_type, 'primitive_type')
+                        else 'unknown'
+                    )
+                    new_primitive = (
+                        key_data_type.primitive_type.value
+                        if hasattr(key_data_type, 'primitive_type')
+                        else 'unknown'
+                    )
+                    if old_primitive != new_primitive:
+                        # Case ②b: types differ. Refuse the silent rewrite
+                        # and point the user at CAST_PROPERTY — the only
+                        # operator whose job is to change a property's type.
+                        # The error message includes the literal command
+                        # they need so they can copy-paste the fix.
+                        return [], (
+                            f"property '{entity.name}.{col_name}' already "
+                            f"exists with type '{old_primitive}'; the AS "
+                            f"clause requested '{new_primitive}'. ADD_KEY "
+                            f"does not change property types — use "
+                            f"'CAST_PROPERTY {entity.name}.{col_name} TO "
+                            f"<Type>' first if you intended to change the "
+                            f"type."
+                        )
+                    # Case ②a: types match. AS is redundant but harmless;
+                    # do not rewrite ``attr.data_type`` (no-op preserves
+                    # any extra type metadata like max_length / precision
+                    # that the AS form would lose).
+                # Case ① / ②a: promote to key without touching data_type.
                 attr.is_key = True
                 attr.is_optional = False
-                if data_type_explicit:
-                    attr.data_type = key_data_type
             key_attrs.append(attr)
-        return key_attrs
+        return key_attrs, None
 
     def _resolve_pk_type(self, key_type_param):
         """Translate the SMILE key_type string into (sql_kind, PKTypeEnum).

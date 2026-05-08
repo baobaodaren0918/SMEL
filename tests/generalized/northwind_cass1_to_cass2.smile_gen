@@ -6,7 +6,7 @@
 --   MERGE:               Denormalize categories into products table
 --   SPLIT:               Separate customer identity from contact info
 --   Repartition orders:  Change partition key from customer_id to order_date
---   ADD_ENTITY:          Create region, territories, employee_territories (with composite partition key)
+--   ADD_ENTITY:          Create sales_region, territories, employee_territories (with composite partition key)
 
 EVOLUTION northwind_cass1_to_cass2:1.0
 FROM COLUMNAR TO COLUMNAR
@@ -42,11 +42,14 @@ ADD PARTITION KEY product_id TO products
 SPLIT customers INTO customers:customer_id, company_name, street, city, region, postal_code, country; customer_contacts:customer_id, contact_name, contact_title, phone, fax
 ADD PARTITION KEY customer_id TO customers
 ADD PARTITION KEY customer_id TO customer_contacts
--- Note: contact_id is not in the SPLIT carry-list above; ADD CLUSTERING KEY's
--- handler auto-creates the missing Integer property when the named column
--- doesn't exist yet (default type when no AS clause is given).
--- After this op, customer_contacts has both customer_id (partition) and
--- contact_id (clustering) as keys.
+-- Declare contact_id explicitly with type String so this evolution stays
+-- type-aligned with the relational counterpart (northwind_pg1_to_pg2 also
+-- adds contact_id as a String clustering key). Without this line
+-- ADD CLUSTERING KEY would auto-create the column with the handler's
+-- default Integer type, producing C2C target ``contact_id INT`` while
+-- R2R target uses ``contact_id VARCHAR(255)`` — same logical column
+-- diverging on type across paradigms is a readability hazard.
+ADD PROPERTY contact_id TO customer_contacts WITH TYPE String
 ADD CLUSTERING KEY contact_id TO customer_contacts
 
 -- ============================================
@@ -111,15 +114,15 @@ ADD PROPERTY status TO orders WITH TYPE String
 -- customer_contacts:     { customer_id [PARTITION], contact_id [CLUSTERING], contact_name, contact_title, phone, fax }
 -- orders:                { order_date [PARTITION], customer_id [CLUSTERING], order_id [CLUSTERING], required_date, shipped_date, shipping_cost, ship_name, ship_address, ship_city, ship_region, ship_postal_code, ship_country, employee_id, shipper_id, status }
 -- order_details:         { order_id [PARTITION], product_id [PARTITION], unit_price, quantity, discount }
--- region:                { region_id [PARTITION], region_description }
+-- sales_region:          { region_id [PARTITION], region_description }
 -- territories:           { territory_id [PARTITION], territory_description, region_id }
 -- employee_territories:  { employee_id [PARTITION], region_id [PARTITION], territory_id [CLUSTERING] }
 -- ============================================
 
 -- ============================================
--- Operation Summary (33 steps, 10 operation types):
+-- Operation Summary (34 steps, 10 operation types):
 --   MERGE: 1              SPLIT: 1
---   ADD ENTITY: 3         ADD PROPERTY: 5
+--   ADD ENTITY: 3         ADD PROPERTY: 6
 --   ADD PARTITION KEY: 7  ADD CLUSTERING KEY: 4
 --   DELETE PARTITION KEY: 3  DELETE CLUSTERING KEY: 3
 --   DELETE PROPERTY: 4   RENAME PROPERTY: 2

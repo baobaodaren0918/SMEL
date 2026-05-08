@@ -53,8 +53,7 @@ def _calculate_changes(prev: Dict, after: Dict, op,
     return to_ui_changes(diff, prev, after)
 
 
-def normalize_entity_kinds(db: Database, target_type: str,
-                           skip_entities: set = None) -> None:
+def normalize_entity_kinds(db: Database, target_type: str) -> None:
     """Convert each entity's ``entity_kind`` to match the target paradigm.
 
     Cross-model migrations (e.g., R→G, G→R, D→C) leave entities tagged with
@@ -72,11 +71,8 @@ def normalize_entity_kinds(db: Database, target_type: str,
     preserved as-is — the user explicitly chose a kind that should survive
     paradigm normalization. EDGE entities are never normalized — they are
     relationship-type artifacts that don't belong to any single paradigm's
-    "table" concept. The legacy ``skip_entities`` parameter is honored for
-    callers that pre-date ``kind_locked``.
+    "table" concept.
     """
-    if skip_entities is None:
-        skip_entities = set()
     target_kind = _ENTITY_KIND_DEFAULT.get(target_type, EntityKind.TABLE)
 
     # For Document target, identify embedded entities (those that are the
@@ -90,7 +86,7 @@ def normalize_entity_kinds(db: Database, target_type: str,
                     embedded_targets.add(rel.aggregates)
 
     for name, entity in db.entity_types.items():
-        if entity.kind_locked or name in skip_entities:
+        if entity.kind_locked:
             continue
         if entity.entity_kind == EntityKind.EDGE:
             continue  # EDGE entities are relationship types, never normalize

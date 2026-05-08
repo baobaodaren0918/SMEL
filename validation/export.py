@@ -39,11 +39,15 @@ def validate_export(result_dict: Dict[str, Any], target_type: str,
 
     target_file = _resolve_target_file(config_key, target_type)
     if not target_file:
-        return {"passed": None, "summary": f"N/A (no target file for {config_key})", "details": {}}
+        # "Other reasons" (rather than the older "N/A") makes it explicit to
+        # the user that this layer was not evaluated due to *external* state
+        # (no expected target file registered for this config) — *not*
+        # because of a script or adapter bug. Avoids the ambiguity of "N/A".
+        return {"passed": None, "summary": f"Other reasons (no target file for {config_key})", "details": {}}
 
     adapter_class = ADAPTER_REGISTRY.get(target_type)
     if not adapter_class:
-        return {"passed": None, "summary": f"N/A (no adapter for {target_type})", "details": {}}
+        return {"passed": None, "summary": f"Other reasons (no adapter for {target_type})", "details": {}}
 
     # Step 1: Parse the exported target back into Meta Schema
     try:

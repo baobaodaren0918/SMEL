@@ -1,59 +1,212 @@
 """
 Unified pipeline validation with explicit blame attribution.
 
-Wraps Layer 1 (validate_meta — Meta V2 vs expected) and Layer 2
-(validate_export — round-trip vs expected) into a single call, and assigns
-blame:
+Three independent layers, evaluated in order, with the first failing layer
+dominating the diagnosis:
 
-* ``smile_script``   — Layer 1 failed: the SMILE script produced a wrong Meta V2
-* ``adapter``        — Layer 1 passed but Layer 2 failed: the adapter mis-translates Meta V2 → DDL → Meta
-* ``ok``             — both layers passed
-* ``unverifiable``   — at least one layer is N/A (no expected target file or no adapter)
+* **Layer 0** (``derive_layer0``)  — *Did the SMILE script run cleanly?*
+  Pass criteria: every operation reached terminal status ``"success"``,
+  no ``"error"`` and no deliberate ``"skipped"``, and at least one entity
+  is present in the result database. The check is derived from
+  ``result_dict["execution_stats"]`` and ``result_dict["operations_detail"]``,
+  both populated by ``core.run_apply``.
 
-Existing top-level ``validation_meta`` / ``validation_export`` keys are still
-populated for backward compatibility with the web UI; the new
-``validation_blame`` key surfaces the diagnosis explicitly.
+  Layer 0 is intentionally strict on ``skipped`` — a deliberate handler
+  skip is a sign the script tried to operate on something that wasn't
+  there (e.g. ``DELETE_PROPERTY foo.bar`` when ``foo.bar`` doesn't
+  exist), which is almost always a script-side mistake. The pipeline
+  itself does **not** abort on skip/error — every subsequent op is still
+  attempted and recorded. Layer 0 only governs the *verdict*.
+
+* **Layer 1** (``validate_meta``) — *Is Meta V2 correct?*
+  Compares the SMILE-script-produced Meta V2 against the meta parsed
+  from the expected target native file. Failure means the SMILE script
+  produced the wrong meta model.
+
+* **Layer 2** (``validate_export``) — *Is the target adapter correct?*
+  Re-parses the exported native target and compares against the meta
+  parsed from the expected target file. Failure means
+  ``parse_T(export_T(M_V2)) ≠ parse_T(T_native)`` — i.e. the adapter's
+  forward-engineering ``parse ∘ export`` cycle dropped or mistranslated
+  information.
+
+Blame priority (highest first):
+    script_failed > smile_script > adapter > unverifiable > ok
+
+* ``script_failed``  — Layer 0 failed. Downstream layers may report
+                       further failures but those are consequences, not
+                       independent diagnoses; we report the upstream
+                       cause.
+* ``smile_script``   — Layer 0 passed but Layer 1 failed: the script
+                       ran cleanly yet produced the wrong Meta V2.
+* ``adapter``        — Layer 1 passed but Layer 2 failed: Meta V2 is
+                       correct, but the target adapter's export/parse
+                       cycle corrupts it.
+* ``unverifiable``   — Layer 0 passed but at least one of Layer 1 / Layer 2
+                       is N/A (no expected target file or no adapter for
+                       the target type — e.g. the grammar_completeness suite).
+* ``ok``             — All three layers passed.
+
+The top-level keys ``validation_layer0`` / ``validation_meta`` /
+``validation_export`` / ``validation_blame`` / ``validation_summary`` on
+the result dict are populated by ``core.run_migration`` from this
+module's return value, and consumed by the CLI (``main.py``) and the
+web UI (``smile-app.js``) to render per-layer cards.
 """
-from typing import Dict, Any
+from typing import Any, Dict, List
 
 from validation.meta import validate_meta
 from validation.export import validate_export
 
 
-def validate_pipeline(result_dict: Dict[str, Any], target_type: str,
-                      config_key: str = "") -> Dict[str, Any]:
-    """Run both validation layers and produce a single unified result.
+def derive_layer0(result_dict: Dict[str, Any]) -> Dict[str, Any]:
+    """Layer 0: did the SMILE script run cleanly?
 
-    Returns a dict with:
-      * layer1: the Layer 1 (Meta V2 vs expected) report
-      * layer2: the Layer 2 (round-trip vs expected) report
-      * blame:  one of {"ok", "smile_script", "adapter", "unverifiable"}
-      * summary: short human-readable line for the UI / CLI
+    Returns a dict with the same shape as Layer 1 / Layer 2 reports
+    (``passed`` / ``summary`` / ``details``) so downstream consumers can
+    render all three layers uniformly.
+
+    Pass criteria (all must hold):
+
+    * ``total > 0``        — at least one operation was attempted
+    * ``error == 0``       — no handler raised an unexpected exception
+    * ``skipped == 0``     — no operation returned ``OperationResult.skipped``
+    * result has ≥1 entity — the database isn't empty after applying ops
+
+    On failure, ``details.failed_steps`` lists every non-``success`` op
+    with its step number, op type, original SMILE keyword, status, and
+    the reason the handler reported. This is the user-facing answer to
+    "where did the script fail?".
     """
-    layer1 = validate_meta(result_dict, target_type, config_key)
-    layer2 = validate_export(result_dict, target_type, config_key)
+    stats = result_dict.get("execution_stats", {})
+    total = stats.get("total", 0)
+    success = stats.get("success", 0)
+    skipped = stats.get("skipped", 0)
+    error = stats.get("error", 0)
+
+    # Real entities only — strip the bookkeeping sidecars
+    # (``__relationship_types__`` / ``__db_meta__``).
+    result_entities = {
+        k for k in result_dict.get("result", {}) if not k.startswith("__")
+    }
+
+    passed = (
+        total > 0
+        and error == 0
+        and skipped == 0
+        and len(result_entities) > 0
+    )
+
+    if passed:
+        return {
+            "passed": True,
+            "summary": f"PASS ({total} ops succeeded)",
+            "details": {
+                "total": total,
+                "success": success,
+                "skipped": 0,
+                "error": 0,
+                "failed_steps": [],
+            },
+        }
+
+    # Collect failed steps for the user-facing "where did it fail?" answer.
+    # Both ``skipped`` and ``error`` are listed — they are different kinds
+    # of failure (deliberate skip vs unexpected exception) but both are
+    # symptoms the user typically wants to see.
+    failed_steps: List[Dict[str, Any]] = []
+    for op in result_dict.get("operations_detail", []):
+        if op.get("status") in ("skipped", "error"):
+            failed_steps.append({
+                "step": op.get("step"),
+                "type": op.get("type"),
+                "original_keyword": op.get("original_keyword") or op.get("type"),
+                "status": op.get("status"),
+                "reason": op.get("reason", ""),
+            })
+
+    if total == 0:
+        summary = "FAIL (no operations executed — script empty or unparseable)"
+    elif len(result_entities) == 0:
+        summary = "FAIL (script ran but produced 0 entities)"
+    else:
+        # ``X errored, Y skipped of Z`` — concise enough for a single status line
+        # while still distinguishing the two failure kinds.
+        parts = []
+        if error:
+            parts.append(f"{error} errored")
+        if skipped:
+            parts.append(f"{skipped} skipped")
+        joined = ", ".join(parts) if parts else "0 failed"
+        summary = f"FAIL ({joined} of {total})"
+
+    return {
+        "passed": False,
+        "summary": summary,
+        "details": {
+            "total": total,
+            "success": success,
+            "skipped": skipped,
+            "error": error,
+            "failed_steps": failed_steps,
+        },
+    }
+
+
+def derive_blame(layer0: Dict[str, Any], layer1: Dict[str, Any],
+                 layer2: Dict[str, Any]) -> tuple:
+    """Choose which layer to blame and produce a human-readable summary.
+
+    Priority order (highest first): script_failed > smile_script > adapter
+    > unverifiable > ok. The first failing layer dominates because
+    downstream layers' verdicts on a corrupted upstream input are not
+    independent evidence.
+    """
+    # Script Execution check dominates: if the script didn't run cleanly,
+    # Layer 1/2 outcomes on the partial / wrong Meta V2 don't add
+    # information.
+    if not layer0.get("passed"):
+        return ("script_failed",
+                f"Script Execution failed — {layer0.get('summary', '')}")
 
     l1_passed = layer1.get("passed")
     l2_passed = layer2.get("passed")
 
     if l1_passed is None or l2_passed is None:
-        blame = "unverifiable"
-        summary = "validation skipped (no expected target file or adapter)"
-    elif l1_passed and l2_passed:
-        blame = "ok"
-        summary = "both layers passed"
-    elif not l1_passed:
-        # Layer 1 fail dominates — the SMILE script produced the wrong Meta V2,
-        # so any Layer 2 outcome is a downstream consequence.
-        blame = "smile_script"
-        summary = "Layer 1 failed → SMILE script produced wrong Meta V2"
-    else:
-        # l1_passed and not l2_passed — Meta V2 matches expected, but the
-        # adapter export/round-trip diverges → adapter is the culprit.
-        blame = "adapter"
-        summary = "Layer 1 passed but Layer 2 failed → adapter export/parse mismatch"
+        return ("unverifiable",
+                "validation skipped (no expected target file or adapter)")
+
+    if l1_passed and l2_passed:
+        return ("ok", "all three layers passed")
+
+    if not l1_passed:
+        return ("smile_script",
+                "Layer 1 failed — Meta V2 mismatches expected target")
+
+    return ("adapter",
+            "Layer 2 failed — adapter export/parse cycle mismatches expected target")
+
+
+def validate_pipeline(result_dict: Dict[str, Any], target_type: str,
+                      config_key: str = "") -> Dict[str, Any]:
+    """Run all three validation layers and produce a single unified result.
+
+    Returns a dict with:
+      * ``layer0``   — Layer 0 (script execution) report
+      * ``layer1``   — Layer 1 (Meta V2 vs expected) report
+      * ``layer2``   — Layer 2 (round-trip vs expected) report
+      * ``blame``    — one of {"script_failed", "smile_script", "adapter",
+                        "unverifiable", "ok"}
+      * ``summary``  — short human-readable line for the UI / CLI
+    """
+    layer0 = derive_layer0(result_dict)
+    layer1 = validate_meta(result_dict, target_type, config_key)
+    layer2 = validate_export(result_dict, target_type, config_key)
+
+    blame, summary = derive_blame(layer0, layer1, layer2)
 
     return {
+        "layer0": layer0,
         "layer1": layer1,
         "layer2": layer2,
         "blame": blame,

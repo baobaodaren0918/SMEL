@@ -126,56 +126,49 @@ class CassandraAdapter(DatabaseAdapter):
         """
         self.database = Database(db_name=db_name, db_type=DatabaseType.COLUMNAR)
 
-        # Step 1: Remove comments
-        cql = self._remove_comments(cql_content)
+        # Step 1: Remove comments (helper inherited from DatabaseAdapter)
+        cql = self._remove_sql_comments(cql_content)
 
         # Step 2: Extract CREATE TABLE statements
         tables = self._extract_create_tables(cql)
 
         # Step 3: Parse each table
-        for table_name, table_body in tables:
-            entity = self._parse_table(table_name, table_body)
+        for table_name, table_body, with_clause in tables:
+            entity = self._parse_table(table_name, table_body, with_clause)
             self.database.add_entity_type(entity)
 
         return self.database
 
-    def _remove_comments(self, cql: str) -> str:
-        """
-        Remove CQL comments from DDL.
-
-        Handles:
-          - Single-line comments: -- comment
-          - Multi-line comments: /* comment */
-        """
-        # Remove single-line comments (-- ...)
-        cql = re.sub(r'--.*$', '', cql, flags=re.MULTILINE)
-        # Remove multi-line comments (/* ... */)
-        cql = re.sub(r'/\*.*?\*/', '', cql, flags=re.DOTALL)
-        return cql
-
-    def _extract_create_tables(self, cql: str) -> List[Tuple[str, str]]:
+    def _extract_create_tables(self, cql: str) -> List[Tuple[str, str, str]]:
         """
         Extract CREATE TABLE statements from CQL DDL.
 
-        Handles optional IF NOT EXISTS and WITH clauses.
-
-        Returns:
-            List of (table_name, table_body) tuples
+        Returns triples ``(table_name, table_body, with_clause)``. The
+        ``with_clause`` is the text *between* the closing paren and the
+        terminating ``;``, excluding the leading ``WITH`` keyword and any
+        wrapping whitespace; an empty string when the table has no WITH
+        clause. ``CLUSTERING ORDER BY`` is the only WITH directive the
+        adapter currently recognises (downstream — see ``_parse_table``);
+        TTL / compaction / gc_grace_seconds are operational tuning,
+        intentionally not surfaced into the meta-model.
 
         Example:
-            "CREATE TABLE users (user_id UUID, PRIMARY KEY (user_id));"
-            -> [("users", "user_id UUID, PRIMARY KEY (user_id)")]
+            "CREATE TABLE t (id INT, PRIMARY KEY (id))
+              WITH CLUSTERING ORDER BY (id DESC);"
+            -> [("t", "id INT, PRIMARY KEY (id)", "CLUSTERING ORDER BY (id DESC)")]
         """
-        # Match CREATE TABLE with optional IF NOT EXISTS
-        # Capture table body inside outermost parentheses, stop before WITH or ;
+        # Match CREATE TABLE with optional IF NOT EXISTS. The WITH clause is
+        # captured in its own group (group 3) so downstream parsing can read
+        # the directives it cares about (CLUSTERING ORDER BY).
         pattern = re.compile(
-            r'CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:\w+\.)?(\w+)\s*\((.*?)\)\s*(?:WITH\s+.*?)?;',
+            r'CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:\w+\.)?(\w+)\s*\((.*?)\)\s*(?:WITH\s+(.*?))?;',
             re.DOTALL | re.IGNORECASE
         )
         matches = pattern.findall(cql)
         return matches
 
-    def _parse_table(self, table_name: str, table_body: str) -> EntityType:
+    def _parse_table(self, table_name: str, table_body: str,
+                     with_clause: str = "") -> EntityType:
         """
         Parse a single CREATE TABLE body into EntityType.
 
@@ -193,6 +186,13 @@ class CassandraAdapter(DatabaseAdapter):
                  ],
                  constraints=[UniqueConstraint(is_primary_key=True, ...)]
                )
+
+        ``with_clause`` is the trailing ``WITH <directives>`` text (without the
+        ``WITH`` keyword). Only ``CLUSTERING ORDER BY (col DIR, ...)`` is
+        currently honoured — its directions are written onto the matching
+        clustering ``UniqueProperty``. Other WITH directives (TTL, compaction,
+        gc_grace_seconds) are intentionally ignored as operational tuning
+        rather than logical schema.
         """
         entity = EntityType(
             object_name=[table_name.lower()],
@@ -249,41 +249,58 @@ class CassandraAdapter(DatabaseAdapter):
                 )
                 entity.add_constraint(constraint)
 
+        # Apply CLUSTERING ORDER BY directives from the WITH clause, if any.
+        # Has to happen after the PK constraint is built so the matching
+        # clustering UniqueProperty already exists to attach the order to.
+        if with_clause:
+            self._apply_clustering_order(entity, with_clause)
+
         return entity
 
-    def _split_columns(self, body: str) -> List[str]:
+    @staticmethod
+    def _apply_clustering_order(entity: EntityType, with_clause: str) -> None:
+        """Read ``CLUSTERING ORDER BY (col DIR, col2 DIR2, ...)`` from a WITH
+        clause and write the direction onto the matching clustering
+        ``UniqueProperty.clustering_order``.
+
+        No-op when the WITH clause has no CLUSTERING ORDER BY directive (e.g.
+        only TTL or compaction tuning). Columns named in ORDER BY but not
+        present as clustering keys are silently skipped — same forgiving
+        behaviour as elsewhere in the adapter.
         """
-        Split column definitions, handling nested parentheses.
+        m = re.search(
+            r'CLUSTERING\s+ORDER\s+BY\s*\(([^)]+)\)',
+            with_clause, re.IGNORECASE,
+        )
+        if not m:
+            return
 
-        Problem: Simple split by ',' fails for PRIMARY KEY ((part_col), clust_col)
-        Solution: Track parenthesis depth, only split at depth 0
+        # Map column name -> 'asc' / 'desc'
+        order_map: Dict[str, str] = {}
+        for part in m.group(1).split(','):
+            tokens = part.strip().split()
+            if not tokens:
+                continue
+            col_name = tokens[0]
+            direction = (tokens[1].lower() if len(tokens) > 1 else 'asc')
+            if direction not in ('asc', 'desc'):
+                direction = 'asc'
+            order_map[col_name] = direction
 
-        Example:
-            "user_id UUID, name TEXT, PRIMARY KEY ((user_id), activity_time)"
-            -> ["user_id UUID", "name TEXT", "PRIMARY KEY ((user_id), activity_time)"]
-        """
-        result = []
-        current = ""
-        depth = 0
+        if not order_map:
+            return
 
-        for char in body:
-            if char == '(':
-                depth += 1
-                current += char
-            elif char == ')':
-                depth -= 1
-                current += char
-            elif char == ',' and depth == 0:
-                # Only split when not inside parentheses
-                result.append(current.strip())
-                current = ""
-            else:
-                current += char
+        pk = entity.get_primary_key()
+        if not pk:
+            return
+        for up in pk.unique_properties:
+            if up.primary_key_type != PKTypeEnum.CLUSTERING:
+                continue
+            attr = entity.get_property_by_id(up.property_id)
+            if attr and attr.name in order_map:
+                up.clustering_order = order_map[attr.name]
 
-        if current.strip():
-            result.append(current.strip())
-
-        return result
+    # ``_split_columns`` is inherited from DatabaseAdapter (shared with PostgreSQL).
 
     def _parse_column(self, col_def: str) -> Tuple[Optional[Property], bool]:
         """
@@ -546,9 +563,54 @@ class CassandraAdapter(DatabaseAdapter):
             columns.append(f"    {pk_clause}")
 
         lines.append(",\n".join(columns))
-        lines.append(");")
+
+        # Emit ``WITH CLUSTERING ORDER BY (...)`` when any clustering
+        # UniqueProperty carries an explicit order. CQL's own default is
+        # ASC, so to keep round-trip output minimal we only emit the WITH
+        # clause when at least one order is actually set (and skip it when
+        # all clustering columns are None or ``asc``). Without this guard
+        # every Cassandra table would gain a redundant ``WITH CLUSTERING
+        # ORDER BY (... ASC)`` line, breaking byte-stable comparison
+        # against schemas written without an explicit ORDER BY.
+        order_by = cls._build_clustering_order_clause(entity)
+        if order_by:
+            lines.append(f")\nWITH {order_by};")
+        else:
+            lines.append(");")
 
         return "\n".join(lines)
+
+    @classmethod
+    def _build_clustering_order_clause(cls, entity: EntityType) -> Optional[str]:
+        """Return ``CLUSTERING ORDER BY (col1 DIR, col2 DIR)`` or ``None`` when
+        no clustering UniqueProperty has a non-default direction set.
+
+        We only emit when **at least one** clustering column is explicitly
+        DESC (or any non-None value). For columns where ``clustering_order``
+        is None we default to ASC in the output — which matches CQL's own
+        default and keeps the parser/exporter symmetric.
+        """
+        pk = entity.get_primary_key()
+        if not pk:
+            return None
+        # Collect clustering columns with their declared order.
+        clustering_entries: List[Tuple[str, str]] = []
+        any_explicit = False
+        for up in pk.unique_properties:
+            if up.primary_key_type != PKTypeEnum.CLUSTERING:
+                continue
+            attr = entity.get_property_by_id(up.property_id)
+            if not attr:
+                continue
+            order = up.clustering_order
+            if order is not None:
+                any_explicit = True
+            clustering_entries.append((attr.name, (order or 'asc').upper()))
+
+        if not any_explicit or not clustering_entries:
+            return None
+        rendered = ", ".join(f"{c} {d}" for c, d in clustering_entries)
+        return f"CLUSTERING ORDER BY ({rendered})"
 
     @classmethod
     def _export_property_to_column(cls, attr: Property) -> str:

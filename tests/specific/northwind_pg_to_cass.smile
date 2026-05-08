@@ -67,7 +67,7 @@ DELETE_PRIMARY_KEY product_id FROM products
 ADD_PARTITION_KEY (category_id, supplier_id) TO products
 ADD_CLUSTERING_KEY product_id TO products
 -- Result:
--- products (category_id [PARTITION], supplier_id [PARTITION], product_id [CLUSTERING], product_name, unit_price, units_in_stock, discontinued, quantity_per_unit, supplier_id)
+-- products (category_id [PARTITION], supplier_id [PARTITION], product_id [CLUSTERING], product_name, unit_price, units_in_stock, discontinued, quantity_per_unit)
 
 -- ============================================
 -- Step 4: Remove FK constraints from orders

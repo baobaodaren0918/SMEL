@@ -1,0 +1,1203 @@
+\chapter{State of the Art}
+\label{ch:stateoftheart}
+This chapter identifies the challenges and reviews existing related work to establish the need for schema changes in migration and evolution scenarios, in order to position the scope of this master thesis.
+
+First, \autoref{sec:stateoftheart:fundamentals} introduces the fundamental concepts necessary to understand the research context. \autoref{sec:stateoftheart:evolution} then reviews existing schema evolution and migration approaches. \autoref{sec:stateoftheart:gap} identifies the research gap that this thesis aims to address. Finally, \autoref{sec:stateoftheart:summary} concludes the chapter by synthesizing the key insights and outlining the requirements derived from the literature review.
+
+
+%
+% Section: Fundamental Concepts
+%
+\section{Fundamental Concepts}
+\label{sec:stateoftheart:fundamentals}
+
+
+
+%
+% Subsection: Database Data Models
+%
+\subsection{Database Data Models}
+\label{sec:stateoftheart:fundamentals:datamodels}
+% TODO: Relational model (tables, rows, columns, foreign keys)
+% TODO: Document model (collections, nested documents, flexible schema)
+% TODO: Graph model (nodes, edges, properties)
+% TODO: Wide-column / Key-value model (column families, partitioning)
+% TODO: Each model ~1 paragraph, keep concise
+
+As introduced in \autoref{ch:background}, SMILE  targets schema migration
+and evolution across four database paradigms: relational, document, graph,
+and columnar (cf. \autoref{tab:migration-matrix}). This subsection briefly
+characterizes each data model and highlights the properties relevant to
+schema transformation.
+
+\paragraph{Relational Model}\quad
+
+The relational model~\cite{elmasri2016fundamentals} organizes data in two-dimensional tables, where each table consists of tuples (rows) and attributes (columns). Every row is identified by a primary key to ensure uniqueness. Relationships between tables are established through foreign keys, which enable referential integrity across tables. Data is typically normalized according to the normal forms (1NF, 2NF, 3NF) to reduce redundancy. The schema must be explicitly defined via DDL statements (e.g., \texttt{CREATE TABLE}) before any data can be inserted. SQL serves as the standardized query language for data retrieval and manipulation. PostgreSQL\footnote{\url{https://www.postgresql.org/}} is used as the representative relational database system, with SQL as its standardized
+query language. A prominent example of industrial relational database usage is
+SAP\footnote{\url{https://www.sap.com/}}, whose ERP system relies on
+extensively normalized table structures such as \texttt{MARA}
+(general material data) and \texttt{MARC} (plant-specific material
+data), connected through the shared key field \texttt{MATNR}
+(material number)\footnote{\texttt{MARA} (General Material Data) and
+\texttt{MARC} (Plant Data for Material) are standard SAP ERP tables
+documented in the SAP Data Dictionary (transaction \texttt{SE11}).
+See \url{https://help.sap.com/}}.
+
+Regarding schema evolution, changes are performed through DDL statements such as \texttt{ALTER TABLE}. Here, foreign key dependencies must be considered during evolution, as dropping a referenced column may require cascading removal of dependent constraints. Additionally, type conversions must ensure compatibility with existing data.
+
+In terms of schema migration, the strictly defined schema is advantageous in that every column possesses a clear type. However, when migrating from a relational system to a NoSQL system, the normalized structure typically requires a denormalization process~\cite{zhao2014schema}.  Depending on the target data model,
+foreign key relationships may need to be preserved as references,
+restructured into embedded documents, or transformed into explicit
+edge types in graph databases ~\cite{lee2015sql}.
+
+\paragraph{Document Model}\quad
+
+The document model stores semi-structured data in collections, where each
+entry is represented as a JSON or BSON document~\cite{chodorow2013mongodb}.
+Unlike the relational model, the document model does not enforce a fixed
+schema, which allows documents within the same collection to exhibit
+different structures, known as structural
+variations. Relationships between entities
+can be expressed either by embedding related data directly within a document
+or by storing a reference to another document's identifier. While
+referencing resembles the concept of a foreign key, the database system does
+not enforce referential integrity. MongoDB\footnote{\url{https://www.mongodb.com/}} serves as the chosen document store, with MQL
+(MongoDB Query Language)\footnote{\url{https://www.mongodb.com/docs/manual/reference/mql/}}
+as its query interface. A well-known use case is the content management platform of
+Forbes\footnote{\url{https://www.forbes.com/}}, which was rebuilt
+entirely on MongoDB to serve 140 million digital users globally
+with content from 2,500 journalists and
+contributors\footnote{See the MongoDB case study on Forbes:
+\url{https://www.mongodb.com/solutions/customer-case-studies/forbes}}.
+
+For schema evolution, the schema-on-read approach eliminates the need
+for explicit schema modification statements.
+The evolution of nested and aggregated structures becomes especially
+complex, as structural variations across documents within the same
+collection must be managed
+consistently~\cite{scherzinger2020empirical}.
+
+When migrating to a different data model, embedded documents and array
+elements pose specific challenges, as nested structures must be decomposed
+or restructured to conform to the target data model's
+constraints~\cite{kuszera2022exploring}.
+
+
+\paragraph{Graph Model.}\quad
+
+The graph model follows the labeled property graph
+paradigm~\cite{robinson2015graph}, in which data is represented as nodes
+and directed relationships, both carrying key-value properties. Nodes can
+be assigned one or more labels to indicate their type, while each
+relationship has exactly one type and connects a source node to a target
+node. This model is well suited for domains with densely connected
+data, such as social
+networks\footnote{\url{https://neo4j.com/use-cases/social-network/}},
+recommendation
+systems\footnote{\url{https://neo4j.com/case-studies/ebay/}}, and
+knowledge
+graphs\footnote{\url{https://neo4j.com/use-cases/knowledge-graph/}}. Unlike the document model, the graph model does not support nested
+or embedded structures, as all associations between entities are
+expressed through explicit relationships~\cite{robinson2015graph}.
+Neo4j\footnote{\url{https://neo4j.com/}} is used as the representative
+graph database system, employing Cypher as its query language.
+
+Since Neo4j operates as a schema-optional system, nodes, labels, and
+properties can be added or modified without prior declaration. However, the type of a relationship is immutable once assigned, and
+changing it requires deleting the original relationship and recreating
+it with the desired
+type\footnote{As stated in the Neo4j APOC documentation: ``This procedure does not rename the relationship type; it creates a new relationship with the new type and copies over the properties from the original relationship, which is then deleted.'' See \url{https://neo4j.com/docs/apoc/current/overview/apoc.refactor/apoc.refactor.setType/}.}.
+
+Other Data models that lack first-class
+relationships\footnote{Neo4j defines \emph{First-Class Relationships}
+as Rule~3 of its 15 Rules of a Native Graph Database:
+``Treat relationships among graph data elements as first-class database
+elements, complete with directional and quantifying properties used by
+the graph database engine.''
+See \url{https://neo4j.com/blog/15-rules-native-graph-database/}.}
+must represent them through alternative constructs such as foreign keys
+or embedded structures~\cite{lu2019multi}, while migrations into the
+graph model may require flattening nested data into separate nodes
+connected by edges.
+
+\paragraph{Wide-Column Model — Cassandra.}\quad
+
+The wide-column model structures data in tables composed of rows and
+columns~\cite{carpenter2022cassandra}. Each row is identified by a
+partition key, which determines the physical distribution of data
+across cluster nodes. Within a partition, rows are ordered by a
+clustering key. Although this structure resembles a relational table
+and requires a predefined schema before data can be inserted,
+Cassandra\footnote{\url{https://cassandra.apache.org/}} differs in
+that its tables are designed around specific query patterns rather
+than normalized data relationships. As a result, the same data may be
+stored redundantly across multiple tables. Since Cassandra does not
+support JOIN operations, all related data must be stored together in a
+single denormalized table to serve queries directly. In addition,
+Cassandra supports User-Defined Types
+(UDTs)\footnote{See the Apache Cassandra documentation on data types:
+\url{https://cassandra.apache.org/doc/latest/cassandra/developing/cql/types.html}},
+which allow multiple named and typed fields to be grouped into a
+single column, including nesting of other UDTs.
+In practice, Netflix\footnote{\url{https://netflixtechblog.com/nosql-at-netflix-e937b660b4c}}
+uses it to manage petabytes of streaming data, and
+Discord\footnote{\url{https://discord.com/blog/how-discord-stores-trillions-of-messages}}
+originally stored trillions of chat messages in Cassandra.
+
+Regarding schema evolution, modifications are performed using CQL
+statements, similar to those in relational
+databases\footnote{See the Apache Cassandra documentation on
+\texttt{ALTER TABLE}:
+\url{https://cassandra.apache.org/doc/latest/cassandra/reference/cql-commands/alter-table.html}}.
+Columns can be added or removed, but the partition key and clustering
+key are immutable after table creation. Furthermore, Cassandra
+operates as a schema-on-write system, meaning that if the key
+structure needs to change, the creation of a new table is required.
+
+When schema migration across database systems is needed, special attention is needed to the fact that partition keys and clustering
+keys have no direct equivalent in other data
+models~\cite{lu2019multi} and therefore require specific handling.
+Additionally, due to Cassandra's denormalized
+design~\cite{carpenter2022cassandra}, migration to a relational model
+requires re-normalizing the redundant data into separate related
+tables.
+
+Table~\ref{tab:datamodel-comparison} compares the four target data models
+across their core structural and behavioral properties.
+
+\begin{table}[ht!]
+\centering
+\caption{Comparison of the four target data models.}
+\label{tab:datamodel-comparison}
+\renewcommand{\arraystretch}{1.5}
+\setlength{\tabcolsep}{6pt}
+\footnotesize
+\begin{tabularx}{\textwidth}{@{} p{2.8cm} X X X X @{}}
+\toprule
+\textbf{Feature} & \textbf{Relational (PostgreSQL)} & \textbf{Document (MongoDB)} & \textbf{Graph (Neo4j)} & \textbf{Wide-Column (Cassandra)} \\
+\midrule
+Schema-Level Unit & Table & Collection & Label & Table \\
+\addlinespace
+Data-Level Unit & Row (Tuple) & Document & Node / Relationship & Row \\
+\addlinespace
+Schema Strategy & Schema-on-Write & Schema-on-Read (default) & Schema-optional & Schema-on-Write \\
+\addlinespace
+Relationship Expression & Foreign keys & Embedding or referencing & Edges (Relationships) & None (denormalized design) \\
+\addlinespace
+Nesting Support (schema level) & Not supported & Core feature & Not supported & Supported (UDTs) \\
+\addlinespace
+Structural Variations & Not possible & Possible (common in practice) & Possible & Not possible \\
+\addlinespace
+Query Language & SQL & MQL & Cypher & CQL \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+
+
+%
+% Subsection: Schema Evolution and Schema Migration
+%
+\subsection{Schema Evolution and Schema Migration}
+\label{sec:stateoftheart:fundamentals:evomig}
+% TODO: Schema Evolution definition: intra-system schema changes within the same database
+% TODO: Schema Migration definition: inter-system schema transformation across different databases
+% TODO: This is the core distinction of the thesis — must be clearly defined here
+Before discussing the subsequent concepts, an explicit distinction between schema evolution and schema migration should be established.
+
+\textbf{Schema evolution} refers to the modification of a database schema within
+the same database system (intra-system). In the matrix shown in
+Table~\ref{tab:migration-matrix}, this corresponds to the four diagonal scenarios
+(1, 6, 11, 16). Schema evolution can be triggered by various factors, such as changing user requirements, query optimization, or business restructuring~\cite{brahmia2024literature}. For example, the developers of MediaWiki
+carried out a major schema evolution in version 1.5 due to the need for
+improved performance and optimization as the platform experienced rapid
+growth.\footnote{Harihareswara, S. \& Paumier, G. (2012). \textit{MediaWiki}.
+In: \textit{The Architecture of Open Source Applications}, Volume~2. Available
+at: \url{https://aosabook.org/en/v2/mediawiki.html}}
+
+\textbf{Schema migration}, in contrast, refers to the transformation of a schema
+between different database models (inter-system). In
+Table~\ref{tab:migration-matrix}, this corresponds to the remaining twelve
+scenarios outside the diagonal, where the source and target systems represent
+different database types. Schema migration is often driven by cost reduction, improved capabilities,
+new functionalities, or changing business requirements. For instance, Coursera
+migrated its core database from MySQL to Cassandra as its user base grew from
+several thousand to many millions, since MySQL provided limited availability and
+restricted the platform's ability to scale
+easily.\footnote{Chia, D. (2014). \textit{Coursera's Adoption of Cassandra}.
+Coursera Engineering Blog. Available at:
+\url{https://medium.com/coursera-engineering/courseras-adoption-of-cassandra-cd27629e609}}
+
+As the examples above illustrate, schema evolution and schema migration address different but complementary needs. The former adapts a schema within the same system, while the latter transforms it across heterogeneous systems. SMILE  is designed as a domain-specific language that covers both.
+
+\subsection{Hub-and-Spoke Integration Pattern}
+\label{sec:stateoftheart:fundamentals:hubandspoke}
+
+According to Table~\ref{tab:migration-matrix}, supporting all 16 scenarios
+through direct transformations would require a large number of individual
+mappings. To reduce this complexity, the Hub-and-Spoke Integration Pattern
+is adopted in this thesis.
+The Hub-and-Spoke Integration Pattern is an architectural topology
+where all connected systems communicate through a central hub, avoiding the $O(N^2)$ complexity of point-to-point connections. To address the data format translation problem, this pattern is typically combined with a Canonical Data Model~\cite{hohpe2004enterprise}. In SMILE 's workflow, source schemas are first translated into a Unified
+Meta Schema, and then migrated to target schemas or their variations. This schema-level canonical approach provides the structural foundation for data migration and evolution.
+
+\textbf{Point-to-Point Complexity:} For $N$ systems requiring full interconnection, point-to-point integration requires\textsuperscript{1}:
+$$Translations = N \times (N - 1) = O(N^2)$$
+
+\textbf{Hub-and-Spoke Complexity:} With a central hub, the same $N$ systems require only\textsuperscript{2}:
+$$Translations = 2N = O(N)$$
+
+\footnotetext[1]{\textsuperscript{1,2} Both formulas adapted from Hohpe, G.:\url{https://www.enterpriseintegrationpatterns.com/ramblings/03_hubandspoke.html}}
+
+Figure~\ref{fig:integration-patterns} illustrates the complexity difference between Point-to-Point and Hub-and-Spoke patterns, along with the Canonical Data Model approach.
+The adoption of the Hub-and-Spoke pattern with a canonical intermediate representation reduces integration complexity from $O(N^2)$ to $O(N)$.
+
+\begin{figure}[htbp]
+\centering
+
+% Figure (a): Point-to-Point
+\subfloat[Point-to-Point $O(N^2)$]{
+\begin{tikzpicture}[scale=0.8, every node/.style={scale=0.8}]
+  \node[draw, circle, minimum size=0.8cm] (A) at (0,2) {A};
+  \node[draw, circle, minimum size=0.8cm] (B) at (2,2) {B};
+  \node[draw, circle, minimum size=0.8cm] (C) at (2,0) {C};
+  \node[draw, circle, minimum size=0.8cm] (D) at (0,0) {D};
+  \draw[<->, thick] (A) -- (B);
+  \draw[<->, thick] (A) -- (C);
+  \draw[<->, thick] (A) -- (D);
+  \draw[<->, thick] (B) -- (C);
+  \draw[<->, thick] (B) -- (D);
+  \draw[<->, thick] (C) -- (D);
+\end{tikzpicture}
+\label{fig:p2p}
+}
+\hfill
+% Figure (b): Hub-and-Spoke
+\subfloat[Hub-and-Spoke $O(N)$]{
+\begin{tikzpicture}[scale=0.8, every node/.style={scale=0.8}]
+  \node[draw, rectangle, rounded corners, minimum size=0.8cm, fill=gray!20] (Hub) at (1,1) {Hub};
+  \node[draw, circle, minimum size=0.8cm] (A) at (0,2.2) {A};
+  \node[draw, circle, minimum size=0.8cm] (B) at (2,2.2) {B};
+  \node[draw, circle, minimum size=0.8cm] (C) at (2,-0.2) {C};
+  \node[draw, circle, minimum size=0.8cm] (D) at (0,-0.2) {D};
+  \draw[<->, thick] (A) -- (Hub);
+  \draw[<->, thick] (B) -- (Hub);
+  \draw[<->, thick] (C) -- (Hub);
+  \draw[<->, thick] (D) -- (Hub);
+\end{tikzpicture}
+\label{fig:hub}
+}
+\hfill
+% Figure (c): Canonical Data Model
+% Figure (c): Canonical Data Model
+\subfloat[Canonical Data Model]{
+\begin{tikzpicture}[scale=0.7, every node/.style={scale=0.7}]
+  \node[draw, rectangle, minimum width=0.9cm, minimum height=0.5cm] (S1) at (-1.5,1.5) {Src A};
+  \node[draw, rectangle, minimum width=0.9cm, minimum height=0.5cm] (S2) at (-1.5,0) {Src B};
+  \node[draw, rectangle, minimum width=0.9cm, minimum height=0.5cm] (S3) at (-1.5,-1.5) {Src C};
+  \node[draw, rectangle, rounded corners, minimum width=1.8cm, minimum height=1cm, fill=gray!20] (CDM) at (0.8,0) {\small Canonical};
+  \node[draw, rectangle, minimum width=0.9cm, minimum height=0.5cm] (T1) at (3,1.5) {Tgt X};
+  \node[draw, rectangle, minimum width=0.9cm, minimum height=0.5cm] (T2) at (3,0) {Tgt Y};
+  \node[draw, rectangle, minimum width=0.9cm, minimum height=0.5cm] (T3) at (3,-1.5) {Tgt Z};
+  \draw[<->, thick] (S1) -- (CDM);
+  \draw[<->, thick] (S2) -- (CDM);
+  \draw[<->, thick] (S3) -- (CDM);
+  \draw[<->, thick] (CDM) -- (T1);
+  \draw[<->, thick] (CDM) -- (T2);
+  \draw[<->, thick] (CDM) -- (T3);
+\end{tikzpicture}
+\label{fig:cdm}
+}
+
+\caption{Point-to-Point, Hub-and-Spoke, and Canonical Data Model patterns}
+\label{fig:integration-patterns}
+\end{figure}
+
+ \section{U-Schema vs. M-Model: Why M-Model?}
+ \label{sec:metamodels}
+
+The Hub-and-Spoke Integration Pattern requires a central, platform-independent meta model. In the related literature, two metamodels that are   relevant for this implementation are U-Schema and M-Model.
+
+  % ============================================================
+  % U-Schema
+  % ============================================================
+
+ \textbf{U-Schema: Unified Metamodel.}                                                                                                               Fernández Candel, Sevilla Ruiz, and García Molina~\cite{candel2022unified} propose U-Schema, a unified logical metamodel able to represent schemas for the four most common NoSQL paradigms (columnar, document, key-value, and graph) as well as relational systems. By introducing a central representation, U-Schema reduces the number of required mappings between $n$ data models from $n \times (n-1)$ to $2n$ (one forward and one reverse
+mapping per data model).
+
+A U-Schema model consists of a collection of schema types (\texttt{SchemaType}), which are either \texttt{EntityType}s or \texttt{RelationshipType}s. Both can form type hierarchies through a \texttt{parent} relationship and include one or more \texttt{StructuralVariation}s. Each variation is characterized by a set of features. \texttt{Attribute}s and \texttt{Aggregate}s are classified as structural features, \texttt{Key}s and \texttt{Reference}s as logical features.  An \texttt{EntityType} includes a boolean \texttt{root} attribute to distinguish top-level entities from those embedded through aggregation. U-Schema supports aggregation, references, graph relationships (via \texttt{RelationshipType}), and inheritance (via \texttt{parent}) between entity types.
+
+A distinctive feature of U-Schema is its explicit support for structural variations. Since most NoSQL systems are schemaless, data of the same entity type can have different structures, and U-Schema captures this variability rather than discarding it. U-Schema distinguishes two schema flavors. In \emph{Full Variability} mode, all structural variations of each schema type are stored separately. In \emph{Union Schema} mode, they are merged into a single variation, and features not shared by all instances are marked as optional. The metamodel is defined in Ecore~(Eclipse Modeling Framework), making it compatible with MDE tooling. SMILE  draws on U-Schema's unified schema concepts as a conceptual reference.
+
+
+  % ============================================================
+  % M-Model
+  % ============================================================
+
+  \textbf{Metamodels for Heterogeneous Database Systems:}                                                                                               Conrad et al.~\cite{conrad2022metamodels} present the \textbf{M-Model},                                                                             a metamodel designed to support database migration between heterogeneous
+  data stores. The M-Model was developed because none of the six evaluated
+  metamodels (NoAM, UMLtoNoSQL, Canonical Model, 5-Families, PDDM,
+  and U-Schema)\footnote{NoAM~\cite{atzeni2020data};
+  UMLtoNoSQL~\cite{abdelhedi2017umltonosql};
+  Canonical Model~\cite{vanhove2017data};
+  5-Families~\cite{mali2020modeldrivenguide};
+  PDDM~\cite{zdepski2020pddm};
+  U-Schema~\cite{candel2022unified}.}
+  was considered to sufficiently fulfill the criteria for the use case of
+  schema and data migration.
+  A central design principle is to keep the metamodel's complexity as
+  low as possible yet still covering all five database paradigms:
+  relational, document, key-value, columnar, and graph.
+
+
+
+The M-Model defines a \texttt{Database} as a tuple $(N, Ty, Ety, Rty)$ consisting of a name, a database type, a set of entity types,
+and an optional set of relationship types used for graph edge labels. Each \texttt{EntityType} is defined as $(N, R, A, K)$, containing a name,
+relationships, attributes, and keys. TDepending on the database paradigm, relationships take one of three forms. Foreign keys in relational databases are modeled as \texttt{Reference}, nested objects in document databases as   \texttt{Embedded}, and directed connections in graph databases as \texttt{Edge}. An \texttt{Edge} can additionally carry its own attributes and connects a source entity type to a target entity type. A \texttt{Key} is defined as a tuple $(Ty, A)$, where the key type explicitly distinguishes between partition keys and clustering keys, which is necessary for representing wide-column stores such as Cassandra.
+
+To illustrate how these definitions translate concrete database schemas
+into M-Model representations, Table~\ref{tab:mmodel-mapping} maps the
+same person-address schema in a relational and a document database: in the relational case, the foreign key is captured as a \texttt{Reference}, while in the document case, the nested object becomes an \texttt{Embedded} relationship.
+
+
+  \begingroup
+  \scriptsize
+  \renewcommand{\arraystretch}{1.15}
+  \setlength\LTleft{0pt}
+  \setlength\LTright{0pt}
+  \setlength\tabcolsep{4pt}
+
+  \begin{longtable}{@{} >{\raggedright}p{5.0cm}
+                        >{\raggedright}p{4.0cm}
+                        >{\raggedright\arraybackslash}p{4.0cm} @{}}
+
+  \caption{Mapping a person-address schema to the
+  M-Model~\cite{conrad2022metamodels}}
+  \label{tab:mmodel-mapping} \\
+
+  % ===== First-page header: source schemas + column heads =====
+  \multicolumn{3}{c}{%
+  \setlength{\fboxsep}{5pt}%
+  \begin{minipage}[t]{0.46\textwidth}
+  \centering\footnotesize
+  \textbf{Source (a): PostgreSQL (relational)}\\[4pt]
+  \fbox{\parbox{0.90\textwidth}{\ttfamily\scriptsize
+  CREATE TABLE person (\\
+  \quad id SERIAL PRIMARY KEY,\\
+  \quad name VARCHAR(100),\\
+  \quad email VARCHAR(255)\\
+  );\\[2pt]
+  CREATE TABLE address (\\
+  \quad id SERIAL PRIMARY KEY,\\
+  \quad city VARCHAR(100),\\
+  \quad street VARCHAR(200),\\
+  \quad person\_id INT\\
+  \quad\quad REFERENCES person(id)\\
+  );
+  }}
+  \end{minipage}%
+  \hfill
+  \begin{minipage}[t]{0.46\textwidth}
+  \centering\footnotesize
+  \textbf{Source (b): MongoDB (document)}\\[4pt]
+  \fbox{\parbox{0.90\textwidth}{\ttfamily\scriptsize
+  // collection: person\\
+  \{\\
+  \quad \_id: ObjectId("..."),\\
+  \quad name: "Alice",\\
+  \quad email: "alice@x.com",\\
+  \quad address: \{\\
+  \quad\quad city: "Berlin",\\
+  \quad\quad street: "Hauptstr."\\
+  \quad \}\\
+  \}
+  }}
+  \end{minipage}%
+   } \\[6pt]
+ \noalign{\vspace{4pt}\hrule height 0.4pt\vspace{6pt}}
+
+
+
+
+  \toprule
+  \textbf{M-Model Definition~\cite{conrad2022metamodels}}
+    & \textbf{$\Rightarrow$ Relational Result (a)}
+    & \textbf{$\Rightarrow$ Document Result (b)} \\
+  \midrule
+  \endfirsthead
+
+  % ===== Subsequent-page header =====
+  \toprule
+  \textbf{M-Model Definition~\cite{conrad2022metamodels}}
+    & \textbf{$\Rightarrow$ Relational Result (a)}
+    & \textbf{$\Rightarrow$ Document Result (b)} \\
+  \midrule
+  \endhead
+
+  \midrule
+  \multicolumn{3}{r}{\textit{Continued on next page}} \\
+  \endfoot
+
+  \bottomrule
+  \endlastfoot
+
+  % ================================================================
+  % Row 1: Database
+  % ================================================================
+  \textbf{Database}\newline
+  $DB = (N, Ty, Ety, Rty)$\newline
+  $DB.N$ = Name of the database.\newline
+  $DB.Ty$ = Type of the database\newline
+  \quad (e.g.\ document).\newline
+  $DB.Ety = \{e_1, \ldots, e_i\}$ is a set\newline
+  \quad of $i$ entity types.\newline
+  $DB.Rty = \{rtp_1, \ldots, rtp_i\}$ is a set\newline
+  \quad of $i$ relationship types which\newline
+  \quad relate to labels in graph\newline
+  \quad databases like Neo4j.
+  &
+  \texttt{Database(}\newline
+  \quad $N{=}$\texttt{"mydb",}\newline
+  \quad $Ty{=}$\texttt{relational,}\newline
+  \quad $Ety{=}$\texttt{\{person,}\newline
+  \quad\quad\texttt{address\},}\newline
+  \quad $Rty{=}\{\}$\texttt{)}
+  &
+  \texttt{Database(}\newline
+  \quad $N{=}$\texttt{"mydb",}\newline
+  \quad $Ty{=}$\texttt{document,}\newline
+  \quad $Ety{=}$\texttt{\{person,}\newline
+  \quad\quad\texttt{address\},}\newline
+  \quad $Rty{=}\{\}$\texttt{)}
+  \\
+  \midrule
+
+  % ================================================================
+  % Row 2: EntityType (person)
+  % ================================================================
+  \textbf{EntityType}\newline
+  $e \in DB.Ety$, $e = (N, R, A, K)$\newline
+  $e.N$ = Name of the entity type.\newline
+  $e.R = \{r_1, \ldots, r_i\}$ is a set of $i$\newline
+  \quad relationships $r \in e.R$. A\newline
+  \quad relationship can be a\newline
+  \quad \textit{Reference}, \textit{Edge} or\newline
+  \quad \textit{Embedded}. Relationships\newline
+  \quad are generally defined as a\newline
+  \quad tuple $(Lbound, Ubound)$, with:\newline
+  \quad $r.Lbound$ = Lower bound and\newline
+  \quad $r.Ubound$ = Upper bound.\newline
+  $e.A = \{a_1, \ldots, a_i\}$ is a set of $i$\newline
+  \quad attributes $a \in e.A$.\newline
+  $e.K = \{k_1, \ldots, k_i\}$ is a set of $i$\newline
+  \quad keys (composite key).
+  &
+  \texttt{EntityType(}\newline
+  \quad $N{=}$\texttt{person,}\newline
+  \quad $R{=}\{\}$\texttt{,}\newline
+  \quad $A{=}$\texttt{\{id, name,}\newline
+  \quad\quad\texttt{email\},}\newline
+  \quad $K{=}$\texttt{\{Key(simple,}\newline
+  \quad\quad\texttt{id)\})}
+  &
+  \texttt{EntityType(}\newline
+  \quad $N{=}$\texttt{person,}\newline
+  \quad $R{=}$\texttt{\{Embedded(}\newline
+  \quad\quad $N{=}$\texttt{address,}\newline
+  \quad\quad $Embeds{=}$\texttt{address)\},}\newline
+  \quad $A{=}$\texttt{\{\_id, name,}\newline
+  \quad\quad\texttt{email\},}\newline
+  \quad $K{=}$\texttt{\{Key(simple,}\newline
+  \quad\quad\texttt{\_id)\})}
+  \\
+  \midrule
+
+  % ================================================================
+  % Row 3: EntityType (address)
+  % ================================================================
+  \textit{(EntityType --- same definition)}
+  &
+  \texttt{EntityType(}\newline
+  \quad $N{=}$\texttt{address,}\newline
+  \quad $R{=}$\texttt{\{Reference(}\newline
+  \quad\quad $N{=}$\texttt{person\_id,}\newline
+  \quad\quad $B{=}\emptyset$\texttt{,}\newline
+  \quad\quad $RefsTo{=}$\texttt{person)\},}\newline
+  \quad $A{=}$\texttt{\{id, city, street,}\newline
+  \quad\quad\texttt{person\_id\},}\newline
+  \quad $K{=}$\texttt{\{Key(simple,}\newline
+  \quad\quad\texttt{id)\})}
+  &
+  \texttt{EntityType(}\newline
+  \quad $N{=}$\texttt{address,}\newline
+  \quad $R{=}\{\}$\texttt{,}\newline
+  \quad $A{=}$\texttt{\{city, street\},}\newline
+  \quad $K{=}\{\}$\texttt{)}
+  \\
+  \midrule
+
+  % ================================================================
+  % Row 4: Reference
+  % ================================================================
+  \textbf{Reference}\newline
+  $r_{Ref} \in e.R$,\newline
+  $r_{Ref} = (N, B, RefsTo)$\newline
+  Inherits $(Lbound, Ubound)$ from\newline
+  \quad Relationship.\newline
+  $r_{Ref}.N$ = Name of the reference.\newline
+  $r_{Ref}.B$ = Is a reference\newline
+  \quad $r_{Ref} \in e.R$ that points to the\newline
+  \quad opposite direction.\newline
+  $r_{Ref}.RefsTo$ = The referenced\newline
+  \quad entity type $e \in DB.Ety$.
+  &
+  \texttt{Reference(}\newline
+  \quad $Lbound{=}$\texttt{0,}\newline
+  \quad $Ubound{=}$\texttt{1,}\newline
+  \quad $N{=}$\texttt{person\_id,}\newline
+  \quad $B{=}\emptyset$\texttt{,}\newline
+  \quad $RefsTo{=}$\texttt{person)}
+  &
+  --- \textit{(no foreign keys\newline
+  in document model)}
+  \\
+  \midrule
+
+  % ================================================================
+  % Row 5: Embedded
+  % ================================================================
+  \textbf{Embedded}\newline
+  $r_{Embed} \in e.R$,\newline
+  $r_{Embed} = (N, Embeds)$\newline
+  Inherits $(Lbound, Ubound)$ from\newline
+  \quad Relationship.\newline
+  $r_{Embed}.N$ = Name of the\newline
+  \quad embedded entity type.\newline
+  $r_{Embed}.Embeds$ = The embedded\newline
+  \quad entity type $e \in DB.Ety$.
+  &
+  --- \textit{(no nested objects\newline
+  in relational model)}
+  &
+  \texttt{Embedded(}\newline
+  \quad $Lbound{=}$\texttt{1,}\newline
+  \quad $Ubound{=}$\texttt{1,}\newline
+  \quad $N{=}$\texttt{address,}\newline
+  \quad $Embeds{=}$\texttt{address)}
+  \\
+  \midrule
+
+  % ================================================================
+  % Row 6: Key
+  % ================================================================
+  \textbf{Key}\newline
+  $k \in e.K$, $k = (Ty, A)$\newline
+  $k.Ty$ = Type of the key (e.g.\newline
+  \quad partition or clustering key\newline
+  \quad in Cassandra).\newline
+  $k.A$ = The key attribute $a \in e.A$.
+  &
+  \texttt{Key(}\newline
+  \quad $Ty{=}$\texttt{simple,}\newline
+  \quad $A{=}$\texttt{id)}
+  &
+  \texttt{Key(}\newline
+  \quad $Ty{=}$\texttt{simple,}\newline
+  \quad $A{=}$\texttt{\_id)}
+  \\
+  \midrule
+
+  % ================================================================
+  % Row 7: Attribute
+  % ================================================================
+  \textbf{Attribute}\newline
+  $a \in e.A \vee a \in r_{Edge}.A$,\newline
+  $a = (N, Ty, K)$\newline
+  $a.N$ = Name of the attribute.\newline
+  $a.Ty$ = Data type of the attribute.\newline
+  $a.K$ = Determines whether the\newline
+  \quad attribute is a key.
+  &
+  e.g.\ \texttt{Attribute(}\newline
+  \quad $N{=}$\texttt{name,}\newline
+  \quad $Ty{=}$\texttt{VARCHAR,}\newline
+  \quad $K{=}$\texttt{false)}
+  &
+  e.g.\ \texttt{Attribute(}\newline
+  \quad $N{=}$\texttt{name,}\newline
+  \quad $Ty{=}$\texttt{string,}\newline
+  \quad $K{=}$\texttt{false)}
+  \\
+
+  \end{longtable}
+
+  \noindent\scriptsize
+
+  \endgroup
+
+ Since the publication of the original paper, the M-Model implementation has been further developed to include additional structural elements such as entity type classification, a constraint system with explicit primary key types, and a connector-based relationship model. While the M-Model was developed with the primary goal of supporting database migration, its structural representation of schema elements is not limited to this use case. In this thesis, the M-Model implementation forms the structural foundation and is adapted to support both schema migration and schema evolution operations. Chapter~\ref{ch:concept} describes these adaptations in detail.
+
+  Compared to U-Schema~\cite{candel2022unified}, the M-Model defines
+  \texttt{Relationship} as a common superclass for \texttt{Reference},
+  \texttt{Embedded}, and \texttt{Edge}, so conversions between
+  different relationship types can be handled through a uniform
+  interface. In U-Schema, \texttt{Reference} and \texttt{Aggregate}
+  belong to separate \texttt{Feature} branches without a direct common
+  superclass. The M-Model's \texttt{Key} concept includes an explicit
+  \texttt{keyType} attribute (partition, clustering) that covers
+  Cassandra's composite primary key structure, while U-Schema treats
+  keys as a generic set of attributes without type distinction. The
+  M-Model also represents each \texttt{EntityType} as a single fixed
+  structure, which matches SMILE 's workflow of operating on one schema
+  version per migration step. Table~\ref{tab:metamodel-comparison}
+  summarizes these differences.
+
+
+  % ============================================================
+  % 对比表（longtable）
+  % ============================================================
+
+  \begingroup
+  \footnotesize
+  \renewcommand{\arraystretch}{1.15}
+  \setlength\LTleft{0pt}
+  \setlength\LTright{0pt}
+  \setlength\tabcolsep{4pt}
+  \begin{longtable}{@{} >{\raggedright\arraybackslash\bfseries}p{0.15\textwidth} >{\raggedright\arraybackslash}p{0.385\textwidth}
+  >{\raggedright\arraybackslash}p{0.385\textwidth} @{}}
+
+  \caption{Comparison of U-Schema and M-Model Metamodels}
+  \label{tab:metamodel-comparison} \\
+
+  \toprule
+  \textbf{Criterion} & \textbf{U-Schema} \newline \textit{(Fernandez Candel et al., 2022)} & \textbf{M-Model} \newline \textit{(Conrad et al.,
+  2022)} \\
+  \midrule
+  \endfirsthead
+
+  \toprule
+  \textbf{Criterion} & \textbf{U-Schema} & \textbf{M-Model} \\
+  \midrule
+  \endhead
+
+  \midrule
+  \multicolumn{3}{r}{\textit{Continued on next page}} \\
+  \bottomrule
+  \endfoot
+
+  \bottomrule
+  \endlastfoot
+
+  \multicolumn{3}{l}{\cellcolor{gray!15}\textit{General}} \\
+  \midrule
+
+  Purpose &
+  Universal metamodel for DB engineering toolkit (migration, schema query, dataset generation, query optimization, visualization) &
+  Metamodel for schema and data migration between heterogeneous DB systems \\
+
+  Design Philosophy &
+  Comprehensive for various use cases; high complexity &
+  Keep complexity as low as possible \\
+
+  Supported DB &
+  Relational, Document, Graph, Key-Value, Columnar &
+  Relational, Document, Graph, Key-Value, Columnar  \\
+
+  \midrule
+  \multicolumn{3}{l}{\cellcolor{gray!15}\textit{Core Elements}} \\
+  \midrule
+
+  Entity Type &
+  \texttt{EntityType} (name, root, variations, parent) \newline root=true: top-level; root=false: embedded \newline Supports inheritance via parent
+  \newline
+  \textit{e.g.\ \texttt{Movie} (root=true), \texttt{Address} (root=false, embedded in User)} &
+  \texttt{EntityType} (enName, attributes, keys, relationships) \newline No root/non-root distinction \newline No inheritance \newline
+  \textit{e.g.\ EntityType ``User'' with attributes, keys and relationships as flat lists} \\
+
+  Attribute + Types &
+  \texttt{Attribute} (name, type) in \texttt{StructuralVariation.features} \newline Types: PrimitiveType, Null, PList, PSet, PMap, PTuple \newline
+  (also JSON and BLOB for relational support) \newline
+  \textit{e.g.\ title: String, genre: PList(String)} &
+  \texttt{Attribute} (attrName, type) in \texttt{EntityType} \newline Types: PrimitiveType, Map, Set, List, Tuple \newline
+  \textit{e.g.\ attrName=``title'', type=String} \\
+
+  Key &
+  \texttt{Key}: set of Attributes (generic, no type distinction) \newline All variations must share the same key \newline
+  \textit{e.g.\ Key=\{\_id\}, shared across all User variations} &
+  \texttt{Key}: keyType + single keyAttribute \newline Explicit key types (partition, clustering) \newline Composite keys via multiple Key instances
+   \newline
+  \textit{e.g.\ k1=(partition, userId), k2=(clustering, timestamp)} \\
+
+  Reference &
+  \texttt{Reference} (name, refsTo, attributes, opposite, isFeaturedBy, lowerBound, upperBound) \newline Can link to RelationshipType variation
+  \newline
+  \textit{e.g.\ \texttt{favoriteMovies} refsTo \texttt{Movie}, linked to FAVORITE\_MOVIES via isFeaturedBy} &
+  \texttt{Reference} subclass of Relationship (refName, refsTo, bidirectional, lowerBound, upperBound) \newline
+  \textit{e.g.\ refName=``favoriteMovies'', refsTo=Movie} \\
+
+  Aggregate / Embedding &
+  \texttt{Aggregate} (name, aggregates, lowerBound, upperBound) \newline Points to StructuralVariation(s) \newline Aggregated EntityType has
+  root=false \newline
+  \textit{e.g.\ \texttt{User} aggregates \texttt{Address}; Address.root=false} &
+  \texttt{Embedded} subclass of Relationship (emName, embedds EntityType) \newline lowerBound/upperBound inherited from Relationship \newline
+  \textit{e.g.\ emName=``address'', embedds=Address} \\
+
+  Graph Edge &
+  \texttt{RelationshipType} (name, variations, parent) \newline First-class concept with own variations \newline Label implicit in name \newline
+  \textit{e.g.\ WATCHED\_MOVIES connecting User $\to$ Movie, with its own variations} &
+  \texttt{Edge} subclass of Relationship (sourceEntity, targetEntity, edgeAttributes) + \texttt{RelationshipType} (relType) as separate class
+  \newline
+  \textit{e.g.\ Edge from User to Movie, relType=``WATCHED\_MOVIES''} \\
+
+  Relationship Superclass &
+  No common superclass for Reference and Aggregate \newline (Reference $\to$ LogicalFeature $\to$ Feature; \newline Aggregate $\to$
+  StructuralFeature $\to$ Feature) \newline
+  \textit{e.g.\ favoriteMovies and address are in different Feature branches} &
+  \texttt{Relationship} (lowerBound, upperBound) \newline Superclass of Reference, Embedded, Edge \newline
+  \textit{e.g.\ all three inherit lowerBound/upperBound from Relationship} \\
+
+  \midrule
+  \multicolumn{3}{l}{\cellcolor{gray!15}\textit{Key Differences}} \\
+  \midrule
+
+  Structural Variations &
+  First-class concept (\texttt{StructuralVariation}): variationId, count, firstTimestamp, lastTimestamp; in Union Schema mode, features can be
+  marked as optional; supports Full Variability and Union Schema modes &
+  Not supported; each EntityType has a single fixed structure \\
+
+  Inheritance &
+  \texttt{SchemaType.parents} for multi-label graph nodes and type hierarchies &
+  Not supported \\
+
+  DB Type Storage &
+  Not stored in metamodel (separate per-paradigm mapping) &
+  \texttt{Database.dbType} stores the type (e.g., ``document'', ``graph'') \\
+
+  Engineering Support &
+  Reverse Eng.: formal canonical mappings for all paradigms \newline Forward Eng.: canonical mapping rules per paradigm &
+  Forward Eng.: script generation \newline Reverse Eng.: schema extraction \newline Formal: tuple-based definitions \\
+
+  \end{longtable}
+  \endgroup
+
+%
+% Section: Schema Evolution Approaches
+%
+\section{Schema Evolution and Migration Approaches}
+\label{sec:stateoftheart:evolution}
+
+% TODO: PRISM / PRISM++ (Curino et al.) - relational
+% TODO: Orion (Chillón et al.) - NoSQL taxonomy and DSL
+% TODO: Darwin (Störl & Klettke) - schema evolution platform
+% TODO: Graph database evolution language (Herrmann et al.)
+
+The development of schema evolution languages has progressed through several distinct phases, as illustrated in Figure~\ref{fig:timeline-schema-evolution}. This subsection reviews existing approaches and positions SMILE  within this research landscape.
+
+\textbf{Early Foundations (2007--2008)} The origins of this research area include Model Management 2.0~\cite{bernstein2007model}, which proposed generic operators for manipulating schemas and mappings. PRISM \cite{curino2008graceful} and PRIMA \cite{moon2009prima} subsequently introduced practical approaches for schema evolution in relational databases. PRISM provides Schema Modification Operators (SMOs) to define schema changes and automatically rewrite legacy queries. PRIMA~\cite{moon2009prima}  builds on PRISM by archiving historical data under their original schema versions and automatically rewriting user queries across multiple past schema versions, thus enabling temporal queries over databases with evolving schemas. These works addressed evolution within relational systems but did not consider cross-database migration, as NoSQL systems were only beginning to emerge during this period.
+
+\textbf{NoSQL Foundations and Bidirectional Evolution (2013--2017)}
+
+Scherzinger, Klettke, and Störl~\cite{scherzinger2013managing} presented foundational work on managing schema evolution in NoSQL data stores. The   paper defines a declarative schema evolution language with five operations, \texttt{add}, \texttt{delete}, \texttt{rename}, \texttt{copy}, and \texttt{move}. It also distinguishes between eager migration (batch processing of all entities) and lazy migration (on-demand migration when entities are accessed). This pioneering work laid the theoretical foundation for subsequent research in NoSQL schema evolution. SMILE  generalizes this
+idea to cover both intra-system and inter-system scenarios.
+
+Herrmann et al. made significant contributions with CoDEL~\cite{herrmann2015codel}
+and BiDEL~\cite{herrmann2017living}. CoDEL extends PRISM to achieve relational
+completeness for database evolution operations. BiDEL further extends CoDEL by
+introducing bidirectional capabilities. This allows multiple schema versions to
+co-exist, with changes propagating both forward and backward between versions.
+Still, these contributions focused specifically on relational databases and did
+not cover cross-database migration scenarios between heterogeneous database systems.
+
+\textbf{Multi-Model Evolution Management(2019--2023)}
+Holubová, Klettke, and Störl~\cite{holubova2019evolution} published  a position paper identifying five key challenges in multi-model data modelling, intra-model versus inter-model operations, global versus local
+evolution operations, eager versus lazy migration, and multi-model schema
+inference. They also outlined an EBNF syntax for a multi-model schema evolution language.
+
+\textbf{Orion: Taxonomy of Schema Changes.}
+Hernández Chillón, Sevilla Ruiz, and García Molina~\cite{chillon2022taxonomy} present Orion, a taxonomy of schema changes and an accompanying DSL for NoSQL database evolution. Existing NoSQL evolution proposals typically rely on simple data models that omit aggregation, reference relationships, and structural variations. By building on U-Schema~\cite{candel2022unified}, Orion defines a richer taxonomy that organizes schema change operations into five categories (\emph{schema type}, \emph{feature}, \emph{attribute}, \emph{reference}, and \emph{aggregate}). The Orion DSL implements this taxonomy as a platform-independent script language that validates operations against the current schema and generates evolution code for MongoDB and Cassandra. SMEL adopts a substantial portion of Orion's operation set, extends the scope to cross-paradigm migration across all four paradigms, and incorporates further structural transformations.
+
+
+
+\textbf{Darwin:} Störl and Klettke~\cite{storl2022darwin} introduce Darwin, a data platform for NoSQL schema evolution management and data migration. Darwin implements basic schema modification operations through a REST API and provides functionalities including schema extraction, version history tracking, and various migration strategies. Its user interface offers a clear overview of schema changes through a series of operations. Darwin does not define a formal unified metamodel, relying instead on a generic data wrapper class, \texttt{DarwinEntity}, which acts as a common internal
+representation for entities across different NoSQL backends. SMILE  draws inspiration from this UI design for visualizing the migration and evolution process.
+
+
+\textbf{Graph Database Evolution.}
+Hausler, Klettke, and Störl~\cite{hausler2023language} developed an evolution
+  language for graph databases implemented in Neo4j, defining evolution operations
+  in an EBNF-like schema grammar but staying within the graph paradigm.
+  SMILE references their work for Neo4j-specific relationship handling.
+
+
+\textbf{Structural Transformation Operations:} Meier~\cite{meier2023datenmigration} introduces structural transformation operations for schema migration, including NEST, FLATTEN, LINKING, and UNWIND. These operations facilitate schema restructuring across different database systems. SMILE  incorporates these operations for schema restructuring.
+\begin{center}
+  \vspace{0.5cm}
+
+  \small
+  \noindent
+  \begin{tabular}{@{}p{0.23\textwidth}@{\hspace{0.02\textwidth}}p{0.23\textwidth}@{\hspace{0.02\textwidth}}p{0.23\textwidth}@{\hspace{0.02\textwidth
+  }}p{0.23\textwidth}@{}}
+
+  {\textcolor{brown}{\rule{\linewidth}{2pt}}} &
+  {\textcolor{olive}{\rule{\linewidth}{2pt}}} &
+  {\textcolor{teal}{\rule{\linewidth}{2pt}}} &
+  {\textcolor{gray}{\rule{\linewidth}{2pt}}} \\[0.15cm]
+
+  \textcolor{brown}{\textbf{2007 -- 2008}} &
+  \textcolor{olive}{\textbf{2013 -- 2017}} &
+  \textcolor{teal}{\textbf{2019 -- 2023}} &
+  \textcolor{gray}{\textbf{2026 --}} \\[0.1cm]
+
+  \textbf{Relational Schema Evolution Foundations} &
+  \textbf{Formal Evolution Languages \& Early NoSQL} &
+  \textbf{NoSQL and Multi-Model Evolution} &
+  \textbf{Toward Cross-Database Migration \& Evolution} \\[0.1cm]
+
+  {\footnotesize\itshape Pioneering work establishing theoretical foundations for model management, schema modification operators, and temporal
+  schema evolution in relational databases} &
+  {\footnotesize\itshape Formal language definitions and bidirectional evolution for relational databases (CoDEL, BiDEL), alongside NoSQL
+  schema evolution management (Scherzinger et al.)} &
+  {\footnotesize\itshape Unified metamodels (U-Schema, M-Model), keyword-based DSLs for NoSQL and multi-model databases, and inter-system data
+   migration with schema evolution operations} &
+  {\footnotesize\itshape Combining inter-system schema migration and intra-system schema evolution in a single DSL with formal grammar, building on
+  prior foundations} \\[0.2cm]
+
+  {\footnotesize [2007] Model Management 2.0\newline [2008] PRISM / PRISM++\newline [2009] PRIMA} &
+  {\footnotesize [2013] Scherzinger et al.\newline [2015] CoDEL\newline [2017] BiDEL} &
+  {\footnotesize [2019] Holubov\'{a} et al.\newline [2022] U-Schema\newline [2022] Conrad et al.\newline [2022] Darwin\newline [2022] Orion\newline
+  [2023] Hausler\newline [2023] Meier} &
+  {\footnotesize [2026] SMILE \newline \ldots} \\
+  \end{tabular}
+
+  \captionof{figure}{Timeline of Schema Evolution Research (2007--2026)}
+  \label{fig:timeline-schema-evolution}
+  \end{center}
+
+
+
+As illustrated in Figure~\ref{fig:timeline-schema-evolution}, research in this area has progressed from relational schema evolution (PRISM, PRIMA) through formal bidirectional languages (CoDEL, BiDEL) and NoSQL evolution management (Darwin, Orion) to cross-database structural transformations (Meier). As summarized in Table~\ref{tab:related-works-comparison}, existing approaches each address different aspects of schema evolution and migration. To consolidate these contributions across different data models, SMILE  formalizes both schema migration and schema evolution within a unified ANTLR4-based grammar.
+
+
+\newgeometry{top=2cm, bottom=2cm, left=2cm, right=2cm}
+\begin{landscape}
+\begin{table}[htbp]
+\centering
+\caption{Comparison of schema evolution and migration approaches.}
+\label{tab:related-works-comparison}
+\scriptsize
+\renewcommand{\arraystretch}{1.4}
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}
+  >{\raggedright\arraybackslash}p{2.0cm}
+  >{\raggedright\arraybackslash}p{2.5cm}
+  >{\raggedright\arraybackslash}p{2.5cm}
+  >{\raggedright\arraybackslash}p{2.8cm}
+  >{\raggedright\arraybackslash}p{2.8cm}
+  >{\raggedright\arraybackslash}p{2.3cm}
+  >{\raggedright\arraybackslash}p{2.3cm}
+  >{\raggedright\arraybackslash}p{2.5cm}
+  >{\raggedright\arraybackslash}p{3.0cm}
+@{}}
+\toprule
+\textbf{Dimension} &
+\textbf{PRISM/PRISM++} &
+\textbf{CoDEL} &
+\textbf{BiDEL} &
+\textbf{Darwin} &
+\textbf{Orion} &
+\textbf{Graph Evo. (Hausler)} &
+\textbf{Meier} &
+\textbf{SMILE } \\
+\midrule
+Syntax Style &
+SQL-based SMOs &
+SQL-like SMOs (scope pattern) &
+SQL-like SMOs (bidirectional) &
+Keyword-based DSL &
+Keyword + Object &
+GEO+SMO\textsubscript{C}+GMO\textsubscript{C} &
+Keyword-based &
+Independent keyword-based \\
+\midrule
+Supported DB &
+MySQL, DB2 &
+Relational (theoretical) &
+PostgreSQL 9.4 &
+MongoDB, Couchbase, Cassandra, ArangoDB &
+MongoDB, Cassandra, Neo4j, Relational &
+Neo4j &
+PostgreSQL, Neo4j, Redis, Cassandra, MongoDB* &
+\textbf{PostgreSQL, MongoDB, Neo4j, Cassandra} \\
+\midrule
+Migration Scope &
+Intra-system &
+Intra-system &
+Intra-system &
+Intra-system (NoSQL only) &
+Intra-system &
+Intra-system (Neo4j only) &
+Inter-system &
+\textbf{Inter-system (Migration); Intra-system (Evolution)} \\
+\midrule
+Unified Metamodel &
+No &
+No &
+No &
+No (DarwinEntity) &
+Yes (U-Schema) &
+No &
+Yes (Extended M-Model) &
+\textbf{Yes (Adapted M-Model)} \\
+\midrule
+Formal Grammar &
+No (DED-based semantics) &
+No (rel.\ algebra semantics) &
+No (Datalog-based semantics, validated via symmetric lenses) &
+EBNF (in Scherzinger et al.\ 2013) &
+EBNF &
+EBNF-like &
+EBNF-like &
+\textbf{ANTLR4} \\
+\midrule
+Tool &
+PRISM Workbench (uses MARS C\&B engine) &
+(theoretical) &
+InVerDa (PostgreSQL 9.4) &
+Java &
+Java &
+Cypher + APOC &
+Java (Apache Spark) &
+\textbf{Python} \\
+\bottomrule
+\multicolumn{9}{l}{\scriptsize *Redis is conceptually supported in Meier's work but was excluded from the evaluation.} \\
+\end{tabular}
+\end{table}
+\end{landscape}
+\restoregeometry
+
+%
+% Section: Research Gap and Positioning
+%
+
+
+\section{Research Gap and Positioning}
+\label{sec:stateoftheart:gap}
+
+The analysis in the previous sections reveals several gaps that SMILE  aims to address.
+
+First, PRISM, CoDEL, and BiDEL provide core support for relational schema evolution, including bidirectional capabilities and relational completeness. Darwin and Orion extend schema evolution to NoSQL databases, while Hausler et al.\ concentrate specifically on graph databases. However, all of these approaches are designed as intra-system solutions. They lack the structural transformations and the meta-model required to bridge different database paradigms. Some of them define formal grammars for their evolution operations, but these grammars remain limited to intra-system scenarios and do not address schema migration across heterogeneous database paradigms.
+
+Second, Meier's master thesis~\cite{meier2023datenmigration} tackles data migration between heterogeneous database systems, incorporating basic
+schema evolution operations (ADD, DELETE, RENAME, COPY, MOVE, MERGE, SPLIT) from prior work~\cite{scherzinger2013managing, holubova2019evolution}
+and introducing four structural transformation operations (NEST, FLATTEN, LINKING, and UNWIND), for which EBNF-like syntax definitions are          provided. However, the EBNF syntax definitions for the basic evolution operations and the structural transformation operations originate from separate sources~\cite{scherzinger2013managing, holubova2019evolution}, and have not yet been consolidated into a
+unified formal grammar.
+
+
+Third, no current tool provides a formal domain-specific language that supports both schema evolution and schema migration in any direction across relational and NoSQL database systems. As shown in Table~\ref{tab:migration-matrix}, the combined space of intra-system evolution and inter-system migration comprises 16 scenarios, yet each existing approach covers only a subset.
+
+To address this research gap, SMILE  is positioned as a domain-specific language that supports both schema evolution and schema migration within a single ANTLR4-based grammar. Building on the M-Model~\cite{conrad2022metamodels} as its architectural foundation, SMILE  integrates the evolution operations defined in the Orion taxonomy~\cite{chillon2022taxonomy} with the structural transformation operations introduced by Meier~\cite{meier2023datenmigration}, and refines the constraint model to support partition and clustering keys for wide-column systems.
+
+Table~\ref{tab:terminology-comparison} maps the core schema terminologies across all reviewed approaches, showing how SMILE  harmonizes divergent vocabularies into a consistent set of concepts. Table~\ref{tab:operation-comparison} compares the supported operations in detail, demonstrating that SMILE  is the approach to consolidate entity operations, property operations, structural transformations, reference operations, key and constraint operations, and graph-specific operations within a single language definition.
+
+\begin{table}[h!]
+\centering
+\caption{Terminology mapping of core schema concepts across existing approaches and \textsc{SMILE }}
+\label{tab:terminology-comparison}
+% \renewcommand{\arraystretch}{1.15}
+% \setlength{\tabcolsep}{2pt}
+% \scriptsize
+\resizebox{\textwidth}{!}{
+\begin{tabular}{lllll
+  >{\columncolor{blue!10}}l}
+\toprule
+\rowcolor{gray!15}
+\textbf{Concept} &
+\textbf{PRISM \cite{curino2008graceful}} &
+\textbf{Darwin \cite{storl2022darwin}} &
+\textbf{Orion \cite{chillon2022taxonomy}} &
+\textbf{GEO \cite{hausler2023language}} &
+\textbf{\textsc{SMILE }} \\
+\rowcolor{gray!15}
+& \textbf{CoDEL \cite{herrmann2015codel}} & & & &\\
+\rowcolor{gray!15}
+& \textbf{BiDEL \cite{herrmann2017living}} & & & &\\
+\midrule
+Entity Type & Table / Relation & Type & Schema Type & Entity Type & Entity Type \\
+Property & Column / Attribute & Property & Feature & Property & Property \\
+Embed. & --- &--- &Aggregate &--- &Embedded \\
+Ref. &Foreign Key &--- &Reference &Relationship &Reference \\
+\bottomrule
+\end{tabular}
+}
+\end{table}
+% ============================================================
+% Operation Comparison Table for SMILE  Thesis (v10)
+% Symmetric margins + shorter Orion entries (two-line breaks)
+% Required: geometry, longtable, array, multirow, colortbl, xcolor, graphicx
+% ============================================================
+  \begin{table*}[h!]
+    \centering
+    \caption{Comparison of schema evolution and migration operations across existing approaches and SMILE .$^\ast$}
+    \label{tab:operation-comparison}
+    \resizebox{\textwidth}{!}{
+    \begin{tabular}{|l|l|l|c|c|c|c|c|c|c|>{\columncolor{blue!10}}l|}
+    \hline
+      \multicolumn{1}{|c|}{\textbf{Category}}&
+      \multicolumn{1}{c|}{\textbf{Operation}}&
+      \multicolumn{1}{c|}{\textbf{Description}}&
+      \rotatebox{70}{\textbf{PRISM}} &
+      \rotatebox{70}{\textbf{CoDEL}} &
+      \rotatebox{70}{\textbf{BiDEL}} &
+      \rotatebox{70}{\textbf{Darwin}} &
+      \rotatebox{70}{\textbf{Orion}} &
+      \rotatebox{70}{\textbf{GEO}} &
+      \rotatebox{70}{\textbf{Meier}} &
+      \multicolumn{1}{c|}{\textbf{SMILE }}\\
+
+    \hline
+    \multirow{8}{*}{Entity Type Ops}
+      & Add Entity Type        & Create a new entity type           & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark & --- &
+  \texttt{ADD\_ENTITY}\\
+    \cline{2-11}
+      & Delete Entity Type     & Remove an entity type and its data & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark & --- &
+  \texttt{DELETE\_ENTITY} \\
+    \cline{2-11}
+      & Rename Entity Type     & Change entity type name            & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark & --- &
+  \texttt{RENAME\_ENTITY}  \\
+    \cline{2-11}
+      & Copy Entity Type       & Duplicate entity type structure    & \checkmark & \checkmark$^{a}$ & \checkmark$^{a}$ & --- & --- & \checkmark & --- &
+  \texttt{COPY\_ENTITY}\\
+    \cline{2-11}
+      & Merge Entity Types    & Combine two entity types into one & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark &
+  \texttt{MERGE}  \\
+    \cline{2-11}
+      & Split Entity Type      & Partition by attr.\ subsets   & \checkmark & \checkmark & dec. & \checkmark & \checkmark & \checkmark & \checkmark & \texttt{SPLIT} \\
+    \cline{2-11}
+      & Extract Entity Type    & Derive from selected features & --- & --- & --- & --- & \checkmark & --- & --- & \texttt{SPLIT} \\
+    \cline{2-11}
+      & Cast Entity Type       & Change entity type kind       & --- & --- & --- & --- & --- & --- & --- & \texttt{CAST\_ENTITY} \\
+    \hline
+    \multirow{8}{*}{Property\newline Ops}
+      & Add Property      & Add a new property            & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark &
+  \texttt{ADD\_PROPERTY}\\
+    \cline{2-11}
+      & Delete Property   & Remove a property             & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark &
+  \texttt{DELETE\_PROPERTY} \\
+    \cline{2-11}
+      & Rename Property   & Change property name          & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark & \checkmark &
+  \texttt{RENAME\_PROPERTY} \\
+    \cline{2-11}
+      & Copy Property     & Duplicate a property          & --- & --- & --- & \checkmark & \checkmark & \checkmark & \checkmark & \texttt{COPY\_PROPERTY}  \\
+    \cline{2-11}
+      & Move Property     & Move property to other entity  & --- & --- & --- & \checkmark & \checkmark & \checkmark & \checkmark & \texttt{MOVE\_PROPERTY} \\
+    \cline{2-11}
+      & Cast / Type Change & Change data type             & ---$^{b}$ & --- & --- & --- & \checkmark & --- & --- & \texttt{CAST\_PROPERTY} \\
+    \cline{2-11}
+      & Promote           & Mark as key property          & --- & --- & --- & --- & \checkmark & --- & --- & \texttt{ADD\_PRIMARY\_KEY}  \\
+    \cline{2-11}
+      & Demote            & Unmark as key property        & --- & --- & --- & --- & \checkmark & --- & --- & \texttt{DELETE\_PRIMARY\_KEY}\\
+    \hline
+    \multirow{7}{*}{Structural\newline Transform.}
+      & Flatten           & Nested $\rightarrow$ parent fields        & --- & --- & --- & --- & unnest & --- & \checkmark & \texttt{FLATTEN}\\
+    \cline{2-11}
+      & Unflatten         & Flat $\rightarrow$ nested object          & --- & --- & --- & --- & nest   & --- & --- & \texttt{UNFLATTEN} \\
+    \cline{2-11}
+      & Unnest            & Embedded $\rightarrow$ separate entity    & --- & --- & --- & --- & morph aggr$\rightarrow$ref & --- & --- & \texttt{UNNEST}\\
+    \cline{2-11}
+      & Nest              & Entity $\rightarrow$ embedded struct.     & --- & --- & --- & --- & morph ref$\rightarrow$aggr & --- & \checkmark & \texttt{NEST}\\
+    \cline{2-11}
+      & Unwind            & Array $\rightarrow$ individual entities   & --- & --- & --- & --- & ---        & --- & \checkmark & \texttt{UNWIND} \\
+    \cline{2-11}
+      & Wind              & Rows $\rightarrow$ array                  & --- & --- & --- & --- & ---        & --- & --- & \texttt{WIND} \\
+    \cline{2-11}
+      & Linking           & Create ref.\ by join cond.                & --- & --- & --- & --- & ---        & --- & \checkmark & \texttt{WIND}\\
+    \hline
+    \multirow{3}{*}{Aggr./\newline Emb.\ Ops}
+      & Add Embedded       & Add embedded struct.          & --- & --- & --- & --- & \checkmark & --- & --- & \texttt{ADD\_EMBEDDED} \\
+    \cline{2-11}
+      & Delete Embedded    & Remove embedded struct.       & --- & --- & --- & --- & \checkmark & --- & --- & \texttt{DELETE\_EMBEDDED} \\
+    \cline{2-11}
+      & Morph (Aggr$\rightarrow$Ref) & Embedded $\rightarrow$ reference & --- & --- & --- & --- & \checkmark & --- & --- & \texttt{UNNEST}  \\
+    \hline
+    \multirow{6}{*}{Graph-\newline specific\newline Ops}
+      & Add RelType         & Add relationship type       & --- & --- & --- & --- & \checkmark & \checkmark & --- & \texttt{ADD\_ENTITY} \\
+    \cline{2-11}
+      & Delete RelType      & Delete relationship type    & --- & --- & --- & --- & \checkmark & \checkmark & --- & \texttt{DELETE\_ENTITY} \\
+    \cline{2-11}
+      & Rename RelType      & Rename relationship type    & --- & --- & --- & --- & \checkmark & \checkmark & --- & \texttt{RENAME\_ENTITY} \\
+    \cline{2-11}
+      & Add Label           & Add a node label            & --- & --- & --- & --- & --- & \checkmark & --- & \texttt{ADD\_LABEL} \\
+    \cline{2-11}
+      & Delete Label        & Remove a node label         & --- & --- & --- & --- & --- & \checkmark & --- & \texttt{DELETE\_LABEL} \\
+    \cline{2-11}
+      & Transform           & Node $\leftrightarrow$ Relationship     & --- & --- & --- & --- & --- & \checkmark & --- & \texttt{TRANSFORM}  \\
+    \hline
+    \multirow{5}{*}{Reference Ops}
+      & Add Reference       & Add a reference             & --- & --- & --- & --- & \checkmark & --- & --- & \texttt{ADD\_FOREIGN\_KEY} \\
+    \cline{2-11}
+      & Delete Reference    & Remove a reference          & --- & --- & --- & --- & \checkmark & --- & --- & \texttt{DELETE\_FOREIGN\_KEY} \\
+    \cline{2-11}
+      & Cast Reference      & Change constraint type      & --- & --- & --- & --- & \checkmark & --- & --- & \texttt{CAST\_CONSTRAINT} \\
+    \cline{2-11}
+      & Multiplicity Change & Change cardinality          & --- & --- & --- & --- & \checkmark & --- & --- & \texttt{RECARD} \\
+    \cline{2-11}
+      & Morph (Ref$\rightarrow$Aggr) & Ref.\ $\rightarrow$ embedded aggr. & --- & --- & --- & --- & \checkmark & --- & --- & \texttt{NEST}\\
+    \hline
+    \multirow{7}{*}{Key Ops}
+      & Add Primary Key     & Define primary key          & --- & --- & --- & --- & --- & --- & --- & \texttt{ADD\_PRIMARY\_KEY}  \\
+    \cline{2-11}
+      & Add Foreign Key     & Define foreign key          & --- & --- & --- & --- & --- & --- & --- & \texttt{ADD\_FOREIGN\_KEY}  \\
+    \cline{2-11}
+      & Add Unique Key      & Define unique constraint    & --- & --- & --- & --- & --- & --- & --- & \texttt{ADD\_UNIQUE\_KEY} \\
+    \cline{2-11}
+      & Add Partition Key   & Define partition key        & --- & --- & --- & --- & --- & --- & --- & \texttt{ADD\_PARTITION\_KEY} \\
+    \cline{2-11}
+      & Add Clustering Key  & Define clustering key       & --- & --- & --- & --- & --- & --- & --- & \texttt{ADD\_CLUSTERING\_KEY} \\
+    \cline{2-11}
+      & Delete Prim./For./Uniq. & Remove key constraint   & --- & --- & --- & --- & --- & --- & --- & \texttt{DELETE\_*\_KEY}  \\
+    \cline{2-11}
+      & Delete Part./Clust. & Remove partition/clust.\ key & --- & --- & --- & --- & --- & --- & --- & \texttt{DELETE\_*\_KEY} \\
+    \hline
+    \multicolumn{3}{|l|}{\cellcolor{gray!10}\textbf{Scope}} &
+    \multicolumn{3}{c|}{\cellcolor{gray!10}Intra (Rel.)} &
+    \multicolumn{4}{c|}{\cellcolor{gray!10}Intra (NoSQL)} &
+    \cellcolor{gray!10}\textbf{Intra \& Inter} \\
+    \hline
+    \end{tabular}
+    }
+    \vspace{0.15cm}
+    \begin{flushleft}
+    \footnotesize
+    $^\ast$ SMILE  supports two syntax variants: \emph{specific} (e.g., \texttt{ADD\_ENTITY}) and \emph{general} (e.g., \texttt{ADD ENTITY}).\\
+    $^{a}$ In CoDEL achievable via \texttt{Split\textsubscript{row}}; in BiDEL achievable via \texttt{DECOMPOSE}.\\
+    $^{b}$ In PRISM achievable via \texttt{ADD COLUMN \ldots\ AS func()}.\\
+    CoDEL additionally defines row-level operations (\texttt{Add\textsubscript{row}}, \texttt{Del\textsubscript{row}},
+    \texttt{Split\textsubscript{row}}, \texttt{Unite\textsubscript{row}}) and column-level operations
+    (\texttt{Split\textsubscript{column}}, \texttt{Unite\textsubscript{column}}) which are outside the scope of this comparison.
+    \end{flushleft}
+
+  \end{table*}
+
+% ============================================================
+% Operation Comparison Table for SMILE  Thesis (v10)
+% Symmetric margins + shorter Orion entries (two-line breaks)
+% Required: geometry, longtable, array, multirow, colortbl, xcolor, graphicx
+% ============================================================
+
+
+
+
+
+\section{Summary}
+\label{sec:stateoftheart:summary}
+
+This chapter reviewed the core concepts and current research in schema evolution and schema migration to position the scope of this thesis
+
+Section~\ref{sec:stateoftheart:fundamentals} introduced the four target data models, namely relational (PostgreSQL), document-oriented (MongoDB), graph-based (Neo4j), and wide-column (Cassandra), and illustrated their practical relevance through industrial use cases. Building on this, the distinction between schema evolution (intra-system) and schema migration (inter-system) was established, and the Hub-and-Spoke integration pattern was introduced to reduce transformation complexity from $O(N^2)$ to $O(N)$. The comparison of U-Schema and M-Model showed that the M-Model is the better fit for SMILE. U-Schema was developed for inferring schemas from schemaless NoSQL stores, whereas the M-Model was designed specifically for schema migration. The M-Model can be adapted to support both schema migration and schema evolution, and is therefore adopted as SMILE's hub schema. The concrete adaptations are described in  \autoref{ch:concept}.
+
+The analysis of schema evolution approaches in Section~\ref{sec:stateoftheart:evolution} traced a development from relational foundations (PRISM, PRIMA), through formal evolution languages with bidirectional capabilities (CoDEL, BiDEL), to NoSQL and multi-model approaches (Darwin, Orion, Hausler et al.). The analysis also highlighted the structural transformation operations introduced by Meier~\cite{meier2023datenmigration} as a key contribution to inter-system migration.
+
+Section~\ref{sec:stateoftheart:gap} identified that existing approaches are either limited to intra-system scenarios or cover a subset of the 16 migration and evolution scenarios outlined in Table~\ref{tab:migration-matrix}. Moreover, no unified formal grammar yet exists that consolidates both evolution and migration operations. SMILE  addresses this gap by combining both within a single ANTLR4-based grammar, building primarily upon the M-Model, the Orion taxonomy, and Meier's transformation operations.
+
+The operation taxonomy derived from this analysis informs the language design in Chapter~3.
+

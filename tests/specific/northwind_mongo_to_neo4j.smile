@@ -43,7 +43,6 @@ UNNEST orders.details:unit_price, quantity, discount, product{product_name, unit
 UNNEST orders.employee:last_name, first_name, title, birth_date, hire_date, phone, notes, reports_to, address{street, city, region, postal_code, country} AS employees WITH orders.order_id TO employees.order_id
 DELETE_PROPERTY employees.order_id
 ADD_PRIMARY_KEY employees.employee_id AS String
-ADD_PROPERTY employee_id TO orders WITH TYPE String
 FLATTEN employees.address
 RENAME_PROPERTY address_street TO street IN employees
 RENAME_PROPERTY address_city TO city IN employees
@@ -57,7 +56,6 @@ RENAME_PROPERTY address_country TO country IN employees
 UNNEST orders.shipper:company_name, phone AS shippers WITH orders.order_id TO shippers.order_id
 DELETE_PROPERTY shippers.order_id
 ADD_PRIMARY_KEY shippers.shipper_id AS String
-ADD_PROPERTY shipper_id TO orders WITH TYPE String
 
 -- ============================================
 -- Step 6: UNNEST product -> products (supplier carried as flat-address sub-object)
@@ -65,7 +63,6 @@ ADD_PROPERTY shipper_id TO orders WITH TYPE String
 UNNEST order_details.product:product_name, unit_price, units_in_stock, discontinued, quantity_per_unit, category{category_name, description}, supplier{company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country} AS products WITH order_details.order_id TO products.order_id
 DELETE_PROPERTY products.order_id
 ADD_PRIMARY_KEY products.product_id AS String
-ADD_PROPERTY product_id TO order_details WITH TYPE String
 
 -- ============================================
 -- Step 7: UNNEST supplier -> suppliers (no FLATTEN — supplier already has flat address)
@@ -73,7 +70,6 @@ ADD_PROPERTY product_id TO order_details WITH TYPE String
 UNNEST products.supplier:company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country AS suppliers WITH products.product_id TO suppliers.product_id
 DELETE_PROPERTY suppliers.product_id
 ADD_PRIMARY_KEY suppliers.supplier_id AS String
-ADD_PROPERTY supplier_id TO products WITH TYPE String
 
 -- ============================================
 -- Step 8: UNNEST category -> categories
@@ -81,7 +77,6 @@ ADD_PROPERTY supplier_id TO products WITH TYPE String
 UNNEST products.category:category_name, description AS categories WITH products.product_id TO categories.product_id
 DELETE_PROPERTY categories.product_id
 ADD_PRIMARY_KEY categories.category_id AS String
-ADD_PROPERTY category_id TO products WITH TYPE String
 
 -- ============================================
 -- Step 9: FLATTEN orders.ship_destination
@@ -99,19 +94,20 @@ RENAME_PROPERTY ship_destination_ship_country TO ship_country IN orders
 ADD_PRIMARY_KEY orders.order_id AS String
 
 -- ============================================
--- Step 11: products FKs -> graph relationships
+-- Step 11: products -> graph relationships
+-- (supplier_id / category_id were never materialised on products in this
+--  script, so no column-level cleanup needed here.)
 -- ============================================
-DELETE_PROPERTY products.supplier_id
-DELETE_PROPERTY products.category_id
 ADD_ENTITY SUPPLIES FROM suppliers TO products
 ADD_ENTITY PART_OF FROM products TO categories
 
 -- ============================================
--- Step 12: orders FKs -> graph relationships
+-- Step 12: orders -> graph relationships
+-- (employee_id / shipper_id were never materialised on orders in this
+--  script. customer_id is a real cross-collection ref carried from Mongo
+--  source, so it still needs explicit removal.)
 -- ============================================
 DELETE_PROPERTY orders.customer_id
-DELETE_PROPERTY orders.employee_id
-DELETE_PROPERTY orders.shipper_id
 ADD_ENTITY PURCHASED FROM customers TO orders
 ADD_ENTITY SOLD FROM employees TO orders
 ADD_ENTITY SHIPPED_VIA FROM orders TO shippers
@@ -124,9 +120,11 @@ ADD_ENTITY REPORTS_TO FROM employees TO employees
 
 -- ============================================
 -- Step 14: order_details -> CONTAINS edge with edge properties
+-- (only order_id was materialised on order_details by UNNEST's WITH carry;
+--  product_id was never added in this script, so only the carry needs
+--  cleanup before TRANSFORM.)
 -- ============================================
 DELETE_PROPERTY order_details.order_id
-DELETE_PROPERTY order_details.product_id
 TRANSFORM order_details INTO RELATIONSHIP FROM orders TO products
 RENAME_ENTITY order_details TO CONTAINS
 

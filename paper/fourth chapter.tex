@@ -1,35 +1,34 @@
 \chapter{Implementation}\label{ch:implementation}
 
   The previous chapter introduced the design of SMILE from four perspectives: the extension of the meta schema to M-Model+, the engine architecture with its six-layer
-  structure and five-phase pipeline, the operation taxonomy, and the dual grammar design.  This chapter describes the concrete implementation of these concepts.\footnote{The complete source code is available at
+  structure and five-phase pipeline, the operation taxonomy, and the dual grammar design. The remainder of this chapter shows how these concepts are realized in the implementation.\footnote{The complete source code is available at
   \url{https://github.com/baobaodaren0918/SMILE-3.0}. During implementation, Claude Code was used in part for the ANTLR~4 grammar implementation. The workflow, core logic, data flow, and all architectural design decisions were developed independently by the author.} The structure follows the six architectural layers defined in \autoref{sec:architecture}. \autoref{sec:tech-stack} gives an overview of the technologies used.
   \autoref{sec:meta-impl} explains the implementation of M-Model+ as the central data structure, including the type mappings between the four database systems.
   \autoref{sec:parser-impl} covers the grammar processing chain from ANTLR~4 code generation and automatic grammar recognition to the listener-based generation of the
-  operation list. \autoref{sec:transformer} describes the Schema Transformer, the central component of the core layer that receives the parsed operation list and applies each operation to the M-Model+ database object through dedicated handlers, transforming Meta Schema V1 into Meta Schema V2 as defined in \autoref{sec:operation-taxonomy}.  \autoref{sec:adapters} documents the four adapters for reverse and forward engineering. \autoref{sec:validation} presents the two-layer
-  validation, and \autoref{sec:user-interface} describes the user interface, which makes the entire migration and evolution process visible.
+  operation list. \autoref{sec:transformer} describes the Schema Transformer, the central component of the core layer that receives the parsed operation list and applies each operation to the M-Model+ database object through dedicated handlers, transforming Meta Schema V1 into Meta Schema V2 as defined in \autoref{sec:operation-taxonomy}.  \autoref{sec:adapters} documents the four adapters for reverse and forward engineering. \autoref{sec:user-interface} describes the user interface, which makes the entire migration and evolution process visible.
 
 \section{Technology Stack}\label{sec:tech-stack}
 \subsection{Programming Language}\label{subsec:lang-python}
 
-  The entire implementation of SMILE is realized in Python. ANTLR~4~\cite{parr2013definitive} provides an official Python target, so that Lexer, Parser, and Listener
+  The entire implementation of SMILE  is realized in Python. ANTLR~4~\cite{parr2013definitive} provides an official Python target, so that Lexer, Parser, and Listener
   classes can be generated directly from the \texttt{.g4} grammar files without introducing an additional language binding layer. Furthermore, Python's
   \texttt{dataclass} mechanism is particularly well suited for modeling M-Model+, since data classes such as \texttt{Property}, \texttt{EntityType}, or
   \texttt{Reference} can be defined declaratively with field names, types, and default values. As a dynamically typed language, Python also enables rapid prototype development~\cite{zeller2022academic}, which matches the character of a research prototype.
 
 \subsection{Web Interface}\label{subsec:tech-web}
-The visualization of migration and evolution results is provided through a web-based interface built on Python's standard library HTTP server (\texttt{http.server}).    No external web framework is required. The frontend uses plain HTML, CSS, and JavaScript without additional frameworks. The interface allows users to compare source
+The visualization of migration and evolution results is provided through a web-based interface built on Python's standard library HTTP server (\texttt{http.server}). No external web framework is required. The frontend uses plain HTML, CSS, and JavaScript without additional frameworks. The interface allows users to compare source
   and target schemas side by side, trace the step-by-step transformation from Meta Schema V1 to Meta Schema V2, and inspect the validation results of both validation
   layers.
 \subsection{Schema File Processing}\label{subsec:tech-file-driven}
 
-  A deliberate design decision is that SMILE does not connect to running database instances but operates exclusively on schema definition files. PostgreSQL schemas are
+  SMILE intentionally does not connect to running database instances but operates exclusively on schema definition files. PostgreSQL schemas are
   parsed from SQL DDL (\texttt{.sql}), MongoDB schemas from JSON Schema documents (\texttt{.json}), Neo4j schemas from Cypher files (\texttt{.cypher}), and Cassandra
-  schemas from CQL DDL (\texttt{.cql}). This scoping decision restricts SMILE to schema-level transformations, covering structural migration and evolution without
+  schemas from CQL DDL (\texttt{.cql}). This scoping decision restricts SMILE  to schema-level transformations, covering structural migration and evolution without
   addressing data migration or runtime connectivity. Each input format imposes distinct parsing constraints. SQL DDL uses a declarative, table-based syntax with typed
    column definitions, inline constraints, and foreign key references. MongoDB schemas follow a recursive JSON structure with nested \texttt{properties} and
-  \texttt{required} arrays conforming to the JSON Schema specification.  Neo4j does not yet provide a generally available native schema definition language~\cite{angles2023pg}\footnote{Starting with Neo4j 2026.02 (released on February 10, 2026), graph types
-  were introduced in Cypher~25 as an Enterprise Preview feature, providing a DDL-like mechanism for defining graph schemas. Since this feature remains in Preview status   rather than general availability, SMILE uses structured comment annotations instead. See \url{https://neo4j.com/docs/cypher-manual/current/schema/graph-types/}.}, so
-  schemas are reconstructed from structured comment annotations in Cypher files that encode node types, relationship types, property names, and data types, as shown in    \autoref{lst:neo4j-schema-example}.
+  \texttt{required} arrays conforming to the JSON Schema specification. Neo4j does not yet provide a generally available native schema definition language~\cite{angles2023pg}\footnote{Starting with Neo4j 2026.02 (released on February 10, 2026), graph types
+  were introduced in Cypher~25 as an Enterprise Preview feature, providing a DDL-like mechanism for defining graph schemas. Since this feature remains in Preview status rather than general availability, SMILE uses structured comment annotations instead. See \url{https://neo4j.com/docs/cypher-manual/current/schema/graph-types/}.}, so
+  schemas are reconstructed from structured comment annotations in Cypher files that encode node types, relationship types, property names, and data types, as shown in \autoref{lst:neo4j-schema-example}.
   Cassandra CQL DDL extends standard DDL syntax with partition key and clustering key declarations inside composite \texttt{PRIMARY KEY} clauses.
 
   \begin{lstlisting}[basicstyle=\small\ttfamily, caption={Neo4j schema definition via structured comment annotations}, label={lst:neo4j-schema-example}]
@@ -57,20 +56,20 @@ The visualization of migration and evolution results is provided through a web-b
 
 \section{M-Model+ Implementation}\label{sec:meta-impl}
 
-Chapter~3 defines M-Model+ as the canonical intermediate representation that connects the four database paradigms. For this design to function, a data structure is needed that can accommodate relational tables, nested documents, graph nodes, and wide-column tables equally. This section describes the concrete implementation of this data structure and its associated type mapping mechanism in the module \texttt{Schema/unified\_meta\_schema.py}. The adapters instantiate these classes when parsing a source schema into M-Model+. The Schema Transformer then executes SMILE operations directly on these objects. After transformation, the validation layer serializes the resulting state to JSON and compares it against the expected target.
+Chapter~3 defines M-Model+ as the canonical intermediate representation that connects the four database paradigms. For this design to function, a data structure is needed that can accommodate relational tables, nested documents, graph nodes, and wide-column tables equally. In the implementation, this role is realized by the module \texttt{Schema/unified\_meta\_schema.py} and its associated type mapping mechanism. The adapters instantiate these classes when parsing a source schema into M-Model+. The Schema Transformer then executes SMILE  operations directly on these objects. After transformation, the validation layer serializes the resulting state to JSON and compares it against the expected target.
 
 \subsection{Data Structures}\label{subsec:meta-data-structures}
 
-  Chapter~3 defines the components of M-Model+ at the conceptual level. This subsection describes their concrete implementation in
+  Chapter~3 defines the components of M-Model+ at the conceptual level. This subsection turns that conceptual model into its concrete implementation in
   \texttt{Schema/unified\_meta\_schema.py}. \autoref{fig:meta-class-hierarchy} illustrates the complete class hierarchy.
 
  The entire module is built on Python's \texttt{@dataclass} decorator, so that each class can be defined with declarative field definitions instead of manually written
   constructors. Beyond construction, every class also implements \texttt{to\_dict()} and \texttt{from\_dict()} methods, since the system needs to serialize schema states
-   at multiple points. The adapters use \texttt{from\_dict()} to rebuild objects from JSON during reverse engineering. The web interface calls \texttt{to\_dict()} to
-  display schema states. The validation layer calls \texttt{to\_dict()} on both the migration result and the expected target, then compares the two outputs to detect      differences.
+  at multiple points. Reverse engineering itself is performed by the paradigm-specific adapters, while the \texttt{from\_dict()} methods provide object-level deserialization for the M-Model+ classes. The web interface calls \texttt{to\_dict()} to
+  display schema states. The validation layer calls \texttt{to\_dict()} on both the migration result and the expected target, then compares the two outputs to detect differences.
 
   As shown in the upper part of \autoref{fig:meta-class-hierarchy}, \texttt{Database} is the outermost container and stores all entities in a \texttt{Dict[str,
-  EntityType]}, where the full path serves as key (e.g.\ \texttt{"products"} or \texttt{"orders.customer"}). A dictionary is used instead of a list because the Schema Transformer needs to look up entities by name. For example, executing \texttt{NEST categories IN               products.category} requires access to both \texttt{categories} and \texttt{products} at the same time.
+  EntityType]}, where the full path serves as key (e.g.\ \texttt{"products"} or \texttt{"orders.customer"}). A dictionary is used instead of a list because the Schema Transformer needs to look up entities by name. For example, executing \texttt{NEST categories IN products.category} requires access to both \texttt{categories} and \texttt{products} at the same time.
 
   The class \texttt{EntityType}, shown in the second level of the figure, is the most complex in the module and contains three lists. Each \texttt{Property} object in
   the \texttt{properties} list comprises a field name, a data type, and two boolean flags \texttt{is\_key} and \texttt{is\_optional}. These two flags are extensions of
@@ -131,7 +130,7 @@ Chapter~3 defines M-Model+ as the canonical intermediate representation that con
     %% ===== Property =====
     \node[cls, fill=yellow!15, minimum width=3.8cm, minimum height=2.2cm] (prop) at (-5.5, -7.0)
       {\textbf{Property}\\
-       \texttt{attr\_name: str}\\
+       \texttt{name: str}\\
        \texttt{data\_type: DataType}\\
        \texttt{is\_key: bool}\\
        \texttt{is\_optional: bool}};
@@ -230,7 +229,7 @@ Chapter~3 defines M-Model+ as the canonical intermediate representation that con
 
 \subsection{Type Mapping Implementation}\label{subsec:meta-type-mapping-impl}
 
-Beyond structural unification, cross-paradigm migration requires data type translation. The same string type is called \texttt{VARCHAR} in PostgreSQL, \texttt{string}   in MongoDB and Neo4j, and \texttt{TEXT} in Cassandra. As described in \autoref{subsec:meta-type-mappings}, M-Model+ addresses this through a hub-and-spoke architecture   at the type level (\autoref{fig:type-mapping-hub}).
+Beyond structural unification, cross-paradigm migration requires data type translation. The same string type is called \texttt{VARCHAR} in PostgreSQL, \texttt{string} in MongoDB and Neo4j, and \texttt{TEXT} in Cassandra. As described in \autoref{subsec:meta-type-mappings}, M-Model+ addresses this through a hub-and-spoke architecture at the type level (\autoref{fig:type-mapping-hub}).
   \begin{figure}[htbp]
     \centering
     \begin{tikzpicture}[
@@ -287,7 +286,7 @@ Beyond structural unification, cross-paradigm migration requires data type trans
   \end{figure}
 
 The class \texttt{TypeMappings} in \texttt{unified\_meta\_schema.py} defines two dictionaries per database system, one for each direction. Eight dictionaries in total
-  cover all type translations across the four paradigms. Two additional display dictionaries provide formatted type names for the web interface.    \autoref{lst:type-mapping-impl} shows an excerpt of the PostgreSQL mappings. When the
+  cover all type translations across the four paradigms. Two additional display dictionaries provide formatted type names for the web interface. \autoref{lst:type-mapping-impl} shows an excerpt of the PostgreSQL mappings. When the
   module is loaded, the four forward engineering dictionaries are registered in a global \texttt{\_NATIVE\_TYPE\_REGISTRY}, indexed by \texttt{DatabaseType}. Every
   \texttt{PrimitiveDataType} exposes a \texttt{to\_native(db)} method that retrieves the target type from this registry. This allows any property type to be translated
   into the native type string of any target system with a single call, without the caller needing to know which mapping rules apply.
@@ -322,11 +321,11 @@ For types without a counterpart in the target system, the forward engineering di
 
 \section{Grammar and Parsing}\label{sec:parser-impl}
 
-  This section describes how SMILE scripts are processed from source text to executable operations. As introduced in \autoref{subsec:grammar-framework}, SMILE uses
+  Before operations can be applied to M-Model+, a SMILE  script must first be transformed from source text into an executable operation sequence. As introduced in \autoref{subsec:grammar-framework}, SMILE  uses
   ANTLR~4~\cite{parr2013definitive} for syntax analysis. \autoref{fig:antlr-files} provides an overview of the complete processing chain. The ANTLR tool generates Lexer,
    Parser, and Listener base classes from the two \texttt{.g4} grammar files (\autoref{subsec:antlr-codegen}). These generated classes are then selected at runtime by
-  \texttt{parser\_factory.py} based on the script file extension (\autoref{subsec:parser-factory}). The custom listener classes in \texttt{smile\_listeners.py} inherit
-  from the generated base classes, walk the parse tree, and produce an ordered list of \texttt{Operation} objects that the Schema Transformer can execute                  (\autoref{subsec:listeners}).
+  \texttt{parser/factory.py} based on the script file extension (\autoref{subsec:parser-factory}). The custom listener classes in \texttt{parser/listeners.py} inherit
+  from the generated base classes, walk the parse tree, and produce an ordered list of \texttt{Operation} objects that the Schema Transformer can execute (\autoref{subsec:listeners}).
   \begin{figure}[t!]
       \centering
       \begin{tikzpicture}[
@@ -341,9 +340,9 @@ For types without a counterpart in the target system, the forward engineering di
 
       %% Row 1: .g4 grammar files
       \node[box, fill=blue!12, minimum width=3.2cm] (g4s) at (-2.5, 0)
-        {\texttt{SMILE\_Specific.g4}};
+        {\texttt{SMILE \_Specific.g4}};
       \node[box, fill=blue!12, minimum width=3.2cm] (g4g) at (2.5, 0)
-        {\texttt{SMILE\_Generalized.g4}};
+        {\texttt{SMILE \_Generalized.g4}};
 
       %% Row 2: ANTLR4 tool
       \node[box, fill=orange!15, minimum width=7.0cm] (antlr) at (0, -1.4)
@@ -355,13 +354,13 @@ For types without a counterpart in the target system, the forward engineering di
       \node[gen, minimum width=3.2cm] (lexG) at (2.5, -3.2)
         {Lexer (.py)\\Parser (.py)\\Listener Base (.py)};
 
-      %% Row 4: parser_factory.py
+      %% Row 4: parser/factory.py
       \node[box, fill=green!12, minimum width=7.0cm] (pf) at (0, -5.4)
-        {\texttt{parser\_factory.py}\\detects \texttt{.smile} / \texttt{.smile\_gen}};
+        {\texttt{parser/factory.py}\\detects \texttt{.smile} / \texttt{.smile\_gen}};
 
-      %% Row 5: smile_listeners.py
+      %% Row 5: parser/listeners.py
       \node[box, fill=yellow!15, minimum width=7.0cm] (sl) at (0, -7.2)
-        {\texttt{smile\_listeners.py}\\
+        {\texttt{parser/listeners.py}\\
          \texttt{SMILESpecificListener} /
          \texttt{SMILEGeneralizedListener}};
 
@@ -400,7 +399,7 @@ For types without a counterpart in the target system, the forward engineering di
       \draw[arr] (sl.south) -- (ops.north);
 
       \end{tikzpicture}
-      \caption{ANTLR~4 code generation and file structure in the SMILE project}
+      \caption{ANTLR~4 code generation and file structure in the SMILE  project}
       \label{fig:antlr-files}
   \end{figure}
 
@@ -408,8 +407,8 @@ For types without a counterpart in the target system, the forward engineering di
   \subsection{ANTLR4 Code Generation}\label{subsec:antlr-codegen}
 
   Each \texttt{.g4} grammar file is processed by the ANTLR tool to produce three Python files. \autoref{fig:antlr-codegen-detail} shows all six generated files for both
-  grammars. On the Specific side, the tool produces \texttt{SMILE\_SpecificLexer.py}, \texttt{SMILE\_SpecificParser.py}, and \texttt{SMILE\_SpecificListener.py}. On the
-  Generalized side, the corresponding files are \texttt{SMILE\_GeneralizedLexer.py}, \texttt{SMILE\_GeneralizedParser.py}, and \texttt{SMILE\_GeneralizedListener.py}.
+  grammars. On the Specific side, the tool produces \texttt{SMILE \_SpecificLexer.py}, \texttt{SMILE \_SpecificParser.py}, and \texttt{SMILE \_SpecificListener.py}. On the
+  Generalized side, the corresponding files are \texttt{SMILE \_GeneralizedLexer.py}, \texttt{SMILE \_GeneralizedParser.py}, and \texttt{SMILE \_GeneralizedListener.py}.
 
   \begin{figure}[htbp]
       \centering
@@ -425,9 +424,9 @@ For types without a counterpart in the target system, the forward engineering di
 
         %% Row 1: .g4 files
         \node[box, fill=blue!12, minimum width=5cm] (g4s) at (-4, 0)
-          {\textbf{SMILE\_Specific.g4}};
+          {\textbf{SMILE \_Specific.g4}};
         \node[box, fill=blue!12, minimum width=5cm] (g4g) at (4, 0)
-          {\textbf{SMILE\_Generalized.g4}};
+          {\textbf{SMILE \_Generalized.g4}};
 
         %% Row 2: ANTLR4 tool
         \node[box, fill=orange!15, minimum width=12cm] (antlr) at (0, -1.5)
@@ -435,34 +434,34 @@ For types without a counterpart in the target system, the forward engineering di
 
         %% Row 3: Generated files - Specific (left column)
         \node[file, minimum width=5cm] (lexS) at (-4, -3.2)
-          {\texttt{SMILE\_SpecificLexer.py}};
+          {\texttt{SMILE \_SpecificLexer.py}};
         \node[file, minimum width=5cm] (parS) at (-4, -4.2)
-          {\texttt{SMILE\_SpecificParser.py}};
+          {\texttt{SMILE \_SpecificParser.py}};
         \node[file, minimum width=5cm] (lisS) at (-4, -5.2)
-          {\texttt{SMILE\_SpecificListener.py}};
+          {\texttt{SMILE \_SpecificListener.py}};
 
         %% Row 3: Generated files - Generalized (right column)
         \node[file, minimum width=5cm] (lexG) at (4, -3.2)
-          {\texttt{SMILE\_GeneralizedLexer.py}};
+          {\texttt{SMILE \_GeneralizedLexer.py}};
         \node[file, minimum width=5cm] (parG) at (4, -4.2)
-          {\texttt{SMILE\_GeneralizedParser.py}};
+          {\texttt{SMILE \_GeneralizedParser.py}};
         \node[file, minimum width=5cm] (lisG) at (4, -5.2)
-          {\texttt{SMILE\_GeneralizedListener.py}};
+          {\texttt{SMILE \_GeneralizedListener.py}};
 
         %% Labels for generated
         \node[font=\scriptsize\itshape, gray] at (-4, -5.9) {generated (do not modify)};
         \node[font=\scriptsize\itshape, gray] at (4, -5.9) {generated (do not modify)};
 
-        %% Row 4: parser_factory.py
+        %% Row 4: parser/factory.py
         \node[box, fill=green!12, minimum width=12cm] (pf) at (0, -7.2)
-          {\texttt{parser\_factory.py} -- selects Lexer, Parser, Listener based on file extension (\texttt{.smile} / \texttt{.smile\_gen})};
+          {\texttt{parser/factory.py} -- selects Lexer, Parser, Listener based on file extension (\texttt{.smile} / \texttt{.smile\_gen})};
 
         %% Row 5: Custom listeners
         \node[custom, minimum width=5cm] (cusS) at (-4, -8.7)
           {\texttt{SMILESpecificListener}};
         \node[custom, minimum width=5cm] (cusG) at (4, -8.7)
           {\texttt{SMILEGeneralizedListener}};
-        \node[font=\scriptsize\itshape, gray] at (0, -9.4) {defined in \texttt{smile\_listeners.py}};
+        \node[font=\scriptsize\itshape, gray] at (0, -9.4) {defined in \texttt{parser/listeners.py}};
 
         %% === Arrows ===
         \draw[arr] (g4s.south) -- (antlr.north -| g4s.south);
@@ -502,18 +501,18 @@ The separation between generated and project code is strict. This follows the li
   documentation describes this pattern as follows: ``ANTLR generates a listener interface that makes it easy to respond to the recognition of phrases of interest. You
   can build your listener by subclassing the base and overriding the methods of interest.'' See \url{https://github.com/antlr/antlr4/blob/master/doc/listeners.md}.},
   where the generated base class serves as the interface contract and the custom subclass provides the implementation. The generated listener base classes, such as
-  \texttt{SMILE\_SpecificListener.py}, contain only empty callback methods that define the interface but perform no action. The custom classes
-  \texttt{SMILESpecificListener} and \texttt{SMILEGeneralizedListener} in \texttt{smile\_listeners.py} inherit from these generated base classes and override the callbacks   with the actual logic that extracts operation parameters from the parse tree. As a result, grammar changes only require re-running the ANTLR tool, while the
+  \texttt{SMILE \_SpecificListener.py}, contain only empty callback methods that define the interface but perform no action. The custom classes
+  \texttt{SMILESpecificListener} and \texttt{SMILEGeneralizedListener} in \texttt{parser/listeners.py} inherit from these generated base classes and override the callbacks with the actual logic that extracts operation parameters from the parse tree. As a result, grammar changes only require re-running the ANTLR tool, while the
   interpretation logic remains independent. In practice, adding a new grammar rule involves defining it in the \texttt{.g4} file and implementing the corresponding
-  \texttt{enter*} method in \texttt{smile\_listeners.py}, without modifying the generated code.
+  \texttt{enter*} method in \texttt{parser/listeners.py}, without modifying the generated code.
 
   \subsection{Parser Factory}\label{subsec:parser-factory}
-The entry point for the entire syntax analysis is the function \texttt{parse\_smile\_auto(file\_path)} in \texttt{parser\_factory.py}. It is called by \texttt{core.py}
+The entry point for the entire syntax analysis is the function \texttt{parse\_smile\_auto(file\_path)} in \texttt{parser/factory.py}. It is called by \texttt{core/pipeline.py}
   with a single file path and returns a triplet \texttt{(context, operations, errors)}, which contains the parsed script header, the ordered operation list, and any
   syntax errors.
 
 \autoref{fig:parser-factory-flow} summarizes the five internal steps of the function. Grammar detection and component selection are separated into two distinct steps
-  so that adding a new grammar variant would only require registering its classes in \texttt{get\_parser\_components()}, without changing the parsing logic itself. Based   on the file extension, \texttt{detect\_grammar\_type()} selects either the Specific (\texttt{.smile}) or the Generalized (\texttt{.smile\_gen}) variant, and
+  so that adding a new grammar variant would only require registering its classes in \texttt{get\_parser\_components()}, without changing the parsing logic itself. Based on the file extension, \texttt{detect\_grammar\_type()} selects either the Specific (\texttt{.smile}) or the Generalized (\texttt{.smile\_gen}) variant, and
   \texttt{get\_parser\_components()} returns the corresponding Lexer and Parser classes. The input text is then processed through the standard ANTLR~4 chain:
   \texttt{FileStream} $\to$ Lexer $\to$ \texttt{CommonTokenStream} $\to$ Parser $\to$ parse tree. In the final step, a \texttt{ParseTreeWalker} traverses the parse tree
   with the selected Listener, which produces the operation list as described in \autoref{subsec:listeners}.
@@ -570,32 +569,32 @@ The entry point for the entire syntax analysis is the function \texttt{parse\_sm
       \draw[arr] (walk.south) -- (output.north);
 
     \end{tikzpicture}
-    \caption{Internal processing steps of \texttt{parse\_smile\_auto()} in \texttt{parser\_factory.py}}
+    \caption{Internal processing steps of \texttt{parse\_smile\_auto()} in \texttt{parser/factory.py}}
     \label{fig:parser-factory-flow}
   \end{figure}
-For the calling code in \texttt{core.py}, \texttt{run\_migration()} passes the file path and receives a uniform operation list back, regardless of which grammar variant was used. The grammar distinction is fully encapsulated within \texttt{parser\_factory.py}.
+For the calling code in \texttt{core/pipeline.py}, \texttt{run\_load()} passes the file path to \texttt{parse\_smile\_auto()} and receives a uniform operation list back, regardless of which grammar variant was used. The higher-level function \texttt{run\_migration()} reaches the same result indirectly through \texttt{run\_load()}. The grammar distinction is fully encapsulated within \texttt{parser/factory.py}.
 
 
   \subsection{Listener-based Parse Tree Processing}\label{subsec:listeners}
 
-  This section describes the last step of the processing chain. The listener                                                                                               classes map the nodes of the parse tree into three data structures defined
-  in \texttt{smile\_listeners.py} (\autoref{fig:listener-output}).
-  \texttt{MigrationContext} records the information from the script header,                                                                                                including the script name, the version, the source and target database                                                                                                   type, and the distinction between migration and evolution via the field
+  The last step of the processing chain maps the nodes of the parse tree into three data structures defined
+  in \texttt{parser/listeners.py} (\autoref{fig:listener-output}).
+  \texttt{MigrationContext} records the information from the script header, including the script name, the version, the source and target database type, and the distinction between migration and evolution via the field
   \texttt{is\_evolution}. For evolution scripts, the additional field
   \texttt{target\_schema\_version} contains the target version from the
   \texttt{VERSION x TO y} declaration. \texttt{OpType} is an enumeration
   with 30~values that identifies each operation type. \texttt{Operation}
   combines an \texttt{OpType} with a typed parameter record whose concrete
   class depends on the operation. The 30 parameter classes are defined in
-  \texttt{operation\_params.py} as \texttt{@dataclass}es (for example
+  \texttt{parser/params.py} as \texttt{@dataclass}es (for example
   \texttt{NestParams}, \texttt{UnnestParams}, \texttt{AddPropertyParams}),
   together with a \texttt{Union} alias \texttt{OpParams} used to annotate
   the \texttt{Operation.params} field. This turns the parser-transformer
-  contract into a statically checked interface: a field-name mismatch
+  contract into an explicit typed interface: a field-name mismatch
   between a listener that builds, say, a \texttt{NestParams} and a handler
-  that expects one becomes a static type error rather than a silent
-  \texttt{params.get(\ldots)} returning \texttt{None} and the operation
-  being skipped at runtime.
+  that expects one becomes much easier to detect than in the earlier
+  dictionary-based design, where a silent \texttt{params.get(\ldots)}
+  could return \texttt{None} and cause the operation to be skipped at runtime.
 
   \begin{figure}[t]
       \centering
@@ -622,11 +621,11 @@ For the calling code in \texttt{core.py}, \texttt{run\_migration()} passes the f
         \node[draw, rounded corners=2pt, align=center, inner sep=5pt,
               fill=yellow!8, minimum width=5.5cm, minimum height=0.7cm] (lisS) at (-3, -3.6)
           {\texttt{SMILESpecificListener}\\
-           inherits \texttt{SMILE\_SpecificListener}};
+           inherits \texttt{SMILE \_SpecificListener}};
         \node[draw, rounded corners=2pt, align=center, inner sep=5pt,
               fill=yellow!8, minimum width=5.5cm, minimum height=0.7cm] (lisG) at (3, -3.6)
           {\texttt{SMILEGeneralizedListener}\\
-           inherits \texttt{SMILE\_GeneralizedListener}};
+           inherits \texttt{SMILE \_GeneralizedListener}};
 
         %% BaseSMILEListener
         \node[draw, rounded corners=2pt, align=center, inner sep=5pt,
@@ -687,7 +686,7 @@ For the calling code in \texttt{core.py}, \texttt{run\_migration()} passes the f
         \node[lbl, font=\scriptsize\itshape] at (0, -6.8) {produces};
 
       \end{tikzpicture}
-      \caption{Listener class hierarchy and output data structures in \texttt{smile\_listeners.py}}
+      \caption{Listener class hierarchy and output data structures in \texttt{parser/listeners.py}}
       \label{fig:listener-output}
   \end{figure}
 
@@ -698,7 +697,7 @@ For the calling code in \texttt{core.py}, \texttt{run\_migration()} passes the f
   conditions, \texttt{\_parse\_property\_clauses()} processes
   \texttt{WITH TYPE} declarations, and \texttt{\_parse\_entity\_clauses()}
   handles property definition lists. \texttt{SMILESpecificListener} inherits
-  from the generated \texttt{SMILE\_SpecificListener} together with
+  from the generated \texttt{SMILE \_SpecificListener} together with
   \texttt{BaseSMILEListener}. \texttt{SMILEGeneralizedListener} follows the
   same pattern. Both override the \texttt{enter*} callbacks to extract
   operation parameters from the parse tree and to wrap them in the
@@ -718,16 +717,26 @@ For the calling code in \texttt{core.py}, \texttt{run\_migration()} passes the f
 
 \section{Schema Transformer}\label{sec:transformer}
 
-This section covers the execution of operations on the M-Model+ database
-object. The class \texttt{SchemaTransformer} in \texttt{core.py} receives
-the operation list together with a copy of Meta Schema V1 and applies
-each operation sequentially through a handler dispatch mechanism, as
-shown in \autoref{fig:transformer-overview}. The handlers correspond to
-the operation taxonomy defined in \autoref{sec:operation-taxonomy} and
-are organized into the same five categories.
-\autoref{subsec:transformer-arch} first describes the dispatch
-architecture that is shared by all handlers, followed by the
-implementation of each category.
+  This section covers the execution of operations on the M-Model+ database
+  object. The class \texttt{SchemaTransformer}, assembled in \texttt{core/pipeline.py} from a shared base class and four handler mixins, receives
+  the operation list together with a copy of Meta Schema V1 and applies
+  each operation sequentially through a handler dispatch mechanism, as
+  shown in \autoref{fig:transformer-overview}. The handlers implement the
+  operations defined in the taxonomy of \autoref{sec:operation-taxonomy}
+  and are organized into five categories according to which part of the
+  \texttt{EntityType} structure they affect.\footnote{The handler
+  groupings in this section follow the \texttt{EntityType} structure
+  each handler modifies, not the conceptual taxonomy of
+  \autoref{sec:operation-taxonomy}. Some taxonomy categories therefore
+  span multiple subsections here—for instance, \texttt{Reference Ops}
+  are split across \autoref{subsec:transformer-structural}
+  (as \texttt{NEST}), \autoref{subsec:transformer-keys} (when they write
+  to \texttt{constraints}), and \autoref{subsec:transformer-rel-graph}
+  (when they write to \texttt{relationships}).}
+  \autoref{subsec:transformer-arch} first describes the dispatch
+  architecture that is shared by all handlers, followed by the
+  implementation of each category.
+
 
 \begin{figure}[htbp]
     \centering
@@ -786,14 +795,14 @@ implementation of each category.
       \draw[semithick] (h5.south) |- (outfork);
       \draw[arr] (outfork) -- (v2.north);
     \end{tikzpicture}
-    \caption{SchemaTransformer dispatch architecture in \texttt{core.py}}
+    \caption{SchemaTransformer dispatch architecture in the \texttt{core/} package}
     \label{fig:transformer-overview}
 \end{figure}
 
 
 \subsection{Architecture and Operation Dispatch}\label{subsec:transformer-arch}
 
-  The class \texttt{SchemaTransformer} in \texttt{core.py}, which forms the
+  The class \texttt{SchemaTransformer}, assembled in \texttt{core/pipeline.py}, which forms the
   central component of the core layer, consumes Meta Schema~V1 through its
   constructor and produces Meta Schema~V2 by applying the operation list one
   step at a time. Because every handler mutates the schema in place, the
@@ -816,17 +825,14 @@ implementation of each category.
   prefix) at construction time; the web interface queries it (exported
   under the JSON key \texttt{"key\_registry"} for backward compatibility)
   to show key information per entity and to resolve the targets of
-  foreign-key references. Once every operation has been executed, a closing
-  normalization pass (\texttt{\_normalize\_entity\_kinds()}) rewrites every
-  entity to the target paradigm's default kind, for instance \texttt{TABLE}
-  for relational or \texttt{VERTEX} for graph.
+  foreign-key references. Once every operation has been executed, \texttt{run\_export()} applies two closing normalization passes, namely \texttt{normalize\_entity\_kinds()} and \texttt{normalize\_document\_cardinality()}, before the target adapter exports Meta Schema~V2 to the native target format.
 
   Sequential execution is driven by a handler registry (\texttt{\_handlers}),
   a dictionary mapping each of the 30 \texttt{OpType} values to a
   corresponding \texttt{\_handle\_*} method (\autoref{lst:handler-registry}).
   This realizes the Command pattern, where \texttt{OpType} serves as the
   command identifier, \texttt{params} (a typed dataclass from
-  \texttt{operation\_params.py}) as its payload, and the method as the
+  \texttt{parser/params.py}) as its payload, and the method as the
   receiver. The pattern is a standard Python idiom~\cite{ramalho2022fluent}
   that selects the right handler with a single dictionary lookup, avoiding a
   long \texttt{if}/\texttt{elif} chain, and lets new operations be registered
@@ -860,32 +866,26 @@ implementation of each category.
   \end{lstlisting}
 
   Every handler exposes the same shape. It takes a single typed parameter
-  record (the OpType-specific dataclass from \texttt{operation\_params.py},
-  for example \texttt{NestParams} for \texttt{NEST}) and returns a boolean,
-  where \texttt{False} indicates a skipped operation, for instance when the
-  target entity does not exist. The dispatch loop in
-  \texttt{run\_migration()} (\autoref{lst:dispatch-loop}) relies on this
+  record (the OpType-specific dataclass from \texttt{parser/params.py},
+  for example \texttt{NestParams} for \texttt{NEST}) and returns an \texttt{OperationResult}. Truthy results denote successful execution, whereas falsy results denote deliberate skips and carry a textual reason, for instance when the target entity does not exist. The dispatch loop in
+  \texttt{run\_apply()} (\autoref{lst:dispatch-loop}) relies on this
   uniformity. For each operation, the loop takes a snapshot of the
   database, dispatches it to the handler returned by
-  \texttt{\_handlers.get()}, and takes a second snapshot once the call
-  returns. A diff helper (\texttt{\_calculate\_changes()}) compares the two
-  snapshots and derives the change record for this step, which the web
-  interface uses for its visualization. Two counters
-  (\texttt{success\_count} and \texttt{skipped\_count}) accumulate the
-  outcomes of all handler calls and produce the final summary of the run.
+  \texttt{\_handlers.get()}, and derives a change record for this step through \texttt{\_calculate\_changes()}. In addition to \texttt{success\_count} and \texttt{skipped\_count}, the current implementation also tracks \texttt{error\_count} separately when a handler raises an unexpected exception, so that genuine handler defects are not conflated with deliberate skips.
 
   \begin{lstlisting}[language=Python, basicstyle=\small\ttfamily,
-    caption={Dispatch loop in \texttt{run\_migration()} (excerpt)},
+    caption={Dispatch loop in \texttt{run\_apply()} (excerpt)},
     label={lst:dispatch-loop}]
   for op in operations:
       prev = db_to_dict(transformer.database)
       handler = transformer._handlers.get(op.op_type)
       try:
-          success = handler(op.params) if handler else False
+          result = handler(op.params) if handler else None
       except Exception:
-          success = False
-      success_count += int(bool(success))
-      skipped_count += int(not success)
+          error_count += 1
+          result = None
+      success_count += int(bool(result))
+      skipped_count += int(handler is None or result is None)
       changes_detail = _calculate_changes(
           prev, db_to_dict(transformer.database), op)
   \end{lstlisting}
@@ -909,28 +909,976 @@ implementation of each category.
 
 
 \subsection{Entity and Property Handlers}\label{subsec:transformer-entity-prop}
+The entity- and property-level handlers share the common workflow sketched
+  in \autoref{fig:entity-prop-workflow}. Each handler begins with a typed
+  \texttt{Operation} object and first tries to locate its target. Entity
+  handlers use \texttt{\_get\_entity}, while property handlers resolve the
+  dotted path through \texttt{\_resolve\_entity\_attr}. If the target cannot
+  be found, the handler does not abort with an exception but instead writes a \texttt{[NOTICE]} and silently skips the operation. This tolerant
+  failure model prevents an invalid SMILE statement from blocking the rest
+  of the script.
 
+ Once located, the handler applies its change locally. These local changes
+  reduce to six basic actions (add, delete, rename, copy, move, and cast),
+  and for many handlers the work ends here. Others, such as
+  \texttt{RENAME\_ENTITY}, \texttt{DELETE\_ENTITY}, and \texttt{MOVE\_PROPERTY}, must also touch entities beyond the one they
+  name, and this is where the dependent propagation step takes over.
+
+  Entities in M-Model\textsuperscript{+} refer to one another by name
+  through the \texttt{refs\_to} field of a foreign key, the
+  \texttt{aggregates} of an embedding, or the source and target of an edge.
+  Renaming or removing such a name leaves behind a trail of stale
+  references, constraints whose target is gone, and edges missing an             endpoint.
+
+  Each handler closes with the same gesture. A short label is appended to
+  the transformation log, and \texttt{True} or \texttt{False} is returned
+  to the dispatch loop. In this way, all the handlers, despite their inner
+  diversity, expose the same interface to the dispatch loop.
+
+  \begin{figure}[htbp]
+    \centering
+    \begin{tikzpicture}[
+      font=\scriptsize,
+      box/.style={draw, rounded corners=2pt, align=center, inner sep=4pt,
+                  minimum width=7cm, minimum height=0.7cm},
+      sm/.style={draw, rounded corners=2pt, align=center, inner sep=3pt,
+                  minimum width=3.2cm, minimum height=0.6cm},
+      dec/.style={draw, diamond, aspect=2.5, align=center, inner sep=2pt,
+                  minimum width=3cm},
+      arr/.style={-{Stealth[length=1.8mm]}, semithick, rounded corners=2pt},
+    ]
+      \node[box, fill=red!10]    (in)   at (0,  0)    {Operation with typed parameters};
+      \node[sm, fill=blue!10]    (rE)   at (-2, -1.5) {\texttt{\_get\_entity}\\(entity-level)};
+      \node[sm, fill=blue!10]    (rA)   at ( 2, -1.5) {\texttt{\_resolve\_entity\_attr}\\(property-level)};
+      \node[dec, fill=orange!12] (chk)  at (0,  -3.0) {target found?};
+      \node[sm, fill=gray!15]    (miss) at (5,  -3.0) {Emit notice,\\skip operation};
+      \node[box, fill=yellow!15] (mut)  at (0,  -4.4) {Apply the local change to the target\\
+        \scriptsize(add / delete / rename / copy / move / cast\\
+        \scriptsize on the entity or on one of its properties)};
+      \node[dec, fill=orange!12] (casc) at (0,  -6.0) {affects other\\entities?};
+      \node[box, fill=purple!10] (cas)  at (0,  -7.4) {\textbf{dependent propagation}\\
+        \scriptsize Update or remove every dependent reference,\\
+        \scriptsize constraint, or derived entity that depends on the target};
+      \node[box, fill=green!12]  (log)  at (0,  -8.8) {Record the operation in the transformation log\\
+        and return success or skip status};
+
+      \draw[arr] (in.south) -- (0, -0.9) -| (rE.north);
+      \draw[arr] (in.south) -- (0, -0.9) -| (rA.north);
+      \draw[arr] (rE.south) |- (chk.west);
+      \draw[arr] (rA.south) |- (chk.east);
+      \draw[arr] (chk.east) -- node[above, font=\tiny]{no} (miss.west);
+      \draw[arr] (chk.south) -- node[right, font=\tiny]{yes} (mut.north);
+      \draw[arr] (mut.south) -- (casc.north);
+      \draw[arr] (casc.south) -- node[right, font=\tiny]{yes} (cas.north);
+      \draw[arr] (casc.east) -- node[pos=0.3, above, font=\tiny]{no} (5.0, -6.0) |- (log.east);
+      \draw[arr] (cas.south) -- (log.north);
+    \end{tikzpicture}
+    \caption{Shared workflow of entity- and property-level handlers in the \texttt{core/} package}
+    \label{fig:entity-prop-workflow}
+  \end{figure}
 
 \subsection{Structural Transformation Handlers}\label{subsec:transformer-structural}
+While the handlers in the previous subsection operate on individual
+  entities and properties, the structural handlers reshape the schema's
+  form itself. The six operators form three inverse pairs, namely
+  NEST/UNNEST, FLATTEN/UNFLATTEN, and UNWIND/WIND, so that a migration
+  script can be reversed simply by swapping each operator with its
+  counterpart. All six handlers share the four-step workflow shown in
+  \autoref{fig:structural-workflow}, with each operator distributing its
+  work across the four stages differently.                                         \begin{figure}[htbp]
+    \centering
+    \begin{tikzpicture}[                                                                                                                                                       font=\scriptsize,
+      box/.style={draw, rounded corners=2pt, align=center, inner sep=4pt,
+                  minimum width=9cm, minimum height=0.9cm},
+      arr/.style={-{Stealth[length=1.8mm]}, semithick},                                                                                                                      ]
+      \node[box, fill=yellow!15] (s1) at (0, 0)
+        {\textbf{1.\ Locate the source}\\
+         through a dotted path; identify its current form\\
+         (embedded, nested fields, array, or scalar)};
+      \node[box, fill=yellow!15] (s2) at (0, -1.8)
+        {\textbf{2.\ Build the target form}\\
+         a new entity (with any carried fields from the parent),\\
+         an embedded relation, prefixed fields, or a data type wrap};
+      \node[box, fill=yellow!15] (s3) at (0, -3.6)
+        {\textbf{3.\ Relocate dependent content} (when required)\\
+         move nested entities under the new prefix\\
+         and rewrite paths still pointing into the old one};
+      \node[box, fill=yellow!15] (s4) at (0, -5.4)
+        {\textbf{4.\ Remove the old form} (if applicable)\\
+         append to the transformation log, and return};
+
+      \draw[arr] (s1.south) -- (s2.north);
+      \draw[arr] (s2.south) -- (s3.north);
+      \draw[arr] (s3.south) -- (s4.north);
+    \end{tikzpicture}
+    \caption{Shared workflow of the six structural transformation handlers}
+    \label{fig:structural-workflow}
+  \end{figure}
+
+  Stage~(1) reads the source reference from the operation's parameters
+  and locates the element it points to. What it finds depends on the
+  operator. NEST locates a separate entity, whereas UNNEST locates an
+  Embedded relation on a parent. FLATTEN locates a nested Embedded, while
+  UNFLATTEN locates a group of flat fields. UNWIND locates an array
+  property, and WIND locates a plain scalar property.
+
+Stage~(2) then builds the target form. Because the operators come in
+  three inverse pairs, each target is exactly the source form of the
+  inverse operator. NEST produces a new Embedded on the parent, which is
+  what UNNEST would have taken in the opposite direction. FLATTEN
+  produces flat prefixed fields on the parent, which is what UNFLATTEN
+  would consume. And WIND produces an array property, which UNWIND would
+  unwrap back into a scalar. When the target is a newly created entity,
+  any carried fields the SMILE  script asks to bring across from the
+  parent are added here as well.
+
+Stage~(3) takes care of the dependent content that moves along with the
+  new form. Any nested entities living under the moved prefix are
+  relocated, and paths still pointing into that prefix are rewritten, so
+  that all references in the database stay consistent afterwards.
+
+  Stage~(4) closes the transformation by removing whatever the new form
+  has replaced, whether an old Embedded relation, a source entity, or a
+  group of nested fields that were rewritten. Every handler ends the same
+  way, appending a short label to the transformation log and returning a
+  boolean.
+
+  \autoref{alg:structural-handler} summarizes this shared structure as a
+  single algorithm. Each structural handler instantiates the four stages
+  differently. For \texttt{WIND}, stages (3) and (4) collapse to no-ops,
+  while \texttt{UNNEST} exercises all four.
+
+  \begin{lstlisting}[basicstyle=\small\ttfamily,
+    caption={Algorithm of the six structural transformation handlers},
+    label={alg:structural-handler}]
+  function handle_structural(params):
+      # (1) Locate the source (form depends on operator):
+      #   NEST       -> separate entity linked by FK
+      #   UNNEST     -> Embedded relation on a parent
+      #   FLATTEN    -> nested Embedded on a parent
+      #   UNFLATTEN  -> group of flat fields on an entity
+      #   UNWIND     -> array-typed property
+      #   WIND       -> scalar property
+      source = locate_source(params)
+      if source is missing:
+          emit NOTICE; return False
+
+      # (2) Build the target form.
+      #     Each operator's target equals its inverse operator's source.
+      #     Any fields the script asks to carry across from the parent
+      #     are also added to a newly created target entity here.
+      target = build_target_form(params, source)
+
+      # (3) Relocate dependent content that moves with the new form
+      move nested entities and rewrite their paths
+
+      # (4) Remove the old form; log; return
+      remove source entity or strip nested fields if applicable
+      self.changes.append(operation_label)
+      return True
+  \end{lstlisting}
+
+  \subsection{Key and Constraint Handlers}\label{subsec:transformer-keys}
+  This subsection focuses on the handlers that manage keys and constraints. Keys determine how rows, documents, nodes, or partitions
+  are uniquely identified in a schema, and constraints encode uniqueness
+  rules within an entity and referential links between entities. SMILE
+  provides five key types. \texttt{PRIMARY} designates the identifying
+  key of an entity, whereas \texttt{UNIQUE} adds a secondary uniqueness
+  constraint on other properties without identifying the entity itself.
+  \texttt{FOREIGN} establishes a referential link between two entities,
+  and \texttt{PARTITION} together with \texttt{CLUSTERING} describe the
+  composite primary-key layout used in Cassandra. Although their
+  semantics differ, all five are processed by a single handler
+  (\texttt{\_handle\_add\_key} in \texttt{core/handlers/keys\_constraints.py}), which reduces this
+  variety to a small set of constraint updates.
 
 
-\subsection{Key and Constraint Handlers}\label{subsec:transformer-keys}
+  \begin{figure}[htbp]
+      \centering
+      \resizebox{\textwidth}{!}{%
+      \begin{tikzpicture}[
+        font=\scriptsize,
+        box/.style={draw, rounded corners=2pt, align=center, inner sep=4pt,
+                    minimum height=1.1cm},
+        arr/.style={-{Stealth[length=1.8mm]}, semithick},
+      ]
+        \node[box, fill=orange!15, minimum width=3.2cm] (d1) at (0, 0)
+          {\textbf{what kind of key?}};
+        \node[box, fill=red!10, minimum width=2.8cm] (fk) at (-5, -2.8)
+          {\textbf{foreign key}\\
+           {\tiny add a new}\\
+           {\tiny \texttt{ForeignKeyConstraint}}};
+        \node[box, fill=gray!15, minimum width=2.8cm] (uq) at (-1.7, -2.8)
+          {\textbf{unique key}\\
+           {\tiny add a \texttt{UniqueConstraint}}\\
+           {\tiny (not primary)}};
+        \node[box, fill=blue!12, minimum width=2.8cm] (cs) at (1.7, -2.8)
+          {\textbf{partition / clustering}\\
+           {\tiny extend or create}\\
+           {\tiny the PK}};
+        \node[box, fill=green!12, minimum width=2.8cm] (sp) at (5, -2.8)
+          {\textbf{simple primary}\\
+           {\tiny replace or create}\\
+           {\tiny the PK}};
+        \draw[semithick] (0, 0) -- (0, -1.4);
+        \draw[semithick] (-5, -1.4) -- (5, -1.4);
+        \draw[arr] (-5,   -1.4) -- node[right, font=\tiny]{FOREIGN}    (fk.north);
+        \draw[arr] (-1.7, -1.4) -- node[right, font=\tiny]{UNIQUE}     (uq.north);
+        \draw[arr] (1.7,  -1.4) -- node[right, font=\tiny]{PART/CLUST} (cs.north);
+        \draw[arr] (5,    -1.4) -- node[right, font=\tiny]{PRIMARY}    (sp.north);
+      \end{tikzpicture}%
+      }
+      \caption{Constraint dispatch in the ADD KEY handler across the four SMILE  key types}
+      \label{fig:addkey-decision}
+  \end{figure}
+
+The central branching logic is shown in \autoref{fig:addkey-decision}.
+  Once the key columns have been added as key properties on the target            entity, a key-type resolver (\texttt{\_resolve\_pk\_type()}) turns the
+  five SMILE  key types into a kind (\texttt{"primary"}, \texttt{"unique"},
+  or \texttt{"foreign"}) together with a Cassandra-specific PK sub-type,
+  and this pair picks one of four paths. \texttt{FOREIGN} creates a new         foreign-key constraint whose entries point to the primary key of the
+  referenced entity. \texttt{UNIQUE} creates a uniqueness constraint that
+  is not a primary key and appends it as is. \texttt{PARTITION} and
+  \texttt{CLUSTERING} either add new columns to an existing primary key
+  or create a new one if none is present, through a PK-extension helper
+  (\texttt{\_append\_to\_existing\_pk()}). \texttt{PRIMARY} instead
+  replaces any existing primary key through a helper that clears the old
+  one (\texttt{\_clear\_existing\_pk()}), turning off the \texttt{is\_key}
+  flag on properties that are no longer part of the key, before adding
+  the new constraint.\footnote{%
+  The replace semantics follows SQL's \texttt{ALTER TABLE ... ADD PRIMARY
+  KEY}, which declares the full primary key rather than adding to it.
+  Both migration and evolution scripts can therefore state the target PK
+  in one call, without having to check whether an old PK is still in
+  place. When a script needs to reshape an existing primary key, the
+  pattern is to call \texttt{DELETE\_PRIMARY\_KEY} first and then
+  \texttt{ADD\_PRIMARY\_KEY}. Calling \texttt{ADD\_PRIMARY\_KEY} directly
+  on an entity that already has a primary key triggers the replace path
+  and drops the old key.}
+
+  \begin{lstlisting}[basicstyle=\small\ttfamily,
+    caption={Algorithm of the ADD KEY handler},
+    label={alg:addkey-handler}]
+  function handle_add_key(params):
+      entity = resolve_or_create(params.entity)
+      key_attrs = upsert_key_properties(entity, params.key_columns)
+      kind, pk_type = resolve_pk_type(params.key_type)
+
+      if kind == "foreign":           # FOREIGN
+          constraint = ForeignKeyConstraint(...)
+      else:                           # UNIQUE / PRIMARY / PART / CLUST
+          constraint = UniqueConstraint(is_primary_key=(kind=="primary"), ...)
+          if constraint.is_primary_key:
+              if append_to_existing_pk(entity, constraint, pk_type):
+                  log; return True    # PART/CLUST: extend or create
+              if pk_type == SIMPLE:
+                  clear_existing_pk(entity)   # PRIMARY: replace
+
+      entity.add_constraint(constraint); log; return True
+  \end{lstlisting}
 
 
-\subsection{Relationship and Graph Handlers}\label{subsec:transformer-rel-graph}
+  \subsection{Relationship and Graph Handlers}\label{subsec:transformer-rel-graph}
+
+  While the previous subsection handles the \texttt{constraints} list,
+  this subsection turns to handlers that write to the \texttt{relationships}
+  list, the \texttt{labels} field, and the graph-specific fields of
+  \texttt{EntityType}.
+
+  \begin{figure}[htbp]
+    \centering
+    \begin{tikzpicture}[
+      font=\scriptsize,
+      ent/.style={draw, rounded corners=3pt, align=left, inner sep=6pt,
+                  fill=blue!6, line width=0.8pt},
+      op/.style={draw, rounded corners=2pt, font=\small\ttfamily\bfseries,
+                 inner sep=3pt, minimum height=0.55cm, minimum width=3.2cm},
+      arr/.style={-{Stealth[length=2mm]}, semithick},
+    ]
+      %% Central EntityType box, color-coded highlights
+      \node[ent] (et) at (0, 0) {%
+        \textbf{EntityType}\\[4pt]
+        \texttt{object\_name}\\
+        \colorbox{green!25}{\texttt{entity\_kind}}\\
+        \colorbox{orange!25}{\texttt{labels: List[str]}}\\
+        \texttt{properties}\\
+        \texttt{constraints}\\
+        \texttt{relationships:}\\
+        \quad\texttt{- Reference(\colorbox{purple!20}{cardinality})}\\
+        \quad\texttt{- \colorbox{blue!20}{Embedded}}\\
+        \quad\texttt{- \colorbox{green!25}{Edge}(\colorbox{purple!20}{cardinality})}\\
+        \colorbox{green!25}{\texttt{source\_entity}},
+        \colorbox{green!25}{\texttt{target\_entity}},\\
+        \colorbox{green!25}{\texttt{edge\_cardinality}}%
+      };
+
+      %% Operation badges, each colored to match its target field
+      \node[op, fill=green!25]  (tr)   at (-5.5,  2.3) {TRANSFORM};
+      \node[op, fill=orange!25] (lbl)  at (-5.5,  0.9) {ADD / DELETE\_LABEL};
+      \node[op, fill=blue!20]   (emb)  at (-5.5, -0.6) {ADD / DELETE\_EMBEDDED};
+      \node[op, fill=purple!20] (rec)  at (-5.5, -2.1) {RECARD};
+
+      \draw[arr] (tr.east)  -- ([yshift= 1.2cm]et.west);
+      \draw[arr] (lbl.east) -- ([yshift= 0.4cm]et.west);
+      \draw[arr] (emb.east) -- ([yshift=-0.8cm]et.west);
+      \draw[arr] (rec.east) -- ([yshift=-1.6cm]et.west);
+    \end{tikzpicture}
+    \caption{Target fields of the relationship and graph handlers}
+    \label{fig:rel-graph-scope}
+  \end{figure}
 
 
-\section{Database Adapters}\label{sec:adapters}
-\subsection{Adapter Architecture}\label{subsec:adapter-arch}
-\subsection{PostgreSQL Adapter}\label{subsec:adapter-pg}
-\subsection{MongoDB Adapter}\label{subsec:adapter-mongo}
-\subsection{Neo4j Adapter}\label{subsec:adapter-neo4j}
-\subsection{Cassandra Adapter}\label{subsec:adapter-cassandra}
+  \autoref{fig:rel-graph-scope} shows which fields of the
+  \texttt{EntityType} structure each handler in this subsection writes
+  to. Each handler on the left shares its colour with the fields it
+  writes. \texttt{TRANSFORM} modifies five fields at once. It sets
+  \texttt{entity\_kind}, \texttt{source\_entity}, \texttt{target\_entity},
+  and \texttt{edge\_cardinality}, and updates the \texttt{Edge} entry in
+  the \texttt{relationships} list of the source entity.
+  \texttt{ADD\_LABEL} and \texttt{DELETE\_LABEL} operate on the
+  \texttt{labels} field. \texttt{ADD\_EMBEDDED} and
+  \texttt{DELETE\_EMBEDDED} act on the \texttt{Embedded} entries in the
+  \texttt{relationships} list. \texttt{RECARD} has two dispatch paths,
+  since it can update the \texttt{cardinality} of either a
+  \texttt{Reference} or an \texttt{Edge} entry.
 
-\section{Validation}\label{sec:validation}
-\subsection{Meta Schema Validation}\label{subsec:validate-meta}
-\subsection{Round-trip Validation}\label{subsec:validate-roundtrip}
+  \texttt{TRANSFORM} stands out from the other handlers in this
+  subsection because it rewrites five fields at once and operates in
+  both directions, so \autoref{fig:transform-vertex-edge} contrasts the
+  two resulting forms side by side. On the left, \texttt{E} appears as
+  a standalone node in VERTEX form. Its \texttt{entity\_kind} is set to
+  \texttt{VERTEX}, and the three graph-specific fields
+  \texttt{source\_entity}, \texttt{target\_entity}, and
+  \texttt{edge\_cardinality} are \texttt{None}. \texttt{A} carries no
+  \texttt{Edge} entry in its \texttt{relationships} list. The dashed
+  lines to \texttt{A} and \texttt{B} suggest typical foreign-key
+  references that are maintained by the user and are not created by
+  \texttt{TRANSFORM} itself. On the right, the same entity appears in
+  EDGE form. \texttt{entity\_kind} switches to \texttt{EDGE},
+  \texttt{source\_entity} becomes \texttt{A}, \texttt{target\_entity}
+  becomes \texttt{B}, and \texttt{edge\_cardinality} takes the
+  cardinality declared in the \texttt{WITH CARDINALITY} clause, or
+  \texttt{0..n} when the script omits it. \texttt{A.relationships} simultaneously receives a new \texttt{Edge} entry with the same values. \texttt{E} thereby becomes an edge between \texttt{A}
+  and \texttt{B}. The arrow in the middle represents both
+  directions of \texttt{TRANSFORM}, and the fields highlighted in green
+  mark exactly the five places where the handler writes during either
+  conversion.
+
+  \begin{figure}[htbp]
+    \centering
+    \begin{tikzpicture}[
+      font=\scriptsize,
+      node/.style={draw, circle, fill=yellow!15, minimum size=0.7cm,
+                   inner sep=1pt, align=center},
+      ent/.style={draw, rounded corners=3pt, align=left, inner sep=5pt,
+                  fill=blue!6, line width=0.8pt, minimum width=4.2cm},
+      side/.style={draw, rounded corners=2pt, align=left, inner sep=4pt,
+                   fill=yellow!8, minimum width=4.2cm},
+      arr/.style={-{Stealth[length=2mm]}, semithick},
+      refarr/.style={-{Stealth[length=1.5mm]}, dashed, gray},
+      lbl/.style={font=\scriptsize\bfseries},
+    ]
+      \node[node] (vA) at (-5.5, 3) {A};
+      \node[node] (vB) at (-2.5, 3) {B};
+      \node[node, fill=green!15] (vE) at (-4, 1.8) {E};
+      \draw[refarr] (vE) -- node[left, font=\tiny]{ref} (vA);
+      \draw[refarr] (vE) -- node[right, font=\tiny]{ref} (vB);
+
+      \node[ent] (el) at (-4, 0) {%
+        \textbf{EntityType E}\\[2pt]
+        \colorbox{green!25}{\texttt{entity\_kind = VERTEX}}\\
+        \colorbox{green!25}{\texttt{source\_entity = None}}\\
+        \colorbox{green!25}{\texttt{target\_entity = None}}\\
+        \colorbox{green!25}{\texttt{edge\_cardinality = None}}%
+      };
+      \node[side] (al) at (-4, -2.5) {%
+        \textbf{EntityType A}\\
+        \texttt{relationships:}\\
+        \quad(no \texttt{Edge} record)};
+      \node[lbl] at (-4, -3.5) {VERTEX form};
+
+      \draw[{Stealth[length=2.5mm]}-{Stealth[length=2.5mm]}, thick]
+        (-1.6, 0) -- node[above, lbl, align=center]{%
+          TRANSFORM\\TO RELATIONSHIP\\TO ENTITY} (1.6, 0);
+
+      \node[node] (eA) at (2.5, 2.5) {A};
+      \node[node] (eB) at (5.5, 2.5) {B};
+      \draw[arr, line width=1pt]
+        (eA) -- node[above, font=\scriptsize\bfseries]{E} (eB);
+
+      \node[ent] (er) at (4, 0) {%
+        \textbf{EntityType E}\\[2pt]
+        \colorbox{green!25}{\texttt{entity\_kind = EDGE}}\\
+        \colorbox{green!25}{\texttt{source\_entity = A}}\\
+        \colorbox{green!25}{\texttt{target\_entity = B}}\\
+        \colorbox{green!25}{\texttt{edge\_cardinality = <card>}}%
+      };
+      \node[side] (ar) at (4, -2.5) {%
+        \textbf{EntityType A}\\
+        \texttt{relationships:}\\
+        \quad\colorbox{green!25}{\texttt{Edge(rel=E, src=A, tgt=B, card=<card>)}}};
+      \node[lbl] at (4, -3.5) {EDGE form};
+    \end{tikzpicture}
+    \caption{\texttt{TRANSFORM} between VERTEX and EDGE form}
+    \label{fig:transform-vertex-edge}
+  \end{figure}
+
+ \autoref{alg:rel-graph-handler} shows the common framework shared by
+  the handlers in this subsection. Each branch follows the same
+  procedure. The target entity is located, a targeted write modifies
+  the appropriate field or relationship object, and the step ends with
+  an entry in the transformation log. If the entity is missing, the
+  handler reports a notice and skips the operation instead of raising
+  an exception. The shared skeleton and tolerant failure mode jointly
+  confine any operation's failure to a single handler invocation, so
+  the enclosing migration script still proceeds to completion.
+
+  \begin{lstlisting}[basicstyle=\small\ttfamily,
+    caption={Algorithm of the relationship and graph handlers},
+    label={alg:rel-graph-handler}]
+  function handle_rel_graph(op, params):
+      entity = self._get_entity(params.entity or params.name)
+      if not entity: return False
+      if op == ADD_LABEL:         entity.labels.append(params.label)
+      elif op == DELETE_LABEL:    entity.labels.remove(params.label)
+      elif op == ADD_EMBEDDED:    entity.add_relationship(Embedded(...))  # + create child
+      elif op == DELETE_EMBEDDED: entity.remove_relationship(params.aggr_name)
+      elif op == RECARD:          sync cardinality on matching Reference or Edge
+      elif op == TRANSFORM and params.target_type == "RELATIONSHIP":  # VERTEX -> EDGE
+          entity.entity_kind = EDGE; set source/target/edge_cardinality; add Edge on source
+      elif op == TRANSFORM:                                            # EDGE -> VERTEX
+          remove Edge from source; entity.entity_kind = VERTEX; clear source/target/edge_cardinality
+      self.changes.append(op_label); return True
+  \end{lstlisting}
+
+  \section{Database Adapters}\label{sec:adapters}
+
+The adapter layer bridges SMILE's canonical M-Model+ \texttt{Database} object and the four paradigm-specific schema formats.
+  \autoref{subsec:adapter-arch} describes the shared architecture, and                      \autoref{subsec:adapter-specific} covers each of the four adapters in                     turn.
+
+
+  \subsection{Adapter Architecture}\label{subsec:adapter-arch}
+
+ The adapter layer decouples M-Model+ core and the native schema
+  files of each paradigm. All four adapters implement the same two
+  methods. A parser (\texttt{parse()}) performs reverse engineering
+  from a native file into an M-Model+ schema object (\texttt{Database}),                       and an exporter (\texttt{export()}) performs forward engineering in
+  the opposite direction. A dispatch table (\texttt{ADAPTER\_REGISTRY})   maps each paradigm identifier to its adapter class and serves as the  single dispatch point. Adding a new paradigm therefore requires one  new adapter class and one new registry entry.                                                                                                \autoref{fig:adapter-architecture} shows this layering, and                                \autoref{lst:adapter-registry} gives the concrete interface along
+  with the registry definition.
+
+
+  \begin{figure}[htbp]
+    \centering
+    \begin{tikzpicture}[
+      font=\scriptsize,
+      hub/.style={draw, rounded corners=3pt, fill=blue!8, align=center,                                                                                                                    inner sep=6pt, minimum width=12cm, minimum height=1.1cm,
+                  line width=0.8pt},
+      adp/.style={draw, rounded corners=2pt, fill=orange!15,
+                  font=\small\ttfamily\bfseries, inner sep=3pt,                                                                                                                            minimum width=2.8cm, minimum height=1.0cm,
+                  align=center},
+      file/.style={draw, rounded corners=2pt, fill=yellow!10,
+                   inner sep=3pt, minimum width=2.8cm, minimum height=0.5cm,
+                   font=\scriptsize\ttfamily},
+      arr/.style={-{Stealth[length=2mm]}, semithick},
+      lbl/.style={font=\scriptsize\itshape},
+    ]
+      %% Central M-Model+ hub
+      \node[hub] (hub) at (0, 0)
+        {\textbf{M-Model+ Database}\\
+         {\scriptsize canonical intermediate schema}};
+
+      %% 4 adapters below the hub -- full names on two lines
+      \node[adp] (pg)    at (-4.5, -2.2) {PostgreSQL\\Adapter};
+      \node[adp] (mongo) at (-1.5, -2.2) {MongoDB\\Adapter};
+      \node[adp] (neo)   at ( 1.5, -2.2) {Neo4j\\Adapter};
+      \node[adp] (cass)  at ( 4.5, -2.2) {Cassandra\\Adapter};
+
+      %% File formats at the bottom
+      \node[file] (f_pg)    at (-4.5, -4.0) {.sql};
+      \node[file] (f_mongo) at (-1.5, -4.0) {.json};
+      \node[file] (f_neo)   at ( 1.5, -4.0) {.cypher};
+      \node[file] (f_cass)  at ( 4.5, -4.0) {.cql};
+
+      %% Bidirectional arrows: adapter <-> hub
+      \draw[{Stealth[length=2mm]}-{Stealth[length=2mm]}]
+        (pg.north)    -- (hub.south -| pg.north);
+      \draw[{Stealth[length=2mm]}-{Stealth[length=2mm]}]
+        (mongo.north) -- (hub.south -| mongo.north);
+      \draw[{Stealth[length=2mm]}-{Stealth[length=2mm]}]
+        (neo.north)   -- (hub.south -| neo.north);
+      \draw[{Stealth[length=2mm]}-{Stealth[length=2mm]}]
+        (cass.north)  -- (hub.south -| cass.north);
+
+      %% Bidirectional arrows: adapter <-> file
+      \draw[{Stealth[length=2mm]}-{Stealth[length=2mm]}] (pg.south)    -- (f_pg.north);
+      \draw[{Stealth[length=2mm]}-{Stealth[length=2mm]}] (mongo.south) -- (f_mongo.north);
+      \draw[{Stealth[length=2mm]}-{Stealth[length=2mm]}] (neo.south)   -- (f_neo.north);
+      \draw[{Stealth[length=2mm]}-{Stealth[length=2mm]}] (cass.south)  -- (f_cass.north);
+
+      %% Direction labels on the outermost arrows
+      \node[lbl] at (-6.5, -1.2) {parse()};
+      \node[lbl] at ( 6.5, -1.2) {export()};
+      \node[lbl] at (-6.5, -3.1) {RE};
+      \node[lbl] at ( 6.5, -3.1) {FE};
+    \end{tikzpicture}
+    \caption{Architecture of SMILE's four paradigm-specific schema adapters}
+    \label{fig:adapter-architecture}
+  \end{figure}
+
+  \autoref{lst:adapter-registry} presents the adapter design as a
+  shared contract plus a dispatch table. All four adapter classes
+  implement the abstract \texttt{DatabaseAdapter} contract, which defines
+  \texttt{load\_from\_file()}, \texttt{parse()}, and \texttt{export()}.
+  This keeps the call surface uniform across all paradigms, while the
+  registry still stores adapter classes rather than instances, leaving
+  construction decisions in the caller's hands.
+
+  \begin{lstlisting}[language=Python, basicstyle=\small\ttfamily,
+    caption={Shared adapter contract and the paradigm registry},
+    label={lst:adapter-registry}]
+  """Every adapter class implements the same abstract contract:
+      load_from_file(path, db_name) -> Database   RE: native file -> M-Model+
+      parse(content, db_name)       -> Database   RE: native text -> M-Model+
+      export(db)                    -> str        FE: M-Model+ -> native
+  """
+
+  ADAPTER_REGISTRY = {
+      SOURCE_TYPE_RELATIONAL: PostgreSQLAdapter,
+      SOURCE_TYPE_DOCUMENT:   MongoDBAdapter,
+      SOURCE_TYPE_GRAPH:      Neo4jAdapter,
+      SOURCE_TYPE_COLUMNAR:   CassandraAdapter,
+  }
+  \end{lstlisting}
+
+
+  \subsection{Paradigm-Specific Adapters}\label{subsec:adapter-specific}
+
+  The four adapters share the contract described above but differ in
+  how they parse their paradigm's native representation. Where that
+  representation lacks a SMILE  concept, each adapter fills the gap with
+  a paradigm-appropriate convention.
+
+  \paragraph{PostgreSQL.}\label{par:adapter-pg}
+  The PostgreSQL adapter parses a standard \texttt{.sql} DDL file. It
+  recognises \texttt{CREATE TABLE} statements, column types such as
+  \texttt{VARCHAR}, \texttt{INTEGER}, \texttt{SERIAL}, and
+  \texttt{DOUBLE PRECISION}, inline \texttt{PRIMARY KEY} and
+  \texttt{UNIQUE} constraints, and \texttt{REFERENCES} clauses for
+  foreign keys. Each \texttt{CREATE TABLE} becomes an
+  \texttt{EntityType}, keys and uniqueness become \texttt{UniqueConstraint}
+  objects, and \texttt{REFERENCES} become \texttt{ForeignKeyConstraint}
+  entries paired with \texttt{Reference} relationships.
+
+  \paragraph{MongoDB.}\label{par:adapter-mongo}
+  The MongoDB adapter consumes a \texttt{.json} file that follows the
+  JSON Schema specification. The implementation supports both legacy
+  single-root schemas and multi-root schemas wrapped in a top-level
+  \texttt{collections} object. Each root collection maps to an
+  \texttt{EntityType}, and nested properties are processed recursively.
+  Each embedded object becomes another \texttt{EntityType} connected to
+  its parent through an \texttt{Embedded} relationship. The
+  \texttt{required} array decides which properties are marked
+  non-optional.
+
+  \paragraph{Neo4j.}\label{par:adapter-neo4j}
+  Neo4j does not yet provide a generally available schema DDL, so the
+  Neo4j adapter reads a \texttt{.cypher} file augmented with structured
+  comment annotations (\texttt{// Node:}, \texttt{// Key:},
+  \texttt{// Properties:}, \texttt{// Relationship:}) that declare node
+  labels, primary keys, typed properties, and edge types. The adapter
+  parses these comments to reconstruct an \texttt{EntityType} per node,
+  an \texttt{EntityType} with \texttt{entity\_kind=EDGE} per
+  relationship type, and the corresponding \texttt{Edge} entries on the
+  source nodes.
+
+  \paragraph{Cassandra.}\label{par:adapter-cassandra}
+  The Cassandra adapter parses \texttt{.cql} DDL. Its distinctive task
+  is the composite \texttt{PRIMARY KEY} clause, where the first group
+  of columns is the partition key and the remaining columns are
+  clustering keys. The adapter splits this tuple into its two parts and
+  records them on the corresponding \texttt{UniqueProperty} entries
+  with \texttt{PKTypeEnum.PARTITION} and \texttt{PKTypeEnum.CLUSTERING},
+  preserving the column ordering that Cassandra's storage layout relies
+  on.
+
+  \begin{figure}[t]
+    \centering
+    %% ========== Part 1: Coverage Matrix (用 tabular) ==========
+    \scriptsize                                                                                                                                                              \setlength{\tabcolsep}{4pt}
+    \renewcommand{\arraystretch}{1.3}
+    \begin{tabular}{|>{\columncolor{gray!15}}l|c|c|c|c|c|c|c|}
+      \hline                                                                                                                                                                   \rowcolor{orange!25}
+      & \textbf{Entity} & \textbf{Property} & \textbf{Unique} & \textbf{FK+Ref} & \textbf{Embedded} & \textbf{Edge} & \textbf{PART/CLUST} \\
+      \hline
+      \textbf{PostgreSQL} & \texttt{CREATE TABLE} & column & \texttt{PK/UNIQUE} & \texttt{REFER.} & \textcolor{gray!60}{---} & \textcolor{gray!60}{---} &
+  \textcolor{gray!60}{---} \\
+      \hline
+      \textbf{MongoDB}    & top doc & property & \texttt{\_id} & \textcolor{gray!60}{---} & nested obj & \textcolor{gray!60}{---} & \textcolor{gray!60}{---} \\
+      \hline
+      \textbf{Neo4j}      & \texttt{// Node:} & \texttt{// Prop:} & \texttt{// Key:} & \textcolor{gray!60}{---} & \textcolor{gray!60}{---} & \texttt{// Rel:} &
+  \textcolor{gray!60}{---} \\
+      \hline
+      \textbf{Cassandra}  & \texttt{CREATE TABLE} & column & \texttt{PK} & \textcolor{gray!60}{---} & \textcolor{gray!60}{---} & \textcolor{gray!60}{---} & PART+CLUST \\
+      \hline
+    \end{tabular}
+    \renewcommand{\arraystretch}{1.0}
+
+    \vspace{0.6cm}
+
+    %% ========== Part 2: 4 Concrete examples (用 tabular + minipage + colorbox) ==========
+    \setlength{\fboxsep}{5pt}
+    \begin{tabular}{@{}c@{\hspace{6pt}}c@{}}
+      \colorbox{yellow!12}{\begin{minipage}{6.0cm}\scriptsize
+        \textbf{PostgreSQL}\\[2pt]
+        \texttt{CREATE TABLE orders (}\\
+        \texttt{\ \ id INT PRIMARY KEY,}\\
+        \texttt{\ \ customer\_id INT}\\
+        \texttt{\ \ \ \ REFERENCES customers(id));}\\[3pt]
+        $\Rightarrow$ \texttt{EntityType(orders)}\\
+        \texttt{\ \ + UniqueConstraint(PK)}\\
+        \texttt{\ \ + ForeignKeyConstraint}\\
+        \texttt{\ \ + Reference(customers)}
+      \end{minipage}}
+      &
+      \colorbox{green!12}{\begin{minipage}{6.0cm}\scriptsize
+        \textbf{MongoDB}\\[2pt]
+        \texttt{\{ "address": \{}\\
+        \texttt{\ \ "street": "string",}\\
+        \texttt{\ \ "city": "string" \}\}}\\[3pt]
+        $\Rightarrow$ \texttt{EntityType(root)}\\
+        \texttt{\ \ + Embedded(address)}\\
+        \texttt{\ \ + EntityType(address)}\\
+        \texttt{\ \ \ \ \ with Property(street, city)}
+      \end{minipage}}
+      \\[8pt]
+      \colorbox{purple!12}{\begin{minipage}{6.0cm}\scriptsize
+        \textbf{Neo4j}\\[2pt]
+        \texttt{// Node: customers}\\
+        \texttt{// Key: id (STRING)}\\
+        \texttt{// Properties: id, name}\\
+        \texttt{// Relationship: ORDERED}\\
+        \texttt{//\ \ (customers -> orders)}\\[3pt]
+        $\Rightarrow$ \texttt{EntityType(customers, VERTEX)}\\
+        \texttt{\ \ + EntityType(ORDERED, EDGE)}\\
+        \texttt{\ \ + Edge on customers}
+      \end{minipage}}
+      &
+      \colorbox{red!12}{\begin{minipage}{6.0cm}\scriptsize
+        \textbf{Cassandra}\\[2pt]
+        \texttt{CREATE TABLE events (}\\
+        \texttt{\ \ user\_id UUID,}\\
+        \texttt{\ \ ts TIMESTAMP, ...,}\\
+        \texttt{\ \ PRIMARY KEY (user\_id, ts));}\\[3pt]
+        $\Rightarrow$ \texttt{EntityType(events)}\\
+        \texttt{\ \ + UniqueProp(user\_id, PARTITION)}\\
+        \texttt{\ \ + UniqueProp(ts, CLUSTERING)}
+      \end{minipage}}
+    \end{tabular}
+    \normalsize
+
+    \caption{Schema constructs and their M-Model+ equivalents across the four adapters}
+    \label{fig:adapter-mappings}
+  \end{figure}
+
+
 
 \section{User Interface}\label{sec:user-interface}
 
+The user interface presents the \textsc{SMILE} workflow from schema selection and script processing to the resulting target schemas and validation output. It combines visualization with interactive support for schema inspection, script generation, execution, and validation. The interface follows a web layout organized around five main tabs, as summarized in \autoref{fig:ui-overview}.
+
+\begin{figure}[t]
+\centering
+
+% Soft pastel palette
+\definecolor{CanvasBg}{HTML}{FAFCFF}
+\definecolor{PastelBlue}{HTML}{D9E8FB}
+\definecolor{PastelPink}{HTML}{F7CECC}
+\definecolor{PastelYellow}{HTML}{FFF5C4}
+\definecolor{PastelSky}{HTML}{9FCEFC}
+\definecolor{PastelPurple}{HTML}{E2D5E7}
+\definecolor{PastelGreen}{HTML}{F3FEF6}
+\definecolor{LineDark}{RGB}{82,96,110}
+\definecolor{TextDark}{RGB}{35,40,45}
+
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[
+  font=\sffamily\footnotesize,
+  >={Stealth[length=2.0mm,width=1.35mm]},
+  canvas/.style={
+    draw=LineDark!28,
+    fill=CanvasBg,
+    rounded corners=6pt,
+    line width=0.45pt
+  },
+  titlebox/.style={
+    draw=LineDark!85,
+    fill=PastelBlue,
+    rounded corners=4pt,
+    line width=0.55pt,
+    align=center,
+    minimum width=18.0cm,
+    minimum height=0.95cm,
+    inner sep=4pt
+  },
+  tab/.style={
+    draw=LineDark!75,
+    rounded corners=4pt,
+    line width=0.45pt,
+    align=center,
+    text width=3.30cm,
+    minimum width=3.55cm,
+    minimum height=1.30cm,
+    inner sep=3pt
+  },
+  panel/.style={
+    draw=LineDark!70,
+    rounded corners=4pt,
+    line width=0.5pt,
+    inner sep=0pt
+  },
+  panelheader/.style={
+    font=\sffamily\footnotesize\bfseries,
+    text=TextDark,
+    anchor=west
+  },
+  nodebox/.style={
+    draw=LineDark!70,
+    fill=white,
+    rounded corners=4pt,
+    line width=0.42pt,
+    align=center,
+    text width=2.75cm,
+    minimum width=2.95cm,
+    minimum height=0.82cm,
+    inner sep=4pt
+  },
+  nodeboxwide/.style={
+    nodebox,
+    text width=2.85cm,
+    minimum width=3.00cm,
+    minimum height=1.45cm
+  },
+  arr/.style={
+    -{Stealth[length=1.75mm,width=1.25mm]},
+    draw=black!65,
+    line width=0.5pt
+  },
+  lbl/.style={
+    font=\sffamily\scriptsize\itshape,
+    text=black!68,
+    fill=CanvasBg,
+    inner xsep=2pt,
+    inner ysep=1pt
+  },
+  lblpink/.style={
+    font=\sffamily\scriptsize\itshape,
+    text=black!70,
+    fill=PastelPink!32,
+    inner xsep=2pt,
+    inner ysep=1pt
+  },
+  note/.style={
+    font=\sffamily\scriptsize\itshape,
+    text=black!70,
+    align=center
+  }
+]
+
+% =========================================================
+% Background canvas
+% =========================================================
+\node[canvas, minimum width=19.4cm, minimum height=14.4cm]
+  (bg) at (0,-6.10) {};
+
+% =========================================================
+% Title
+% =========================================================
+\node[titlebox] (title) at (0,0)
+  {\textbf{SMILE Web Interface}};
+
+% =========================================================
+% Top-level tabs
+% =========================================================
+\node[tab, fill=PastelBlue] (t1) at (-7.30,-1.85)
+  {\textbf{Source Schemas}\\browse predefined\\schemas};
+
+\node[tab, fill=PastelPink] (t2) at (-3.65,-1.85)
+  {\textbf{User Transformation}\\interactive workspace};
+
+\node[tab, fill=PastelGreen] (t3) at (0,-1.85)
+  {\textbf{Schema Comparison}\\source vs.\ target};
+
+\node[tab, fill=PastelYellow] (t4) at (3.65,-1.85)
+  {\textbf{SMILE Script}\\script + parsed\\operations};
+
+\node[tab, fill=PastelPurple] (t5) at (7.30,-1.85)
+  {\textbf{Migration / Evolution}\\\textbf{Process}\\pipeline trace};
+
+\draw[dashed, rounded corners=4pt, draw=LineDark!45, line width=0.45pt]
+  (-9.20,-2.60) rectangle (9.20,-1.05);
+
+\node[lbl] at (-7.75,-0.85) {Top-level tabs};
+
+% =========================================================
+% Detail: User Transformation
+% =========================================================
+\node[panel, fill=PastelPink!32, minimum width=17.6cm, minimum height=3.20cm]
+  (detail) at (0,-4.95) {};
+
+\begin{scope}
+  \clip[rounded corners=4pt] (-8.8,-3.35) rectangle (8.8,-6.55);
+  \fill[PastelPink!58] (-8.8,-3.35) rectangle (8.8,-3.80);
+\end{scope}
+\draw[LineDark!55, line width=0.4pt]
+  (-8.8,-3.80) -- (8.8,-3.80);
+
+\node[panelheader] at (-8.5,-3.575) {Detail: User Transformation};
+
+\node[nodeboxwide, fill=PastelBlue!65] (u1) at (-6.85,-5.15)
+  {\textbf{Source Schema}\\paste text /\\upload file};
+
+\node[nodeboxwide, fill=PastelBlue!35] (u2) at (-3.42,-5.15)
+  {\textbf{Meta Schema V1}\\inspect source};
+
+\node[nodeboxwide, fill=PastelYellow!75] (u3) at (0,-5.15)
+  {\textbf{Generate Script}\\editor +\\autocomplete};
+
+\node[nodeboxwide, fill=PastelGreen!70] (u4) at (3.42,-5.15)
+  {\textbf{Meta Schema V2}\\result summary};
+
+\node[nodeboxwide, fill=PastelPink!65] (u5) at (6.85,-5.15)
+  {\textbf{Target Schema}\\exported native\\schema};
+
+\draw[arr] (u1.east) -- (u2.west);
+\draw[arr] (u2.east) -- (u3.west);
+\draw[arr] (u3.east) -- (u4.west);
+\draw[arr] (u4.east) -- (u5.west);
+
+\node[lblpink] at (-5.13,-4.18) {Inspect Source};
+\node[lblpink] at (1.71,-4.18) {Run};
+
+% =========================================================
+% Schema Comparison
+% =========================================================
+\node[panel, fill=PastelGreen!42, minimum width=8.6cm, minimum height=2.65cm]
+  (cmp) at (-4.45,-8.05) {};
+
+\begin{scope}
+  \clip[rounded corners=4pt] (-8.75,-6.725) rectangle (-0.15,-9.375);
+  \fill[PastelGreen!70] (-8.75,-6.725) rectangle (-0.15,-7.175);
+\end{scope}
+\draw[LineDark!55, line width=0.4pt]
+  (-8.75,-7.175) -- (-0.15,-7.175);
+
+\node[panelheader] at (-8.45,-6.95) {Schema Comparison};
+
+\node[nodebox, minimum width=3.1cm, text width=2.9cm] (c1) at (-6.35,-8.15)
+  {Source schema view};
+
+\node[nodebox, minimum width=3.1cm, text width=2.9cm] (c2) at (-2.55,-8.15)
+  {Target schema view};
+
+\draw[arr] (c1.east) -- (c2.west);
+
+\node[note] at (-4.45,-9.10)
+  {ER / Graph / Chebotko / JSON depending on DB type};
+
+% =========================================================
+% SMILE Script
+% =========================================================
+\node[panel, fill=PastelYellow!50, minimum width=8.6cm, minimum height=2.65cm]
+  (scr) at (4.45,-8.05) {};
+
+\begin{scope}
+  \clip[rounded corners=4pt] (0.15,-6.725) rectangle (8.75,-9.375);
+  \fill[PastelYellow!85] (0.15,-6.725) rectangle (8.75,-7.175);
+\end{scope}
+\draw[LineDark!55, line width=0.4pt]
+  (0.15,-7.175) -- (8.75,-7.175);
+
+\node[panelheader] at (0.45,-6.95) {SMILE Script};
+
+\node[nodebox, text width=2.2cm, minimum width=2.45cm, minimum height=1.05cm] (s1) at (1.65,-8.15)
+  {script text};
+
+\node[nodebox, text width=2.2cm, minimum width=2.45cm, minimum height=1.05cm] (s2) at (4.45,-8.15)
+  {parsed\\operations};
+
+\node[nodebox, text width=2.2cm, minimum width=2.45cm, minimum height=1.05cm] (s3) at (7.25,-8.15)
+  {validation};
+
+\draw[arr] (s1.east) -- (s2.west);
+\draw[arr] (s2.east) -- (s3.west);
+
+\node[note] at (4.45,-9.10)
+  {Layer 1: SMILE Script \quad Layer 2: Adapter Export};
+
+% =========================================================
+% Migration / Evolution Process
+% =========================================================
+\node[panel, fill=PastelPurple!42, minimum width=17.6cm, minimum height=2.55cm]
+  (proc) at (0,-11.30) {};
+
+\begin{scope}
+  \clip[rounded corners=4pt] (-8.8,-10.025) rectangle (8.8,-12.575);
+  \fill[PastelPurple!68] (-8.8,-10.025) rectangle (8.8,-10.475);
+\end{scope}
+\draw[LineDark!55, line width=0.4pt]
+  (-8.8,-10.475) -- (8.8,-10.475);
+
+\node[panelheader] at (-8.5,-10.25)
+  {Migration / Evolution Process};
+
+\node[nodebox, minimum width=2.7cm, text width=2.45cm] (p1) at (-6.65,-11.42)
+  {Meta Schema V1};
+
+\node[nodebox, minimum width=2.7cm, text width=2.45cm] (p2) at (-3.30,-11.42)
+  {operations};
+
+\node[nodebox, minimum width=2.7cm, text width=2.45cm] (p3) at (0.05,-11.42)
+  {Meta Schema V2};
+
+\node[nodebox, minimum width=2.7cm, text width=2.45cm] (p4) at (3.40,-11.42)
+  {target schema};
+
+\node[nodebox, minimum width=2.7cm, text width=2.45cm] (p5) at (6.75,-11.42)
+  {summary};
+
+\draw[arr] (p1.east) -- (p2.west);
+\draw[arr] (p2.east) -- (p3.west);
+\draw[arr] (p3.east) -- (p4.west);
+\draw[arr] (p4.east) -- (p5.west);
+
+\end{tikzpicture}%
+}
+
+\caption{Overview of the SMILE web interface and its tab-based organization}
+\label{fig:ui-overview}
+\end{figure}
+
+
+The tab \texttt{Source Schemas} is the entry point of the system. It displays the available source schemas, which are used as test and demonstration scenarios for migrations and evolutions. This area primarily supports exploratory interaction with the prototype and the selection of example configurations.
+
+The tab \texttt{User Transformation} forms the interactive workspace. On the left side, users can paste a source schema as text or upload it as a file. The schema can then be converted into Meta Schema V1 for inspection. Based on this schema, the right side generates a \textsc{SMILE} script skeleton that can be further edited, validated, and executed in the editor. The interface supports both syntax variants and offers options to copy and save the generated script. To assist script authoring, the editor provides keyword completion and hints for specific operations. For example, after typing \texttt{add}, the interface suggests available \textsc{SMILE} operations such as \texttt{ADD\_ENTITY}, \texttt{ADD\_PROPERTY}, or \texttt{ADD\_CLUSTERING\_KEY}, together with a short description and the expected syntax pattern. In the lower area, the interface displays both the computed Meta Schema V2 and the exported target schema derived from it.
+
+The tab \texttt{Schema Comparison} presents the source and target schemas. Depending on the database type, schemas are shown through suitable visualisations, including ER, graph, Chebotko, and JSON views. This makes the native expression of each transformation visible and highlights the structural differences between the source and target paradigms.
+
+The tab \texttt{SMILE Script} focuses on the transformation script. The interface displays the complete \textsc{SMILE} script together with the parsed operation list, the execution status of individual steps, and the results of the two-layer validation. This area combines the syntax view, the execution view, and the validation feedback in a single representation.
+
+The tab \texttt{Migration / Evolution Process} visualises the transformation process of the given test scripts. This view presents the process from Meta Schema V1 through the applied operations and Meta Schema V2 to the exported target schema. This area makes individual transformation steps traceable and shows the effect of each operation within the overall workflow.
+
+In summary, these five areas enable exploratory interaction with the prototype and offer transparent insight into the internal processing steps.
+
 \section{Summary}\label{sec:impl-summary}
+
+This chapter described how the concepts introduced in Chapter~3 are realized in the implementation of SMILE. It began with the technical foundation of the system. Python is used throughout the project, ANTLR~4 generates the parser components from the two grammar files, and the web interface is implemented with \texttt{http.server}, HTML, CSS, and JavaScript. The implementation works on schema definition files rather than on live database instances, which keeps the scope on schema-level migration and evolution.
+
+The central data structure is M-Model+, which brings the four supported database paradigms into one intermediate representation. Instead of transforming native schemas directly, SMILE first translates them into this meta representation. The same idea is used for data types, where native types are first mapped to \texttt{PrimitiveType} values and then translated back into the target representation during export.
+
+On this basis, the parsing layer turns SMILE scripts into executable operations. The two ANTLR~4 grammars generate the parser components, and the system selects the appropriate grammar automatically from the script type. Although the Specific and Generalized variants differ at the syntax level, both are translated into the same internal list of typed \texttt{Operation} objects. The listener classes connect the parse tree produced by ANTLR~4 with the operation sequence consumed by the transformation engine.
+
+The SMILE Engine then applies these operations to Meta Schema~V1 and produces Meta Schema~V2. The Schema Transformer dispatches each operation to the corresponding implementation step and keeps the execution logic modular across both schema evolution operations and structural cross-paradigm transformations. The pipeline also distinguishes between successful, skipped, and failed operations, so that the execution flow remains visible during processing.
+
+The adapter layer connects this internal representation with the native schema formats of PostgreSQL, MongoDB, Neo4j, and Cassandra. Each adapter covers both reverse engineering and forward engineering for one paradigm. In this way, the transformation logic remains independent of database-specific syntax, while the exported result can still be checked against the expected target through the two-layer validation process.
+
+The user interface makes this processing chain visible. It presents the main stages of the workflow, including schema inspection, script execution, result comparison, and validation. The implementation turns the concepts and design decisions introduced in \autoref{ch:concept} into a working system prototype and provides the basis for the evaluation in \autoref{ch:evaluation}.

@@ -17,6 +17,7 @@ Data Flow:
 Design: from Andre Conrad
 """
 import json
+import logging
 import re
 from typing import Dict, Any, Optional, List, Union
 from ..unified_meta_schema import (
@@ -26,6 +27,8 @@ from ..unified_meta_schema import (
     TypeMappings
 )
 from ._base import DatabaseAdapter
+
+logger = logging.getLogger(__name__)
 
 
 class Neo4jAdapter(DatabaseAdapter):
@@ -187,6 +190,22 @@ class Neo4jAdapter(DatabaseAdapter):
         """
         label = node_def.get("label", "Unknown")
         primary_key = node_def.get("primary_key")
+        # Normalise primary_key to a list so single-column and composite NODE KEYs
+        # share the same downstream code path.
+        # Accepted shapes:
+        #   None       → no PK
+        #   "name"     → single-column NODE KEY (legacy shape)
+        #   ["a", "b"] → composite NODE KEY (matches the export-side
+        #                ``REQUIRE (n.a, n.b) IS NODE KEY`` form)
+        if primary_key is None:
+            pk_columns: List[str] = []
+        elif isinstance(primary_key, str):
+            pk_columns = [primary_key]
+        elif isinstance(primary_key, (list, tuple)):
+            pk_columns = [str(c) for c in primary_key]
+        else:
+            pk_columns = []
+        pk_set = set(pk_columns)
 
         entity = EntityType(
             object_name=[label],
@@ -199,7 +218,7 @@ class Neo4jAdapter(DatabaseAdapter):
             prop_name = prop_def.get("name", "")
             prop_type = prop_def.get("type", "string").lower()
 
-            is_key = (prop_name == primary_key)
+            is_key = prop_name in pk_set
             data_type = self._parse_data_type(prop_type)
 
             attr = Property(
@@ -210,19 +229,25 @@ class Neo4jAdapter(DatabaseAdapter):
             )
             entity.add_property(attr)
 
-            # Create primary key constraint
-            if is_key:
-                constraint = UniqueConstraint(
+        # Build a single UniqueConstraint with one UniqueProperty per PK column.
+        # Single-column NODE KEY → 1 UniqueProperty (back-compat); composite
+        # NODE KEY → N UniqueProperties on a single constraint, mirroring the
+        # ``REQUIRE (n.a, n.b) IS NODE KEY`` export form.
+        if pk_columns:
+            unique_props = []
+            for col in pk_columns:
+                pk_attr = entity.get_property(col)
+                if pk_attr:
+                    unique_props.append(UniqueProperty(
+                        primary_key_type=PKTypeEnum.NODE_KEY,
+                        property_id=pk_attr.meta_id,
+                    ))
+            if unique_props:
+                entity.add_constraint(UniqueConstraint(
                     is_primary_key=True,
                     is_managed=True,
-                    unique_properties=[
-                        UniqueProperty(
-                            primary_key_type=PKTypeEnum.NODE_KEY,
-                            property_id=attr.meta_id
-                        )
-                    ]
-                )
-                entity.add_constraint(constraint)
+                    unique_properties=unique_props,
+                ))
 
         return entity
 
@@ -281,7 +306,14 @@ class Neo4jAdapter(DatabaseAdapter):
         # Create Edge on source entity's relationships list
         source_entity = self.database.get_entity_type(source_label)
         if not source_entity:
-            print(f"[NOTICE] Neo4j relationship '{rel_name}': source entity '{source_label}' not found, Edge not created")
+            # ``logger.warning`` instead of ``print`` so the message goes
+            # through the same logging pipeline as the rest of the project
+            # (core / handlers / parser all use ``logger``). Stays out of
+            # stdout, which is owned by main.py / web_server response bodies.
+            logger.warning(
+                "Neo4j relationship '%s': source entity '%s' not found, Edge not created",
+                rel_name, source_label,
+            )
         if source_entity:
             # Optionality is derived from cardinality minimum:
             # 0..1, 0..n → optional (minimum 0), 1..1, 1..n → required (minimum 1)
@@ -363,12 +395,36 @@ class Neo4jAdapter(DatabaseAdapter):
                         continue
 
                     # CREATE CONSTRAINT ... REQUIRE n.<field> IS UNIQUE/NODE KEY (executable format)
+                    # Single-column form. Symmetric to the export side that
+                    # writes ``REQUIRE n.<field> IS NODE KEY`` for length-1 PKs.
                     constraint_match = re.match(
                         r'CREATE CONSTRAINT .+ FOR \(n:[\w:]+\) REQUIRE n\.(\w+) IS (?:UNIQUE|NODE KEY);',
                         next_line
                     )
                     if constraint_match:
                         primary_key = constraint_match.group(1)
+                        j += 1
+                        continue
+
+                    # Composite NODE KEY: REQUIRE (n.a, n.b) IS NODE KEY.
+                    # Round-trip counterpart of the export side at line ~568:
+                    # ``REQUIRE (n.<col1>, n.<col2>) IS NODE KEY``.
+                    composite_match = re.match(
+                        r'CREATE CONSTRAINT .+ FOR \(n:[\w:]+\) REQUIRE \(([^)]+)\) IS NODE KEY;',
+                        next_line
+                    )
+                    if composite_match:
+                        # Inner list: "n.col1, n.col2" → strip the "n." prefix.
+                        cols = []
+                        for part in composite_match.group(1).split(','):
+                            part = part.strip()
+                            if part.startswith('n.'):
+                                cols.append(part[2:])
+                            else:
+                                cols.append(part)
+                        # Pass the list onwards as primary_key; _parse_node
+                        # accepts both str and list-of-str for primary_key.
+                        primary_key = cols
                         j += 1
                         continue
 

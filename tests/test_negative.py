@@ -307,12 +307,125 @@ class TestValidationBlame:
         assert r["validation_blame"] == "ok"
 
     def test_smile_script_blame_on_layer1_failure(self):
-        """Simulate a broken Meta V2 (script error) and confirm blame=smile_script."""
+        """Simulate a broken Meta V2 (script bug) and confirm blame=smile_script.
+
+        Surgically swap the entity dict for a single bogus entity so:
+          * Layer 0 still passes (≥1 entity, original execution_stats kept)
+          * Layer 1 fails (entity names don't match the expected target)
+
+        Replacing the whole result with ``{}`` would also fail Layer 0
+        (zero entities is a script-side failure mode), which would route
+        blame to ``script_failed`` — masking the Layer 1 path we want to
+        exercise here.
+        """
         from core import run_migration
         from validation.pipeline import validate_pipeline
         r = run_migration("northwind_r2d_specific")
-        # Surgically wreck the Meta V2 to force Layer 1 to fail.
-        r["result"] = {}
+        # Replace the entity map with a single bogus entity so the entity-set
+        # diff against the expected Mongo target fails on Layer 1, while Layer 0
+        # still sees one entity + all original execution_stats pass.
+        r["result"] = {
+            "bogus_entity": {
+                "name": "bogus_entity",
+                "entity_kind": "document",
+                "properties": [],
+                "constraints": [],
+                "references": [],
+                "embedded": [],
+                "edges": [],
+                "labels": [],
+            },
+            "__db_meta__": r["result"].get("__db_meta__", {}),
+        }
         r["exported_target"] = ""
         v = validate_pipeline(r, "Document", "northwind_r2d_specific")
         assert v["blame"] == "smile_script"
+
+    def test_script_failed_blame_when_handler_errors(self):
+        """An exception in a handler surfaces as Layer 0 fail → blame=script_failed.
+
+        Synthetic result_dict simulates the post-run_apply state where one
+        op finished with status="error" — the same shape the real pipeline
+        produces when a handler raises an unexpected exception. We don't
+        actually need a broken handler in production code: the contract is
+        that ``execution_stats.error > 0`` flips Layer 0 to fail, and Layer
+        0 fail dominates blame attribution regardless of L1/L2 outcomes.
+        """
+        from validation.pipeline import validate_pipeline
+        result_dict = {
+            "result": {"some_entity": {"name": "some_entity"}},
+            "execution_stats": {"total": 3, "success": 2, "skipped": 0, "error": 1},
+            "operations_detail": [
+                {"step": 1, "type": "ADD_PROPERTY",
+                 "original_keyword": "ADD_PROPERTY", "status": "success"},
+                {"step": 2, "type": "ADD_FOREIGN_KEY",
+                 "original_keyword": "ADD_FOREIGN_KEY", "status": "error",
+                 "reason": "AttributeError: 'NoneType' has no attribute 'meta_id'"},
+                {"step": 3, "type": "MERGE",
+                 "original_keyword": "MERGE", "status": "success"},
+            ],
+            "exported_target": "",
+        }
+        v = validate_pipeline(result_dict, "Relational", "")
+        assert v["blame"] == "script_failed"
+        # Failed-step list must surface the bad op so the user can locate it.
+        failed = v["layer0"]["details"]["failed_steps"]
+        assert len(failed) == 1
+        assert failed[0]["step"] == 2
+        assert failed[0]["status"] == "error"
+        assert "AttributeError" in failed[0]["reason"]
+
+    def test_script_failed_blame_when_all_skipped(self):
+        """Every op deliberately skipped (e.g. wrong entity names throughout)
+        also fails Layer 0 — the script ran without crashing but produced
+        no schema change, which is a script-side mistake, not an adapter
+        problem.
+        """
+        from validation.pipeline import validate_pipeline
+        result_dict = {
+            "result": {"unrelated_entity": {"name": "unrelated_entity"}},
+            "execution_stats": {"total": 2, "success": 0, "skipped": 2, "error": 0},
+            "operations_detail": [
+                {"step": 1, "type": "ADD_PROPERTY",
+                 "original_keyword": "ADD_PROPERTY", "status": "skipped",
+                 "reason": "add_property: precondition not met"},
+                {"step": 2, "type": "DELETE_PROPERTY",
+                 "original_keyword": "DELETE_PROPERTY", "status": "skipped",
+                 "reason": "delete_property: 'foo' not found on bar"},
+            ],
+            "exported_target": "",
+        }
+        v = validate_pipeline(result_dict, "Relational", "")
+        assert v["blame"] == "script_failed"
+        assert v["layer0"]["passed"] is False
+        # Both skipped ops surfaced with their reasons — exactly the "where
+        # did it fail?" answer the user wants.
+        failed = v["layer0"]["details"]["failed_steps"]
+        assert len(failed) == 2
+        assert all(s["status"] == "skipped" for s in failed)
+
+    def test_layer0_failed_steps_listing_format(self):
+        """``details.failed_steps`` must carry AT LEAST the keys the CLI /
+        web UI rely on for rendering: step / type / original_keyword /
+        status / reason. Subset assertion (``<=``) rather than ``==`` so
+        that future additions (e.g. ``traceback`` / ``op_index``) don't
+        false-fail this contract test — the rendering code reads only the
+        five required keys, so adding extras is forward-compatible.
+        """
+        from validation.pipeline import derive_layer0
+        layer0 = derive_layer0({
+            "result": {"e": {"name": "e"}},
+            "execution_stats": {"total": 1, "success": 0, "skipped": 0, "error": 1},
+            "operations_detail": [
+                {"step": 1, "type": "NEST",
+                 "original_keyword": "NEST", "status": "error",
+                 "reason": "RuntimeError: boom"},
+            ],
+        })
+        assert layer0["passed"] is False
+        failed = layer0["details"]["failed_steps"]
+        required_keys = {"step", "type", "original_keyword", "status", "reason"}
+        assert failed and required_keys <= set(failed[0].keys()), (
+            f"failed_steps[0] missing required keys: "
+            f"{required_keys - set(failed[0].keys())}"
+        )

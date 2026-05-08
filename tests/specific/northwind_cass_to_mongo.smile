@@ -10,6 +10,12 @@ MIGRATION northwind_cass_to_mongo:1.0
 FROM COLUMNAR TO DOCUMENT
 USING adapted_northwind_schema VERSION 1
 
+-- Declare the two surviving document roots explicitly.
+-- CAST_ENTITY locks entity_kind so the auto-normalize step doesn't override.
+-- Aligned with northwind_pg_to_mongo / northwind_neo4j_to_mongo for byte-stable output.
+CAST_ENTITY orders TO DOCUMENT
+CAST_ENTITY customers TO DOCUMENT
+
 -- Source: 8 Cass tables — see northwind_cassandra.cql
 -- Target: 2 Mongo collections — orders + customers, max depth 3, supplier carries flat address
 

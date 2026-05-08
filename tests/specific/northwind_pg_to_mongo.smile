@@ -10,6 +10,11 @@ MIGRATION northwind_pg_to_mongo:1.0
 FROM RELATIONAL TO DOCUMENT
 USING adapted_northwind_schema VERSION 1
 
+-- Declare the two surviving document roots explicitly.
+-- CAST_ENTITY locks entity_kind so the auto-normalize step doesn't override.
+CAST_ENTITY orders TO DOCUMENT
+CAST_ENTITY customers TO DOCUMENT
+
 -- ============================================
 -- Source: PostgreSQL 3NF Tables (8 tables)
 -- ============================================
