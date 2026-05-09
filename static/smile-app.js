@@ -263,6 +263,52 @@
             container.innerHTML = html;
         }
 
+        // Renders the Verdict-layer banner shown above the per-layer rows.
+        // Maps the code-level blame string (smile_script / adapter / ...) to
+        // the paper-facing label (target_PIM / target_schema / ...) so that
+        // the UI matches the four-category Verdict description in
+        // paper smile.tex Figure 6. Colour follows pass/fail intent: green
+        // for ok, deep red for both/script_failed, plain red for single-layer
+        // failures, gray for unverifiable.
+        function renderVerdictBanner(blame, summary) {
+            if (blame == null) return '';
+            var paperLabel = {
+                'ok': 'OK',
+                'smile_script': 'TARGET_PIM',
+                'adapter': 'TARGET_SCHEMA',
+                'both': 'BOTH',
+                'script_failed': 'SCRIPT_FAILED',
+                'unverifiable': 'OTHER'
+            }[blame] || blame.toUpperCase();
+            var colour = {
+                'ok': '#1B873F',
+                'smile_script': '#D32F2F',
+                'adapter': '#D32F2F',
+                'both': '#8B1A1A',
+                'script_failed': '#8B1A1A',
+                'unverifiable': '#8E8E93'
+            }[blame] || '#8E8E93';
+            var bg = {
+                'ok': '#E6F4EA',
+                'smile_script': '#FFEBEE',
+                'adapter': '#FFEBEE',
+                'both': '#FFCDD2',
+                'script_failed': '#FFCDD2',
+                'unverifiable': '#F2F2F2'
+            }[blame] || '#F2F2F2';
+            return '<div class="validation-verdict" '
+                + 'style="display:flex;align-items:center;gap:10px;'
+                + 'padding:8px 12px;margin:6px 0 10px;border-radius:6px;'
+                + 'background:' + bg + ';border-left:4px solid ' + colour + ';">'
+                + '<span style="font-size:11px;color:#666;font-weight:600;'
+                + 'text-transform:uppercase;letter-spacing:0.5px;">Verdict</span>'
+                + '<span style="font-size:14px;font-weight:700;color:' + colour + ';">'
+                + escapeHtml(paperLabel) + '</span>'
+                + '<span style="font-size:12px;color:#555;flex:1;">'
+                + escapeHtml(summary || '') + '</span>'
+                + '</div>';
+        }
+
         function renderValidation(data) {
             var vLayer0 = data.validation_layer0 || {};
             var vMeta = data.validation_meta || {};
@@ -291,6 +337,15 @@
 
             var html = '<div class="validation-section">';
             html += '<div class="validation-section-title">Validation</div>';
+
+            // Verdict banner — directly surfaces the four/five Verdict-layer
+            // categories from paper smile.tex Figure 6 (ok / target_PIM /
+            // target_schema / both / script_failed) instead of leaving the
+            // user to infer them from per-layer PASS/FAIL badges. The verdict
+            // string itself comes from validation/pipeline.derive_blame; the
+            // rendered label uses paper terminology so the UI matches the
+            // thesis description verbatim.
+            html += renderVerdictBanner(data.validation_blame, vSummary);
 
             if (crashed) {
                 var errMsg = vSummary.substring('validation crashed:'.length).trim();

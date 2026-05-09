@@ -312,18 +312,22 @@ class TestValidationBlame:
         Surgically swap the entity dict for a single bogus entity so:
           * Layer 0 still passes (≥1 entity, original execution_stats kept)
           * Layer 1 fails (entity names don't match the expected target)
+          * Layer 2 still passes (the original ``exported_target`` produced
+            from the real Meta V2 is left intact, so it round-trips
+            cleanly against the expected target file)
 
-        Replacing the whole result with ``{}`` would also fail Layer 0
-        (zero entities is a script-side failure mode), which would route
-        blame to ``script_failed`` — masking the Layer 1 path we want to
-        exercise here.
+        Keeping Layer 2 green is what makes blame collapse to
+        ``smile_script`` rather than ``both`` — it isolates the Layer 1
+        attribution path. A separate test below covers the ``both`` case.
         """
         from core import run_migration
         from validation.pipeline import validate_pipeline
         r = run_migration("northwind_r2d_specific")
         # Replace the entity map with a single bogus entity so the entity-set
         # diff against the expected Mongo target fails on Layer 1, while Layer 0
-        # still sees one entity + all original execution_stats pass.
+        # still sees one entity + all original execution_stats pass. The
+        # original ``exported_target`` is intentionally not cleared, so
+        # Layer 2 round-trips cleanly against the expected Mongo target.
         r["result"] = {
             "bogus_entity": {
                 "name": "bogus_entity",
@@ -337,9 +341,43 @@ class TestValidationBlame:
             },
             "__db_meta__": r["result"].get("__db_meta__", {}),
         }
-        r["exported_target"] = ""
         v = validate_pipeline(r, "Document", "northwind_r2d_specific")
         assert v["blame"] == "smile_script"
+
+    def test_both_blame_when_layer1_and_layer2_fail(self):
+        """Layer 1 and Layer 2 both fail → blame=both.
+
+        Reproduces the double-failure case where the script produced the
+        wrong Meta V2 (Layer 1 fail) *and* the adapter export/parse cycle
+        could not round-trip to the expected target (Layer 2 fail) — for
+        instance, because the bogus Meta V2 produced no exported target at
+        all. The verdict ``both`` surfaces that both responsible
+        components are involved, instead of silently collapsing on the
+        first failing layer.
+        """
+        from core import run_migration
+        from validation.pipeline import validate_pipeline
+        r = run_migration("northwind_r2d_specific")
+        # Same bogus entity swap as above so Layer 1 fails ...
+        r["result"] = {
+            "bogus_entity": {
+                "name": "bogus_entity",
+                "entity_kind": "document",
+                "properties": [],
+                "constraints": [],
+                "references": [],
+                "embedded": [],
+                "edges": [],
+                "labels": [],
+            },
+            "__db_meta__": r["result"].get("__db_meta__", {}),
+        }
+        # ... plus blanking the exported target so Layer 2 also fails.
+        r["exported_target"] = ""
+        v = validate_pipeline(r, "Document", "northwind_r2d_specific")
+        assert v["blame"] == "both"
+        assert v["layer1"]["passed"] is False
+        assert v["layer2"]["passed"] is False
 
     def test_script_failed_blame_when_handler_errors(self):
         """An exception in a handler surfaces as Layer 0 fail → blame=script_failed.

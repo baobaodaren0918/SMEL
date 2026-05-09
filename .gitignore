@@ -36,3 +36,6 @@ ENV/
 /SMILEListener.py
 /SMILEParser.py
 /SMILEVisitor.py
+
+# Paper / thesis sources (kept local only)
+paper/

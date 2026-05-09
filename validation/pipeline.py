@@ -157,10 +157,21 @@ def derive_blame(layer0: Dict[str, Any], layer1: Dict[str, Any],
                  layer2: Dict[str, Any]) -> tuple:
     """Choose which layer to blame and produce a human-readable summary.
 
-    Priority order (highest first): script_failed > smile_script > adapter
-    > unverifiable > ok. The first failing layer dominates because
-    downstream layers' verdicts on a corrupted upstream input are not
-    independent evidence.
+    Verdict precedence:
+
+    * ``script_failed`` — Layer 0 fails. Dominates because a broken script
+      run produces a partial / wrong Meta V2, so Layer 1 / Layer 2
+      outcomes downstream are not independent evidence.
+    * ``unverifiable`` — Layer 1 or Layer 2 cannot be evaluated (no
+      expected target file or no adapter for the target type).
+    * ``ok`` — Both validation layers (Layer 1 and Layer 2) pass; Script
+      Execution is treated as a precondition that has already cleared.
+    * ``both`` — Layer 1 AND Layer 2 both fail. Reported as a distinct
+      verdict so a double failure is not silently collapsed onto a single
+      layer; it surfaces that the script produced a wrong Meta V2 *and*
+      the adapter's export/parse cycle does not round-trip cleanly.
+    * ``smile_script`` — only Layer 1 fails (script error).
+    * ``adapter`` — only Layer 2 fails (adapter export/parse error).
     """
     # Script Execution check dominates: if the script didn't run cleanly,
     # Layer 1/2 outcomes on the partial / wrong Meta V2 don't add
@@ -177,7 +188,13 @@ def derive_blame(layer0: Dict[str, Any], layer1: Dict[str, Any],
                 "validation skipped (no expected target file or adapter)")
 
     if l1_passed and l2_passed:
-        return ("ok", "all three layers passed")
+        return ("ok", "both validation layers passed")
+
+    if not l1_passed and not l2_passed:
+        return ("both",
+                "Both Layer 1 and Layer 2 failed — Meta V2 is wrong and "
+                "the adapter export/parse cycle does not round-trip to the "
+                "expected target")
 
     if not l1_passed:
         return ("smile_script",
@@ -196,7 +213,7 @@ def validate_pipeline(result_dict: Dict[str, Any], target_type: str,
       * ``layer1``   — Layer 1 (Meta V2 vs expected) report
       * ``layer2``   — Layer 2 (round-trip vs expected) report
       * ``blame``    — one of {"script_failed", "smile_script", "adapter",
-                        "unverifiable", "ok"}
+                        "both", "unverifiable", "ok"}
       * ``summary``  — short human-readable line for the UI / CLI
     """
     layer0 = derive_layer0(result_dict)
