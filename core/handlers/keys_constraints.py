@@ -253,6 +253,16 @@ class KeysConstraintsHandlersMixin:
         if not entity.get_property(field_name):
             entity.add_property(Property(field_name, fk_type, False, True))
 
+        # Mirror the cardinality's required-ness onto the source property's
+        # ``is_optional``. The Reference itself records cardinality, but the
+        # Mongo / PG adapters read ``Property.is_optional`` to decide whether
+        # the column appears in ``required[]`` / carries ``NOT NULL``. Without
+        # this propagation, an ADD_CONSTRAINT REFERENCE WITH CARDINALITY
+        # ONE_TO_* would silently leave the property nullable.
+        src_attr = entity.get_property(field_name)
+        if src_attr is not None:
+            src_attr.is_optional = not cardinality.is_required()
+
         # Upsert the Reference. If one already exists for this column,
         # update its target / cardinality and force ``is_enforced=False``
         # so this op cleanly downgrades a previously-enforced reference.
@@ -618,6 +628,17 @@ class KeysConstraintsHandlersMixin:
     def _clear_existing_pk(self, entity, incoming_key_columns):
         """Drop any existing primary-key constraint and strip `is_key` from
         every old PK property that is NOT in the new key column set.
+
+        ``is_optional`` is intentionally left untouched. Auto-restoring it
+        to True would silently turn a previously-NOT-NULL property into
+        nullable on PK demotion — a hidden semantic decision that loses
+        the explicit constraint a PG / Mongo source may have carried (and
+        that has no SMILE op to revert). Users who genuinely want the
+        post-demotion property to be nullable should declare that
+        explicitly via ``ADD_CONSTRAINT field AS EXISTENCE`` followed by
+        ``DELETE_CONSTRAINT field``; Layer 1 NOTICEs flag the cases where
+        such an explicit decision was not made so the user can act on
+        them rather than have the handler decide on their behalf.
         """
         for old_c in entity.constraints:
             if old_c.kind == "unique" and old_c.is_primary_key:
@@ -707,6 +728,16 @@ class KeysConstraintsHandlersMixin:
                         if up_attr and up_attr.name in key_columns_set:
                             constraint.unique_properties.remove(up)
                             up_attr.is_key = False
+                            # In Cassandra, the only way for a column to be
+                            # non-null is to be part of the partition or
+                            # clustering key. Removing it from the key must
+                            # therefore restore is_optional=True, mirroring
+                            # ADD_KEY's symmetric is_optional=False on
+                            # promotion. A subsequent SMILE op (ADD_KEY,
+                            # ADD_FOREIGN_KEY, ADD_CONSTRAINT REFERENCE with
+                            # required cardinality) is responsible for
+                            # re-asserting non-null if intended.
+                            up_attr.is_optional = True
                             removed_any = True
                 if removed_any:
                     key_names_str = ", ".join(key_columns)
