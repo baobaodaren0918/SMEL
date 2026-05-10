@@ -616,11 +616,12 @@ class Neo4jAdapter(DatabaseAdapter):
                 if pk_attr:
                     pk_attrs.append(pk_attr.name)
             if len(pk_attrs) == 1:
-                constraint_name = f"{label.lower()}_{pk_attrs[0]}_unique"
-                lines.append(
-                    f"CREATE CONSTRAINT {constraint_name} IF NOT EXISTS "
-                    f"FOR (n:{label_display}) REQUIRE n.{pk_attrs[0]} IS NODE KEY;"
-                )
+                # Native ground-truth files use the ``// Key: <field>`` comment
+                # form rather than an executable ``CREATE CONSTRAINT``. The
+                # parser at ``_parse_node_block`` already accepts both, so
+                # exporting comments keeps round-trip intact while aligning
+                # with the project's chosen Cypher style.
+                lines.append(f"// Key: {pk_attrs[0]}")
             elif len(pk_attrs) > 1:
                 constraint_name = f"{label.lower()}_pk"
                 props = ", ".join(f"n.{a}" for a in pk_attrs)

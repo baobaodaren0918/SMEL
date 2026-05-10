@@ -15,7 +15,7 @@ Plus ``_calculate_changes`` — thin wrapper around the unified
 from typing import Dict, List, Optional
 
 from Schema.unified_meta_schema import (
-    Cardinality, Database, EntityKind, Embedded,
+    Cardinality, Database, EntityKind, Embedded, PrimitiveDataType,
 )
 from config import (
     SOURCE_TYPE_RELATIONAL, SOURCE_TYPE_DOCUMENT,
@@ -178,6 +178,45 @@ def normalize_document_full_paths(db: Database) -> None:
         if old in db.entity_types and old != new:
             entity = db.entity_types.pop(old)
             db.entity_types[new] = entity
+
+
+def normalize_property_psm(db: Database, source_type: str, target_type: str) -> None:
+    """Strip source-paradigm property-level PSM that doesn't apply to the
+    target paradigm.
+
+    Counterpart to ``normalize_entity_kinds`` (entity-level PSM) and
+    ``normalize_document_cardinality`` (relationship-level PSM): handles the
+    Property layer.
+
+    Currently strips ``max_length`` on cross-paradigm migrations whose target
+    is not Relational. Rationale: ``VARCHAR(N)`` length is a relational PSM
+    concept; document/graph/columnar native schemas in this project do not
+    declare per-string length constraints. Carrying ``max_length`` through to
+    e.g. MongoDB JSON Schema produces a stricter target than the project's
+    hand-written ground-truth files, which encode the idiomatic style of
+    each paradigm. Same-paradigm migrations (R→R, D→D, ...) preserve
+    ``max_length`` so an explicit ``VARCHAR(100)`` survives a R→R rename.
+    """
+    if source_type == target_type:
+        return
+    if target_type == SOURCE_TYPE_RELATIONAL:
+        return
+
+    # ``max_length`` (PG VARCHAR length) is a relational PSM concept.
+    # Strip it when migrating into a non-relational target.
+    #
+    # NB: ``is_optional`` is *not* stripped here. PG NOT NULL on non-PK
+    # columns is real source-side information that Cassandra DDL and the
+    # project's comment-based Cypher cannot carry — when these mismatches
+    # occur Layer 1 surfaces them as nullability NOTICEs. Treating them
+    # as paradigm-capability diagnostics (and letting the user resolve
+    # them script-side via ADD_CONSTRAINT EXISTENCE / DELETE_CONSTRAINT
+    # when the column is genuinely meant to be nullable post-migration)
+    # is more honest than silently rewriting the meta to hide the gap.
+    for entity in db.entity_types.values():
+        for prop in entity.properties:
+            if isinstance(prop.data_type, PrimitiveDataType):
+                prop.data_type.max_length = None
 
 
 def normalize_document_cardinality(db: Database, source_type: str) -> None:
