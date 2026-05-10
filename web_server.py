@@ -262,6 +262,7 @@ class SMILEHandler(SimpleHTTPRequestHandler):
                             validation_layer0 = v["layer0"]
                             validation_meta = v["layer1"]
                             validation_export = v["layer2"]
+                            validation_text_diff = v["layer3"]
                             validation_blame = v["blame"]
                             validation_summary = v["summary"]
                         except Exception as ex:
@@ -271,6 +272,7 @@ class SMILEHandler(SimpleHTTPRequestHandler):
                             validation_layer0 = err_block
                             validation_meta = err_block
                             validation_export = err_block
+                            validation_text_diff = err_block
                             validation_blame = "unverifiable"
                             validation_summary = f"validation crashed: {ex}"
 
@@ -288,6 +290,7 @@ class SMILEHandler(SimpleHTTPRequestHandler):
                             "validation_layer0": validation_layer0,
                             "validation_meta": validation_meta,
                             "validation_export": validation_export,
+                            "validation_text_diff": validation_text_diff,
                             "validation_blame": validation_blame,
                             "validation_summary": validation_summary,
                         }
@@ -1778,10 +1781,10 @@ def get_html():
 
                     <div id="composeEditor"></div>
                     <div id="composeStatus" class="compose-status"></div>
-                    <!-- Holds the three-layer validation panel (Layer 0 / 1 / 2 +
-                         blame) the backend returns for /api/run_script. Without
+                    <!-- Holds the four-layer validation panel (Layer 0 / 1 / 2 / 3
+                         + blame) the backend returns for /api/run_script. Without
                          this hook, runComposeScript would render only a plain-
-                         text banner and discard validation_layer0/meta/export. -->
+                         text banner and discard validation_layer0/meta/export/text_diff. -->
                     <div id="composeValidation"></div>
                 </div>
             </div>

@@ -57,6 +57,7 @@ from typing import Any, Dict, List
 
 from validation.meta import validate_meta
 from validation.export import validate_export
+from validation.text_diff import validate_text_diff
 
 
 def derive_layer0(result_dict: Dict[str, Any]) -> Dict[str, Any]:
@@ -154,27 +155,37 @@ def derive_layer0(result_dict: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def derive_blame(layer0: Dict[str, Any], layer1: Dict[str, Any],
-                 layer2: Dict[str, Any]) -> tuple:
+                 layer2: Dict[str, Any],
+                 layer3: Dict[str, Any]) -> tuple:
     """Choose which layer to blame and produce a human-readable summary.
 
     Verdict precedence:
 
     * ``script_failed`` — Layer 0 fails. Dominates because a broken script
-      run produces a partial / wrong Meta V2, so Layer 1 / Layer 2
-      outcomes downstream are not independent evidence.
+      run produces a partial / wrong Meta V2, so downstream layers'
+      outcomes are not independent evidence.
     * ``unverifiable`` — Layer 1 or Layer 2 cannot be evaluated (no
-      expected target file or no adapter for the target type).
-    * ``ok`` — Both validation layers (Layer 1 and Layer 2) pass; Script
-      Execution is treated as a precondition that has already cleared.
-    * ``both`` — Layer 1 AND Layer 2 both fail. Reported as a distinct
-      verdict so a double failure is not silently collapsed onto a single
-      layer; it surfaces that the script produced a wrong Meta V2 *and*
-      the adapter's export/parse cycle does not round-trip cleanly.
+      expected target file or no adapter for the target type). Layer 3
+      missing alone does not trigger this verdict because the text-level
+      check has its own skip semantics that we surface in the L3 card.
+    * ``both`` — Layer 1 AND Layer 2 both fail. Distinct verdict so a
+      double meta-level failure is not silently collapsed onto a single
+      layer.
     * ``smile_script`` — only Layer 1 fails (script error).
     * ``adapter`` — only Layer 2 fails (adapter export/parse error).
+    * ``text_diff`` — Layer 1 and Layer 2 both pass, but Layer 3 fails.
+      Surfaces a PSM-style drift between the FE-exported native and the
+      project's hand-written ground truth (set-based text comparison).
+      This is reported as its own verdict because earlier ``ok`` runs
+      with a failing L3 hid real adapter / handler bugs (e.g. Cassandra
+      clustering NOT NULL leaking into PG / Mongo, the maxLength
+      cross-paradigm leak, the Neo4j ``CREATE CONSTRAINT`` vs ``// Key:``
+      style mismatch). Treating the L3 failure as part of the verdict
+      makes that class of bug visible without burying it inside ``ok``.
+    * ``ok`` — Layer 1, Layer 2, and (if evaluated) Layer 3 all pass.
     """
     # Script Execution check dominates: if the script didn't run cleanly,
-    # Layer 1/2 outcomes on the partial / wrong Meta V2 don't add
+    # Layer 1/2/3 outcomes on the partial / wrong Meta V2 don't add
     # information.
     if not layer0.get("passed"):
         return ("script_failed",
@@ -182,13 +193,11 @@ def derive_blame(layer0: Dict[str, Any], layer1: Dict[str, Any],
 
     l1_passed = layer1.get("passed")
     l2_passed = layer2.get("passed")
+    l3_passed = layer3.get("passed")
 
     if l1_passed is None or l2_passed is None:
         return ("unverifiable",
                 "validation skipped (no expected target file or adapter)")
-
-    if l1_passed and l2_passed:
-        return ("ok", "both validation layers passed")
 
     if not l1_passed and not l2_passed:
         return ("both",
@@ -200,32 +209,56 @@ def derive_blame(layer0: Dict[str, Any], layer1: Dict[str, Any],
         return ("smile_script",
                 "Layer 1 failed — Meta V2 mismatches expected target")
 
-    return ("adapter",
-            "Layer 2 failed — adapter export/parse cycle mismatches expected target")
+    if not l2_passed:
+        return ("adapter",
+                "Layer 2 failed — adapter export/parse cycle mismatches "
+                "expected target")
+
+    # Layer 1 and Layer 2 passed; Layer 3 is the final gate.
+    if l3_passed is False:
+        return ("text_diff",
+                "Layer 3 failed — exported native text does not match the "
+                "hand-written ground truth under set-based normalization "
+                "(PSM style drift)")
+
+    # l3_passed is True, or None (skipped because no normalizer / no target)
+    return ("ok",
+            "all validation layers passed"
+            if l3_passed
+            else "Layer 1 and Layer 2 passed (Layer 3 not evaluated)")
 
 
 def validate_pipeline(result_dict: Dict[str, Any], target_type: str,
                       config_key: str = "") -> Dict[str, Any]:
-    """Run all three validation layers and produce a single unified result.
+    """Run all validation layers and produce a single unified result.
 
     Returns a dict with:
       * ``layer0``   — Layer 0 (script execution) report
       * ``layer1``   — Layer 1 (Meta V2 vs expected) report
       * ``layer2``   — Layer 2 (round-trip vs expected) report
+      * ``layer3``   — Layer 3 (exported text vs hand-written native, set-based) report
       * ``blame``    — one of {"script_failed", "smile_script", "adapter",
-                        "both", "unverifiable", "ok"}
+                        "both", "unverifiable", "ok"} -- Layer 3 does not
+                        participate in blame attribution; an L3 failure when
+                        L1/L2 pass is a *style alignment* signal (the FE
+                        emits valid PSM but in a form that diverges from the
+                        hand-written ground truth), not a correctness bug.
+                        It is reported alongside the verdict so the user
+                        can act on it independently.
       * ``summary``  — short human-readable line for the UI / CLI
     """
     layer0 = derive_layer0(result_dict)
     layer1 = validate_meta(result_dict, target_type, config_key)
     layer2 = validate_export(result_dict, target_type, config_key)
+    layer3 = validate_text_diff(result_dict, target_type, config_key)
 
-    blame, summary = derive_blame(layer0, layer1, layer2)
+    blame, summary = derive_blame(layer0, layer1, layer2, layer3)
 
     return {
         "layer0": layer0,
         "layer1": layer1,
         "layer2": layer2,
+        "layer3": layer3,
         "blame": blame,
         "summary": summary,
     }

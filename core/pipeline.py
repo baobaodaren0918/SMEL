@@ -37,6 +37,7 @@ from core.normalization import (
     normalize_entity_kinds,
     normalize_document_cardinality,
     normalize_document_full_paths,
+    normalize_property_psm,
 )
 
 logger = logging.getLogger(__name__)
@@ -277,6 +278,7 @@ def run_export(transformer: 'SchemaTransformer', source_type: str, target_type: 
     # cardinality promotion, which made the call site read ambiguously.
     normalize_entity_kinds(result_db, target_type)
     normalize_document_cardinality(result_db, source_type)
+    normalize_property_psm(result_db, source_type, target_type)
     # Document-specific: promote any simple-name embedded entities (left
     # behind by NEST / UNFLATTEN when source-side embedded chains were
     # carried forward) to canonical ``parent.child`` full paths. This is
@@ -373,6 +375,7 @@ def run_migration(direction: str) -> Dict[str, Any]:
         result_dict["validation_layer0"] = v["layer0"]
         result_dict["validation_meta"] = v["layer1"]
         result_dict["validation_export"] = v["layer2"]
+        result_dict["validation_text_diff"] = v["layer3"]
         result_dict["validation_blame"] = v["blame"]
         result_dict["validation_summary"] = v["summary"]
     except Exception as e:
@@ -380,6 +383,7 @@ def run_migration(direction: str) -> Dict[str, Any]:
         result_dict["validation_layer0"] = err
         result_dict["validation_meta"] = err
         result_dict["validation_export"] = err
+        result_dict["validation_text_diff"] = err
         result_dict["validation_blame"] = "unverifiable"
         result_dict["validation_summary"] = f"validation crashed: {e}"
 

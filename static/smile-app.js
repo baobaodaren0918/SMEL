@@ -278,6 +278,7 @@
                 'adapter': 'TARGET_SCHEMA',
                 'both': 'BOTH',
                 'script_failed': 'SCRIPT_FAILED',
+                'text_diff': 'TARGET_TEXT',
                 'unverifiable': 'OTHER'
             }[blame] || blame.toUpperCase();
             var colour = {
@@ -286,6 +287,7 @@
                 'adapter': '#D32F2F',
                 'both': '#8B1A1A',
                 'script_failed': '#8B1A1A',
+                'text_diff': '#E67E22',
                 'unverifiable': '#8E8E93'
             }[blame] || '#8E8E93';
             var bg = {
@@ -294,6 +296,7 @@
                 'adapter': '#FFEBEE',
                 'both': '#FFCDD2',
                 'script_failed': '#FFCDD2',
+                'text_diff': '#FDF1E2',
                 'unverifiable': '#F2F2F2'
             }[blame] || '#F2F2F2';
             return '<div class="validation-verdict" '
@@ -313,6 +316,7 @@
             var vLayer0 = data.validation_layer0 || {};
             var vMeta = data.validation_meta || {};
             var vExport = data.validation_export || {};
+            var vTextDiff = data.validation_text_diff || {};
             var vSummary = data.validation_summary || '';
 
             // Detect the validation-crashed state explicitly: all three layers
@@ -376,6 +380,7 @@
             html += renderValidationLayer0(vLayer0);
             html += renderValidationLayer('Layer 1 — SMILE Script', vMeta);
             html += renderValidationLayer('Layer 2 — Adapter Export', vExport);
+            html += renderValidationLayer3(vTextDiff);
 
             html += '</div>';
             return html;
@@ -579,6 +584,57 @@
                 items.push('Extra PK on (' + (pk.columns||[]).map(function(c){return '<code>'+escapeHtml(c)+'</code>';}).join(', ') + ')');
             });
             return items;
+        }
+
+        function renderValidationLayer3(v) {
+            // Layer 3: text-level diff between FE-exported native and the
+            // hand-written ground truth, under set-based normalization
+            // (table/column/required ordering ignored, comments stripped per
+            // paradigm). Renders PASS/FAIL/SKIP like Layers 1/2 but the FAIL
+            // body is a unified-diff <pre> block instead of structured
+            // entity diffs (the comparison is text-level by definition).
+            var label = 'Layer 3 — Text Style Alignment';
+            if (!v || v.passed == null) {
+                var summaryText = (v && v.summary) ? v.summary : 'Other reasons';
+                return '<div class="validation-layer">' +
+                    '<span class="validation-layer-label">' + label + '</span>' +
+                    '<span class="validation-badge na">OTHER</span>' +
+                    '<span style="font-size:12px;color:#8E8E93;">' + escapeHtml(summaryText) + '</span>' +
+                    '</div>';
+            }
+            var badge = v.passed
+                ? '<span class="validation-badge pass">PASS</span>'
+                : '<span class="validation-badge fail">FAIL</span>';
+            var html = '<div class="validation-layer">' +
+                '<span class="validation-layer-label">' + label + '</span>' +
+                badge +
+                '<span style="font-size:12px;color:#8E8E93;">' + escapeHtml(v.summary || '') + '</span>' +
+                '</div>';
+
+            var d = v.details || {};
+            // Show the unified diff preview when L3 fails. Keep it compact —
+            // Layer 3 surfaces *style* drift, the user mostly needs to see a
+            // few representative diff lines, not the whole file.
+            if (!v.passed && d.diff_preview && d.diff_preview.length) {
+                html += '<div class="validation-details">';
+                if (d.target_file) {
+                    html += '<div class="vd-row" style="font-size:11px;color:#666;">'
+                          + 'Compared against: <code>' + escapeHtml(d.target_file) + '</code></div>';
+                }
+                html += '<pre style="background:#1e1e1e;color:#d4d4d4;padding:10px;'
+                      + 'border-radius:4px;font-size:11px;line-height:1.4;'
+                      + 'overflow-x:auto;max-height:320px;margin-top:6px;">';
+                d.diff_preview.forEach(function(line) {
+                    var cls = '';
+                    if (line.indexOf('+') === 0 && line.indexOf('+++') !== 0) cls = 'color:#6A9955;';
+                    else if (line.indexOf('-') === 0 && line.indexOf('---') !== 0) cls = 'color:#F44747;';
+                    else if (line.indexOf('@@') === 0) cls = 'color:#569CD6;';
+                    html += '<span style="' + cls + '">' + escapeHtml(line) + '</span>\n';
+                });
+                html += '</pre>';
+                html += '</div>';
+            }
+            return html;
         }
 
         function renderValidationWarnings(warnings) {
