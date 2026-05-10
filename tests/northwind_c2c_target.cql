@@ -89,7 +89,7 @@ CREATE TABLE order_details (
     unit_price DOUBLE,
     quantity INT,
     discount DOUBLE,
-    PRIMARY KEY (order_id, product_id)
+    PRIMARY KEY ((order_id, product_id))
 );
 
 CREATE TABLE customer_contacts (

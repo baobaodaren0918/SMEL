@@ -686,15 +686,18 @@ class CassandraAdapter(DatabaseAdapter):
         if not partition_cols:
             return None
 
+        partition_str = ", ".join(partition_cols)
         if clustering_cols:
-            # Composite: PRIMARY KEY ((part1, part2), clust1, clust2)
-            partition_str = ", ".join(partition_cols)
+            # Partition + clustering: PRIMARY KEY ((part1, part2), clust1, clust2)
             clustering_str = ", ".join(clustering_cols)
             return f"PRIMARY KEY (({partition_str}), {clustering_str})"
-        else:
-            # Partition only: PRIMARY KEY (col1, col2)
-            partition_str = ", ".join(partition_cols)
-            return f"PRIMARY KEY ({partition_str})"
+        if len(partition_cols) > 1:
+            # Composite partition, no clustering: PRIMARY KEY ((p1, p2)).
+            # Single parens here would mean "p1 partition, p2 clustering" in
+            # CQL — semantically different from a composite partition.
+            return f"PRIMARY KEY (({partition_str}))"
+        # Single partition: PRIMARY KEY (col)
+        return f"PRIMARY KEY ({partition_str})"
 
     @classmethod
     def export_to_cql_file(cls, database: Database, file_path: str) -> None:
