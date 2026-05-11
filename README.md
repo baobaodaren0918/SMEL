@@ -1,6 +1,6 @@
 # SMILE - Schema Migration & Evolution Language
 
-A formally defined DSL for schema migration and evolution between heterogeneous database systems, supporting 4 data models with a full 4×4 migration matrix and two-layer automated validation.
+A formally defined DSL for schema migration and evolution between heterogeneous database systems, supporting 4 data models with a full 4×4 migration matrix and three-layer automated validation.
 
 ## Supported Database Models
 
@@ -42,7 +42,7 @@ The web interface provides five tabs:
 - **User Transformation** — point at a source DDL, pick a target DB, generate a SMILE header, edit the script in the in-browser Ace editor (autocomplete + syntax highlighting), validate, then run; the resulting Meta V2 and Target Schema panels are rendered read-only
 - **Schema Comparison** — side-by-side card view of Meta V1 vs Meta V2 with structural diff highlighting
 - **SMILE Script** — script rendering and syntax-highlighted preview for any registered migration config
-- **Migration / Evolution Process** — full pipeline run (parse → transform → export → validate) with step-by-step operation log and Layer 1 / Layer 2 validation results
+- **Migration / Evolution Process** — full pipeline run (parse → transform → export → validate) with step-by-step operation log and Layer 1 / Layer 2 / Layer 3 validation results
 
 ### CLI
 ```bash
@@ -157,11 +157,12 @@ SMILE/
 │   ├── factory.py                     #   parse_smile_auto (grammar auto-detect by extension)
 │   ├── listeners.py                   #   ANTLR listeners (Specific + Generalized)
 │   └── params.py                      #   Per-op param dataclasses (NestParams, ...)
-├── validation/                        # Two-layer + blame-attribution validators
-│   ├── meta.py                        #   Layer 1: Meta V2 vs expected schema
-│   ├── export.py                      #   Layer 2: Export → re-parse round-trip
-│   └── pipeline.py                    #   Wraps L1 + L2; assigns blame
-│                                      #     (ok | smile_script | adapter | unverifiable)
+├── validation/                        # Three-layer + blame-attribution validators
+│   ├── meta.py                        #   Layer 1: Meta V2 vs expected schema (PIM)
+│   ├── export.py                      #   Layer 2: Export → re-parse round-trip (PSM round-trip)
+│   ├── text_diff.py                   #   Layer 3: Exported text vs target file (set-based)
+│   └── pipeline.py                    #   Wraps L0/L1/L2/L3; assigns blame
+│                                      #     (ok | smile_script | adapter | text_diff | both | script_failed | unverifiable)
 ├── diff/                              # Unified diff engine + two formatter shapes
 │   ├── engine.py                      #   compute_diff (single source of truth)
 │   ├── formatters.py                  #   to_ui_changes (per-op panel)
@@ -196,13 +197,12 @@ SMILE/
  └──────────┘           └──────────────┘           └──────────┘
                                │                        │
                                ▼                        ▼
-                        ┌─────────────┐          ┌─────────────┐
-                        │   Phase 5   │          │   Phase 5   │
-                        │  Layer 1    │          │  Layer 2    │
-                        │ Validation  │          │ Validation  │
-                        │(Meta V2 vs  │          │(Export → RE │
-                        │ expected)   │          │ round-trip) │
-                        └─────────────┘          └─────────────┘
+          ┌─────────────┐ ┌─────────────┐ ┌─────────────┐
+          │   Phase 5   │ │   Phase 5   │ │   Phase 5   │
+          │  Layer 1    │ │  Layer 2    │ │  Layer 3    │
+          │ Meta V2 vs  │ │ Round-trip  │ │ Text-level  │
+          │  expected   │ │ vs expected │ │ vs target   │
+          └─────────────┘ └─────────────┘ └─────────────┘
 ```
 
 | Phase | Component | Input → Output |
@@ -211,21 +211,100 @@ SMILE/
 | 2. SMILE Parsing | `parser.factory.parse_smile_auto()` | `.smile` / `.smile_gen` → `Operation` list |
 | 3. Transformation | `SchemaTransformer` (30 handlers, called via `core.run_apply`) | Meta V1 + Operations → Meta V2 |
 | 4. Forward Engineering | `ADAPTER_REGISTRY[target_type]` (driven by `core.run_export`) | Meta V2 → Target DDL |
-| 5. Validation | `validation.meta` + `validation.export` (composed by `validation.pipeline`) | Two-layer correctness check + blame attribution |
+| 5. Validation | `validation.meta` + `validation.export` + `validation.text_diff` (composed by `validation.pipeline`) | Three-layer correctness check + blame attribution |
 
 `core.run_migration()` is a thin orchestrator on top of the three pipeline helpers (`run_load`, `run_apply`, `run_export`) so each phase can also be invoked independently from the web UI's User Transformation flow.
 
-### Two-Layer Validation
+### Three-Layer Validation
 
 | Layer | File | What it proves | How |
 |-------|------|---------------|-----|
-| **Layer 1** | `validation/meta.py` | SMILE script correctness | Meta V2 vs expected target schema |
-| **Layer 2** | `validation/export.py` | Adapter FE correctness | Exported target → RE round-trip vs expected |
-| **Blame**   | `validation/pipeline.py` | Which side failed | `ok` / `smile_script` (L1 fail) / `adapter` (L2 fail with L1 ok) / `unverifiable` |
+| **Layer 0** | `validation/pipeline.py` (`derive_layer0`) | SMILE script executed cleanly | No `error` or `skipped` ops, ≥1 entity in result |
+| **Layer 1** | `validation/meta.py` | SMILE script correctness (PIM equivalence) | Meta V2 vs parsed expected target |
+| **Layer 2** | `validation/export.py` | Adapter forward-engineering correctness (PSM round-trip, Foster PUT-GET law) | `parse(export(Meta V2))` vs parsed expected target |
+| **Layer 3** | `validation/text_diff.py` | Adapter output alignment with hand-written native (PSM style) | Exported text vs target file text under set-based normalization |
+| **Blame**   | `validation/pipeline.py` | Which side failed | `ok` / `smile_script` (L1) / `adapter` (L2) / `text_diff` (L3) / `both` / `script_failed` / `unverifiable` |
 
-For **cross-model** migrations, the 4 original Northwind files form a closed validation loop — each file is both source (outgoing) and expected target (incoming). No manually written ground truth needed.
+#### Dual-Role Validation Diagram
 
-For **same-model** evolution, dedicated target files (`northwind_r2r_target.sql`, etc.) serve as expected output.
+The 4 native files form a closed validation loop: each file plays both the **source role** (outgoing migrations) and the **target / ground-truth role** (incoming migrations). The diagram below shows the forward (PG → Mongo) and reverse (Mongo → PG) cases side-by-side.
+
+```
+  ╔══════════════════════════════════════════════════════════════════╗
+  ║ (a) Direction A:  PG  →  Mongo                                   ║
+  ╚══════════════════════════════════════════════════════════════════╝
+
+  source role          target / ground truth
+  ┌─────────────┐      ┌─────────────┐ ◄·············┐
+  │ northwind_  │      │ northwind_  │               ┊
+  │postgresql.  │      │  mongodb.   │               ┊
+  │    sql      │      │    json     │               ┊
+  └──────┬──────┘      └──────┬──────┘               ┊
+         │ parse(PG)          │ parse(Mongo)         ┊
+         ▼                    ▼                      ┊
+    ┌─────────┐          ┌─────────┐                 ┊
+    │   M₁    │          │    X    │                 ┊
+    └────┬────┘          └────┬────┘                 ┊
+         │ Apply               │                     ┊
+         │pg_to_mongo.smile    │                     ┊
+         ▼                     │                     ┊
+    ┌─────────┐ ···· L1 ·····► │                     ┊  L3 (text)
+    │   M₂    │   (PIM)        │                     ┊  E vs target
+    └────┬────┘                │                     ┊  file
+         │ export(Mongo)       │                     ┊
+         ▼                     │                     ┊
+    ┌─────────┐                                      ┊
+    │    E    │·····································┘
+    │ (file)  │
+    └────┬────┘
+         │ parse(Mongo)
+         ▼
+    ┌─────────┐ ···· L2 ·····► X (reused)
+    │    R    │  (round-trip)
+    └─────────┘
+
+
+  ╔══════════════════════════════════════════════════════════════════╗
+  ║ (b) Direction B:  Mongo  →  PG                                   ║
+  ╚══════════════════════════════════════════════════════════════════╝
+
+  source role          target / ground truth
+  ┌─────────────┐      ┌─────────────┐ ◄·············┐
+  │ northwind_  │      │ northwind_  │               ┊
+  │  mongodb.   │      │postgresql.  │               ┊
+  │    json     │      │    sql      │               ┊
+  └──────┬──────┘      └──────┬──────┘               ┊
+         │ parse(Mongo)       │ parse(PG)            ┊
+         ▼                    ▼                      ┊
+    ┌─────────┐          ┌─────────┐                 ┊
+    │   M₁    │          │    X    │                 ┊
+    └────┬────┘          └────┬────┘                 ┊
+         │ Apply               │                     ┊
+         │mongo_to_pg.smile    │                     ┊
+         ▼                     │                     ┊
+    ┌─────────┐ ···· L1 ·····► │                     ┊  L3 (text)
+    │   M₂    │   (PIM)        │                     ┊  E vs target
+    └────┬────┘                │                     ┊  file
+         │ export(PG)          │                     ┊
+         ▼                     │                     ┊
+    ┌─────────┐                                      ┊
+    │    E    │·····································┘
+    │ (file)  │
+    └────┬────┘
+         │ parse(PG)
+         ▼
+    ┌─────────┐ ···· L2 ·····► X (reused)
+    │    R    │  (round-trip)
+    └─────────┘
+```
+
+In direction (a), `northwind_mongodb.json` serves as the target / ground truth. In direction (b), the same file serves as the source. No manually written ground truth is needed for any of the 12 cross-paradigm scenarios.
+
+For **same-model** evolution (e.g., r2r), dedicated V2 target files (`northwind_r2r_target.sql`, etc.) serve as expected output.
+
+#### Why Layer 2 and Layer 3 are both kept
+
+Layer 3 is logically stronger than Layer 2 (text equivalence implies meta equivalence under deterministic parsing), but Layer 2 is retained because it (a) directly instantiates Foster (2007)'s PUT-GET law for bidirectional transformations, (b) serves as an independent cross-check against bugs in Layer 3's per-paradigm normalizers, and (c) is paradigm-independent — a new adapter automatically gets Layer 2 coverage without writing a new Layer 3 normalizer.
 
 ### M-Model+ Meta Schema
 
