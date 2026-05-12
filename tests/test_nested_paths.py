@@ -58,11 +58,9 @@ def _parse_one(script: str, suffix: str = ".smile"):
         Path(f.name).unlink(missing_ok=True)
 
 
-# ============================================================================
 # Parse-level: every ⚠️→✅ promoted op accepts a dotted path source/target.
 # Each test exercises BOTH grammars (specific .smile and generalized .smile_gen)
 # to prove the spec/gen parity contract holds for path-capable forms too.
-# ============================================================================
 
 class TestParsePathForms:
 
@@ -232,10 +230,8 @@ class TestParsePathForms:
         assert op.params.target_table == "orders.customer"
 
 
-# ============================================================================
 # End-to-end: run a full pipeline against the multi-root Mongo schema and
 # verify path-based ops actually reach the meta-model.
-# ============================================================================
 
 @pytest.fixture
 def mongo_db():

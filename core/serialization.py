@@ -1,29 +1,4 @@
-"""SMILE serialization layer — Database -> JSON-shaped dicts for the web UI / CLI.
-
-This module owns *all* of the "how do we lay out a Database object as a dict
-the rest of the system can consume" logic. Pulling it out of ``core.py``
-keeps the transformer file focused on schema mutation; nothing here imports
-``SchemaTransformer`` so the boundary is one-way (core depends on this; this
-does not depend on core).
-
-Three flavors of dict are produced:
-
-* ``db_to_dict``        — the canonical Meta Schema shape used by validators
-                          and the web UI's diff panels. Property types are
-                          paradigm-neutral PrimitiveType strings.
-* ``db_to_source_dict`` — same shape, but property types are rendered in the
-                          source paradigm's native format (e.g. ``VARCHAR(255)``,
-                          ``bsonType``). Used by the source-schema preview.
-* ``parse_original_source`` — does *not* go through the meta-model. It parses
-                          the raw native schema text directly into a nested
-                          tree for the source-schema panel; the input is the
-                          unmodified file contents, the output is "this is
-                          what the user uploaded".
-
-FK ``references_property`` fields are resolved from runtime UUIDs to the
-target property's name (see ``_resolve_unique_property_name``) so the JSON
-output is byte-stable across runs and human-readable.
-"""
+"""SMILE serialization layer — Database -> JSON-shaped dicts for the web UI / CLI."""
 import json
 import re
 from typing import Any, Dict, List, Optional
@@ -66,16 +41,7 @@ def _get_type_str(data_type) -> str:
 
 
 def _resolve_unique_property_name(db: Optional[Database], up_meta_id: str) -> str:
-    """Resolve a ``UniqueProperty.meta_id`` reference to the property name.
-
-    Foreign keys carry ``points_to_unique_property_id`` — the runtime UUID of
-    the target ``UniqueProperty``. Exposing that UUID directly in the JSON
-    payload (a) leaks an internal id into the API surface and (b) means
-    Specific vs Generalized runs produce non-identical JSON for equivalent
-    migrations. Resolving it to the target property name keeps the wire
-    format both human-readable and reproducible. Returns ``""`` when the
-    target cannot be located (db not passed in legacy callsites, or stale id).
-    """
+    """Resolve a ``UniqueProperty.meta_id`` reference to the property name."""
     if not db or not up_meta_id:
         return ""
     for entity in db.entity_types.values():
@@ -90,13 +56,7 @@ def _resolve_unique_property_name(db: Optional[Database], up_meta_id: str) -> st
 
 
 def _serialize_entity(name: str, entity, db: Optional[Database] = None) -> Dict[str, Any]:
-    """Serialize a single EntityType to dict (shared by db_to_dict and db_to_source_dict).
-
-    ``db`` is optional for back-compat with legacy callers; when provided,
-    foreign-key ``references_property`` fields are resolved from the runtime
-    ``UniqueProperty.meta_id`` UUID to the target property's name (see
-    ``_resolve_unique_property_name``).
-    """
+    """Serialize a single EntityType to dict (shared by db_to_dict and db_to_source_dict)."""
     constraints = []
     for c in entity.constraints:
         if c.kind == "unique":
@@ -243,11 +203,7 @@ def _serialize_relationship_types(db: Database) -> Dict[str, Any]:
 
 
 def db_to_dict(db: Database) -> Dict[str, Any]:
-    """Convert Database to a JSON-serializable dict (Unified Meta Schema format).
-
-    Returns a flat ``{entity_name: serialized_entity}`` map plus optional
-    ``__relationship_types__`` and ``__db_meta__`` scratch keys.
-    """
+    """Convert Database to a JSON-serializable dict (Unified Meta Schema format)."""
     entities = {}
     for name, entity in db.entity_types.items():
         if entity.entity_kind == EntityKind.EDGE:
@@ -321,12 +277,7 @@ def _get_source_type_str(attr: Property, source_type: str) -> str:
 
 
 def db_to_source_dict(db: Database, source_type: str) -> Dict[str, Any]:
-    """Convert Database to dict with property types in the source-paradigm's native format.
-
-    The structure mirrors ``db_to_dict`` but the ``type`` field of each
-    property is rendered as e.g. ``VARCHAR(255)``, ``SERIAL``, ``bsonType``
-    rather than the canonical ``PrimitiveType`` string.
-    """
+    """Convert Database to dict with property types in the source-paradigm's native format."""
     entities = {}
     for name, entity in db.entity_types.items():
         if entity.entity_kind == EntityKind.EDGE:
@@ -350,13 +301,7 @@ def db_to_source_dict(db: Database, source_type: str) -> Dict[str, Any]:
 
 
 def parse_original_source(raw_source: str, source_type: str) -> Dict[str, Any]:
-    """Parse raw source schema text directly into a nested tree for the UI.
-
-    Unlike ``db_to_dict`` / ``db_to_source_dict`` (which go through the
-    meta-model), this function reads the *unprocessed* native file content
-    so the source-schema panel can show the user's exact upload, including
-    formatting quirks the meta-model would normalise away.
-    """
+    """Parse raw source schema text directly into a nested tree for the UI."""
     if source_type == SOURCE_TYPE_DOCUMENT:
         # Parse MongoDB JSON schema - return nested structure for the web UI.
         # Two input shapes are supported, mirroring MongoDBAdapter.parse():

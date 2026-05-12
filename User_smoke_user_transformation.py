@@ -1,32 +1,4 @@
-"""
-User_smoke_user_transformation.py — manual smoke + functional test for the
-**User Transformation** tab in the SMILE web UI.
-
-Run this script while the web server (``python web_server.py``) is up on
-http://localhost:5601. It mirrors exactly what the browser does when a
-user pastes a SMILE script in the Compose tab and clicks Run, by hitting
-the same endpoints over HTTP:
-
-  1. POST /api/validate_script  — parse-only check (script syntax)
-  2. POST /api/run_script       — full pipeline (parse → apply → export
-                                  → 3-layer validation)
-
-The five test cases cover:
-  * TEST 1 — a trivial valid script (happy path, validate-only)
-  * TEST 2 — a deliberate syntax error (negative, parser error reporting)
-  * TEST 3 — a small PG→PG end-to-end migration (happy path, full pipeline)
-  * TEST 4 — strict ADD_KEY rule case ④ (no AS + property absent →
-             must be rejected and surfaced via Layer 0 + script_failed)
-  * TEST 5 — strict ADD_KEY rule case ②b (AS type mismatches existing →
-             must reject and point at CAST_PROPERTY in the reason text)
-
-This file is **not** part of the pytest suite — it is a one-off manual
-smoke tool kept in the repo so future runs can re-verify the live
-end-to-end behaviour of the User Transformation flow without having to
-rewrite the request bodies. To run:
-
-    python User_smoke_user_transformation.py
-"""
+"""User_smoke_user_transformation.py — manual smoke + functional test for the"""
 import json
 import sys
 import urllib.request

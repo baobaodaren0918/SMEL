@@ -1,37 +1,13 @@
-"""
-Operation parameter types for SMILE operations.
-
-Each OpType has a dedicated dataclass defining the contract between the
-listener (which constructs operations while walking the ANTLR parse tree)
-and the transformer handlers (which consume them). Replacing the previous
-Dict[str, Any] payload with typed dataclasses turns parser/transformer
-contract mismatches into static errors instead of silent runtime skips.
-
-The `clauses` field in a few OpTypes remains a Dict[str, Any]: its nested
-structure is itself recursive (AST-like) and a second layer of typed
-wrappers would be over-engineering at this stage.
-
-Each dataclass also runs `__post_init__` validation that rejects empty
-required identifiers — catching listener/handler contract drift at
-construction time rather than letting it surface as a confusing downstream
-error ("entity 'None' not found").
-"""
+"""Operation parameter types for SMILE operations."""
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional, Union
 
 
-# ============================================================================
 # Shared discriminators
-# ============================================================================
 
 class KeyType(str, Enum):
-    """Surface-level key discriminator for ADD_KEY / DELETE_KEY ops.
-
-    Inherits from `str` so members compare equal to their string values
-    (`KeyType.PRIMARY == "PRIMARY"`), keeping the existing
-    KEY_TYPE_MAP dict-lookup pattern working without changes.
-    """
+    """Surface-level key discriminator for ADD_KEY / DELETE_KEY ops."""
     PRIMARY = "PRIMARY"
     UNIQUE = "UNIQUE"
     FOREIGN = "FOREIGN"
@@ -39,19 +15,11 @@ class KeyType(str, Enum):
     CLUSTERING = "CLUSTERING"
 
 
-# ============================================================================
 # Operation result
-# ============================================================================
 
 @dataclass
 class OperationResult:
-    """Outcome of a single _handle_* invocation.
-
-    Replaces the old bool return so callers can distinguish "operation
-    finished successfully" from "operation skipped because <reason>".
-    The ``__bool__`` method makes the value usable in boolean contexts
-    (``if result: ...``) so existing call sites continue to work.
-    """
+    """Outcome of a single _handle_* invocation."""
     success: bool
     reason: Optional[str] = None
 
@@ -67,9 +35,7 @@ class OperationResult:
         return cls(success=False, reason=reason)
 
 
-# ============================================================================
 # Validation helper
-# ============================================================================
 
 def _require_nonempty(obj: Any, *names: str) -> None:
     """Raise ValueError if any named field on `obj` is empty (None, "", [])."""
@@ -81,9 +47,7 @@ def _require_nonempty(obj: Any, *names: str) -> None:
             )
 
 
-# ============================================================================
 # Structural operations
-# ============================================================================
 
 @dataclass
 class NestParams:
@@ -149,9 +113,7 @@ class UnwindParams:
         _require_nonempty(self, "mode", "source")
 
 
-# ============================================================================
 # Entity operations
-# ============================================================================
 
 @dataclass
 class AddEntityParams:
@@ -194,9 +156,7 @@ class CopyEntityParams:
         _require_nonempty(self, "source", "target")
 
 
-# ============================================================================
 # Property operations
-# ============================================================================
 
 @dataclass
 class AddPropertyParams:
@@ -245,9 +205,7 @@ class MovePropertyParams:
         _require_nonempty(self, "source", "target")
 
 
-# ============================================================================
 # Key / Constraint operations
-# ============================================================================
 
 @dataclass
 class AddKeyParams:
@@ -278,16 +236,7 @@ class DeleteKeyParams:
 
 @dataclass
 class AddForeignKeyParams:
-    """Foreign-key parameters supporting both single-column and composite FKs.
-
-    The lists ``field_names`` (source columns on this entity) and
-    ``target_columns`` (referenced columns on the target table) must have the
-    same length and pair up positionally — index ``i`` of ``field_names``
-    references index ``i`` of ``target_columns``. A length of one expresses
-    the common single-column case; lengths of two or more express a true
-    composite FK such as ``(tenant_id, item_id) -> tenants_items(tenant_id,
-    item_id)``.
-    """
+    """Foreign-key parameters supporting both single-column and composite FKs."""
     field_names: List[str]
     target_table: str
     target_columns: List[str]
@@ -325,9 +274,7 @@ class CastConstraintParams:
         _require_nonempty(self, "target", "constraint_type")
 
 
-# ============================================================================
 # ADD_CONSTRAINT / DELETE_CONSTRAINT operations
-# ============================================================================
 # These cover the constraint kinds NOT addressed by the narrow operators
 # (PRIMARY KEY / UNIQUE KEY / FOREIGN KEY / PARTITION KEY / CLUSTERING KEY /
 # LABEL). Three sub-bodies, discriminated by ``body_kind``:
@@ -345,21 +292,7 @@ class ConstraintBodyKind(str, Enum):
 
 @dataclass
 class AddConstraintParams:
-    """Payload for ADD_CONSTRAINT.
-
-    ``target`` is the qualified property the constraint attaches to (e.g.
-    ``orders.customer_id``). ``body_kind`` selects which body fields are
-    relevant:
-
-    * REFERENCE: ``ref_target_table``, ``ref_target_columns``, optional
-      ``ref_cardinality``. The reference is always **logical**
-      (non-enforced); the SQL-traditional enforced FK case goes through
-      ``ADD_FOREIGN_KEY`` (also the only path that supports composite
-      multi-column FKs).
-    * CHECK: ``check_expression`` (a ``CheckExpr`` AST root from
-      ``Schema.unified_meta_schema``).
-    * EXISTENCE: no extra fields (just ``target``).
-    """
+    """Payload for ADD_CONSTRAINT."""
     target: str
     body_kind: ConstraintBodyKind
     # REFERENCE body fields
@@ -384,9 +317,7 @@ class AddConstraintParams:
 
 @dataclass
 class DeleteConstraintParams:
-    """Payload for DELETE_CONSTRAINT. ``target`` is the qualified property
-    whose attached constraint (logical Reference / CheckConstraint /
-    ExistenceConstraint) should be removed."""
+    """Payload for DELETE_CONSTRAINT. ``target`` is the qualified property"""
     target: str
 
     def __post_init__(self) -> None:
@@ -402,9 +333,7 @@ class CastEntityParams:
         _require_nonempty(self, "target", "entity_kind")
 
 
-# ============================================================================
 # Embedded operations
-# ============================================================================
 
 @dataclass
 class AddEmbeddedParams:
@@ -425,9 +354,7 @@ class DeleteEmbeddedParams:
         _require_nonempty(self, "embedded")
 
 
-# ============================================================================
 # Label operations (Graph)
-# ============================================================================
 
 @dataclass
 class AddLabelParams:
@@ -447,9 +374,7 @@ class DeleteLabelParams:
         _require_nonempty(self, "label")
 
 
-# ============================================================================
 # Transformation / cast / cardinality operations
-# ============================================================================
 
 @dataclass
 class CastPropertyParams:
@@ -502,9 +427,7 @@ class TransformParams:
         _require_nonempty(self, "name", "target_type")
 
 
-# ============================================================================
 # Union type alias for Operation.params annotation
-# ============================================================================
 
 OpParams = Union[
     NestParams, UnnestParams, FlattenParams, UnflattenParams,

@@ -1,12 +1,4 @@
-"""Handlers for plain schema-edit ops — ADD/DELETE/RENAME × {PROPERTY, ENTITY, EMBEDDED} + COPY/MOVE.
-
-The "boring" CRUD layer: each op directly mutates one entity's properties,
-relationships, or identity without touching constraint topology. The
-distinction between this file and ``keys_constraints.py`` is that nothing
-here builds, modifies, or deletes a UniqueConstraint or
-ForeignKeyConstraint — those live next door because their handlers all
-share the key/FK helper utilities.
-"""
+"""Handlers for plain schema-edit ops — ADD/DELETE/RENAME × {PROPERTY, ENTITY, EMBEDDED} + COPY/MOVE."""
 
 import copy
 import logging
@@ -87,9 +79,7 @@ class CRUDHandlersMixin:
 
     @register_handler(OpType.ADD_ENTITY)
     def _handle_add_entity(self, params: AddEntityParams) -> OperationResult:
-        """ADD_ENTITY Product WITH PROPERTIES (id String, name String)
-        Also handles EDGE entities: ADD_ENTITY name FROM src TO tgt WITH PROPERTIES (...)
-        """
+        """ADD_ENTITY Product WITH PROPERTIES (id String, name String)"""
         name = params.name
         clauses = params.clauses
         source_entity = params.source_entity
@@ -352,14 +342,7 @@ class CRUDHandlersMixin:
 
     @register_handler(OpType.COPY_PROPERTY)
     def _handle_copy_property(self, params: CopyPropertyParams) -> OperationResult:
-        """
-        COPY_PROPERTY: Copy property from source to target.
-
-        Supports nested paths for embedded objects:
-        - COPY PROPERTY customers.address.street TO orders.ship_address
-          Source: entity="customers.address", attr="street"
-          Target: entity="orders", attr="ship_address"
-        """
+        """COPY_PROPERTY: Copy property from source to target."""
         source_path = params.source
         target_path = params.target
 
@@ -390,15 +373,7 @@ class CRUDHandlersMixin:
 
     @register_handler(OpType.COPY_ENTITY)
     def _handle_copy_entity(self, params: CopyEntityParams) -> OperationResult:
-        """COPY_ENTITY: Duplicate an entire entity with all its structure.
-
-        Reference: PRISM "COPY TABLE R INTO S", CoDEL "Addtable(S, R)"
-        Deep copies the source entity (properties, keys, constraints, relationships)
-        and adds it as a new entity with the target name.
-
-        Example: COPY_ENTITY customers AS premium_customers
-        Example: COPY_ENTITY PURCHASED AS REORDERED FROM customers TO orders  (EDGE)
-        """
+        """COPY_ENTITY: Duplicate an entire entity with all its structure."""
         source_name = params.source
         target_name = params.target
         source_entity_name = params.source_entity

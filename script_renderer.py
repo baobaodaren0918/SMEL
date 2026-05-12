@@ -1,8 +1,4 @@
-"""Emit a SMILE script header (the user writes the operations themselves).
-
-Used by ``/api/generate_script`` to seed the editor with a valid header for
-the chosen source/target combo. The body of the script is left to the user.
-"""
+"""Emit a SMILE script header (the user writes the operations themselves)."""
 from __future__ import annotations
 
 
@@ -16,12 +12,7 @@ def render_header_only(
     schema_version_to: str = "2.0",
     syntax: str = "specific",
 ) -> str:
-    """Emit just the SMILE header — the user writes the operations themselves.
-
-    kind="auto"  → MIGRATION when src ≠ tgt, EVOLUTION when src == tgt.
-    kind="migration" / "evolution" → forced.
-    Evolution headers use ``USING ... VERSION X TO Y`` (per the grammar).
-    """
+    """Emit just the SMILE header — the user writes the operations themselves."""
     src = (source_db_type or "").upper()
     tgt = (target_db_type or "").upper()
     if kind == "auto":

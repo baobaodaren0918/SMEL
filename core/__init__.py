@@ -1,12 +1,4 @@
-"""SMILE core package — public surface.
-
-Re-exports the names downstream code imports as ``from core import X``.
-Internal scaffolding (the handler registry, the ``register_handler``
-decorator, the four mixins, the ``_serialize_*`` helpers, ``_calculate_changes``)
-is intentionally NOT exposed here — those are implementation details that
-should stay accessible only via their concrete modules (``core.transformer``,
-``core.serialization``, etc.).
-"""
+"""SMILE core package — public surface."""
 from core.serialization import (
     db_to_dict,
     db_to_source_dict,

@@ -1,11 +1,4 @@
-"""Handlers for entity-level reshaping ops — MERGE, SPLIT, CAST_PROPERTY, CAST_ENTITY.
-
-These are the "semantic restructure" ops: MERGE collapses two entities
-into one, SPLIT vertically partitions an entity, CAST_PROPERTY changes a
-column's data type, CAST_ENTITY changes an entity's paradigm-kind. They
-don't share helpers with the structural NEST/UNNEST family — the nesting
-ops shuffle existing trees, while these ops change identity / topology.
-"""
+"""Handlers for entity-level reshaping ops — MERGE, SPLIT, CAST_PROPERTY, CAST_ENTITY."""
 
 import copy
 import logging
@@ -157,18 +150,7 @@ class ReshapeHandlersMixin:
 
     @register_handler(OpType.SPLIT)
     def _handle_split(self, params: SplitParams) -> OperationResult:
-        """
-        SPLIT: Divide one entity into multiple separate entities (vertical partitioning).
-
-        Reference: André Conrad - "SPLIT Person into Person:id, firstname, lastname AND knows:id, knows"
-
-        Example: SPLIT customers INTO customers:customer_id, company_name, street, city, region; customer_contacts:customer_id, contact_name, phone, fax
-          Before: customers { customer_id, company_name, contact_name, phone, fax, street, city, region }
-          After:  customers { customer_id, company_name, street, city, region }
-                 customer_contacts { customer_id, contact_name, phone, fax }
-
-        Note: Fields can be duplicated across parts (e.g., customer_id in both parts for FK relationship).
-        """
+        """SPLIT: Divide one entity into multiple separate entities (vertical partitioning)."""
         source_name = params.source
         parts = params.parts
 
@@ -282,13 +264,7 @@ class ReshapeHandlersMixin:
 
     @register_handler(OpType.CAST_ENTITY)
     def _handle_cast_entity(self, params: CastEntityParams) -> OperationResult:
-        """CAST_ENTITY: Change the entity_kind of an entity type (cross-paradigm type conversion).
-
-        Overrides automatic entity_kind normalization for this entity.
-        For VERTEX<->EDGE conversion, use TRANSFORM instead.
-        Example: CAST_ENTITY orders TO DOCUMENT
-        Example: CAST_ENTITY customers TO GRAPH
-        """
+        """CAST_ENTITY: Change the entity_kind of an entity type (cross-paradigm type conversion)."""
         target = params.target
         entity_kind_str = params.entity_kind
 

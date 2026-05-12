@@ -1,26 +1,4 @@
-"""SMILE transformer base — operation registry + state holder + shared helpers.
-
-Pulled out of core.py so the transformer's "scaffolding" (handler registration,
-the per-instance state every handler reads from, and the small path/lookup
-helpers each handler uses) lives in one focused module. Each ``_handle_*``
-operation method ends up in its own ``handlers/*.py`` mixin (structural /
-crud / keys_constraints / reshape) and the four mixins plus this base class
-get re-assembled into the public ``SchemaTransformer`` over in core.py.
-
-Why mixins instead of standalone functions: the existing ~30 handlers all
-read and mutate ``self.database``, call ``self._touch()`` to declare which
-entities they edited, and use ``self._get_entity()`` etc. for lookup.
-Converting every call site to pass an explicit ``transformer`` argument
-would have churned ~3000 lines for no behavioural gain. Mixins preserve
-``self.*`` semantics while letting each topic live in its own file.
-
-The ``_HANDLER_REGISTRY`` dict is module-level state populated as a side
-effect of importing the mixin modules: each ``@register_handler(OpType.X)``
-decorator adds an entry while the mixin's class body executes. By the time
-``SchemaTransformer.__init__`` runs (which calls ``getattr(self, name)`` to
-bind the registry into ``self._handlers``), every mixin has been imported
-and every handler is present in the registry.
-"""
+"""SMILE transformer base — operation registry + state holder + shared helpers."""
 import copy
 import logging
 from typing import Any, Dict, List, Optional
@@ -32,23 +10,16 @@ from Schema.unified_meta_schema import (
 logger = logging.getLogger(__name__)
 
 
-# ---------------------------------------------------------------------------
 # Handler registry — populated at class-definition time by @register_handler
 # decorators on each mixin's _handle_* methods. Stores method *names*
 # (not function objects) so the registry stays valid across subclassing and
 # overrides — the binding to ``self`` happens later in
 # ``SchemaTransformerBase.__init__`` via ``getattr``.
-# ---------------------------------------------------------------------------
 _HANDLER_REGISTRY: Dict["OpType", str] = {}  # noqa: F821 — OpType is a forward ref
 
 
 def register_handler(op_type):
-    """Bind an OpType to its handler method by name.
-
-    Stores the method *name* (not the function object) so the registry stays
-    valid across subclassing and method overrides — the binding to ``self``
-    happens later in ``SchemaTransformer.__init__`` via ``getattr``.
-    """
+    """Bind an OpType to its handler method by name."""
     def decorator(method):
         if op_type in _HANDLER_REGISTRY:
             raise RuntimeError(
@@ -61,15 +32,7 @@ def register_handler(op_type):
 
 
 class SchemaTransformerBase:
-    """The instance state every ``_handle_*`` mixin operates on.
-
-    Holds the working ``database`` copy, change tracking (`changes`,
-    ``_touched``), the source-schema PK snapshot used by the web UI, and
-    the bound handler dispatch table. Each handler mixin contributes
-    methods to this class via multiple inheritance; the resulting class
-    ``core.SchemaTransformer`` looks like the original 3000-line
-    monolithic class did, but its source lives in five focused files now.
-    """
+    """The instance state every ``_handle_*`` mixin operates on."""
 
     def __init__(self, database: Database):
         self.database = copy.deepcopy(database)
@@ -94,11 +57,7 @@ class SchemaTransformerBase:
         }
 
     def _touch(self, *entity_names: str) -> None:
-        """Hint to run_apply that this handler only modified the listed entities.
-
-        Optional — handlers without _touch() calls still work (they just trigger
-        a full-DB diff). Use for hot single-entity handlers (ADD_PROPERTY etc).
-        """
+        """Hint to run_apply that this handler only modified the listed entities."""
         if self._touched is None:
             return  # not tracking right now (handler called outside run_apply)
         for n in entity_names:
@@ -106,14 +65,7 @@ class SchemaTransformerBase:
                 self._touched.append(n)
 
     def _init_source_keys(self) -> None:
-        """Populate source_key_snapshot from the source schema's primary keys.
-
-        Composite primary keys (e.g. \"order_details(order_id, product_id)\"
-        in relational or Cassandra's PARTITION+CLUSTERING) must not lose
-        their trailing columns. \"key_fields\" records the full tuple while
-        \"key_field\" (singular) keeps the first column for backward
-        compatibility with frontends that expect a scalar.
-        """
+        """Populate source_key_snapshot from the source schema's primary keys."""
         for entity_name, entity in self.database.entity_types.items():
             pk = entity.get_primary_key()
             if not (pk and pk.unique_properties):
@@ -143,20 +95,14 @@ class SchemaTransformerBase:
         return entity
 
     def _split_path(self, path: str) -> tuple:
-        """Split 'entity.attr' path into (entity_name, attr_or_field_name).
-
-        Returns ("", "") if path has fewer than 2 parts.
-        """
+        """Split 'entity.attr' path into (entity_name, attr_or_field_name)."""
         parts = path.split(".")
         if len(parts) < 2:
             return ("", "")
         return ".".join(parts[:-1]), parts[-1]
 
     def _resolve_entity_attr(self, path: str, op_name: str = "") -> tuple:
-        """Parse 'entity.attr' path, look up the entity, and return (entity, attr_name).
-
-        Returns (None, "") on failure (with optional [NOTICE] print).
-        """
+        """Parse 'entity.attr' path, look up the entity, and return (entity, attr_name)."""
         entity_name, attr_name = self._split_path(path)
         if not entity_name:
             return (None, "")

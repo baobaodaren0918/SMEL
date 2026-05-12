@@ -1,12 +1,4 @@
-"""
-SMILE Listeners - Parsers for the two SMILE grammar variants.
-
-This module provides listener implementations for:
-1. SMILE_Specific.g4 - Specific operations version (one keyword per op)
-2. SMILE_Generalized.g4 - Generalized operations version (verb + object)
-
-Both listeners share common logic through the BaseSMILEListener class.
-"""
+"""SMILE Listeners - Parsers for the two SMILE grammar variants."""
 import sys
 from enum import Enum
 from pathlib import Path
@@ -42,11 +34,7 @@ from Schema.unified_meta_schema import (
 
 
 class OpType(str, Enum):
-    """Operation types for SMILE schema migration operations.
-
-    Values are lowercase strings matching handler method names in SchemaTransformer
-    (e.g., OpType.NEST -> _handle_nest). Use .name for uppercase display (e.g., "NEST").
-    """
+    """Operation types for SMILE schema migration operations."""
     # Structure operations
     NEST = "nest"
     UNNEST = "unnest"
@@ -114,11 +102,7 @@ class Operation:
 
 
 class BaseSMILEListener:
-    """
-    Base class with shared parsing logic for all SMILE variants.
-
-    This class provides common helper methods used by all listener implementations.
-    """
+    """Base class with shared parsing logic for all SMILE variants."""
 
     def __init__(self):
         self.context = MigrationContext()
@@ -127,13 +111,7 @@ class BaseSMILEListener:
     # ========== Helper methods for parsing clauses ==========
 
     def _parse_condition_pairs(self, condition_ctx):
-        """Recursively parse condition tree into list of (left = right) join pairs.
-
-        Supports:
-          a.x = b.y                        → [{"left": "a.x", "right": "b.y"}]
-          a.x = b.y AND a.z = b.z          → [{"left": "a.x", ...}, {"left": "a.z", ...}]
-          (a.x = b.y) AND a.z = b.z        → same, with parentheses
-        """
+        """Recursively parse condition tree into list of (left = right) join pairs."""
         pairs = []
         # Leaf: qualifiedName EQUALS qualifiedName
         qns = condition_ctx.qualifiedName()
@@ -150,9 +128,7 @@ class BaseSMILEListener:
         return pairs
 
     def _parse_property_clauses(self, clause_list):
-        """Parse property clauses: WITH TYPE, WITH DEFAULT, NOT NULL.
-        Returns list of dicts, e.g. [{'type': 'TYPE', 'data_type': 'String'}, {'type': 'NOT_NULL'}]
-        """
+        """Parse property clauses: WITH TYPE, WITH DEFAULT, NOT NULL."""
         result = []
         for clause in clause_list:
             if hasattr(clause, 'withTypeClause') and clause.withTypeClause():
@@ -176,9 +152,7 @@ class BaseSMILEListener:
         return result
 
     def _parse_embedded_clauses(self, clause_list):
-        """Parse embedded clauses.
-        Returns list of dicts, e.g. [{'type': 'CARDINALITY', 'value': 'ONE_TO_ONE'}]
-        """
+        """Parse embedded clauses."""
         result = []
         for clause in clause_list:
             if hasattr(clause, 'withCardinalityClause') and clause.withCardinalityClause():
@@ -189,9 +163,7 @@ class BaseSMILEListener:
         return result
 
     def _parse_entity_clauses(self, clause_list):
-        """Parse entity clauses.
-        Returns list of dicts, e.g. [{'type': 'PROPERTIES', 'properties': [{'name': 'id', 'data_type': 'String'}, ...]}, {'type': 'KEY', 'key_name': 'id'}]
-        """
+        """Parse entity clauses."""
         result = []
         for clause in clause_list:
             if hasattr(clause, 'withPropertiesClause') and clause.withPropertiesClause():
@@ -208,13 +180,7 @@ class BaseSMILEListener:
         return result
 
     def _parse_key_columns(self, key_columns_ctx):
-        """
-        Parse key columns - supports qualifiedName (entity.field) or composite keys.
-
-        Returns: (key_columns_list, entity_name)
-        - For qualifiedName: (["field"], "entity") or (["field"], None)
-        - For composite: (["a", "b"], None)
-        """
+        """Parse key columns - supports qualifiedName (entity.field) or composite keys."""
         if key_columns_ctx.qualifiedName():
             # New: qualifiedName supports entity.field syntax
             full_path = key_columns_ctx.qualifiedName().getText()
@@ -248,23 +214,7 @@ class BaseSMILEListener:
         return result
 
     def _parse_unnest_field_list(self, field_list_ctx, parser_module):
-        """
-        Recursively parse UNNEST field list to separate properties and nested objects.
-
-        Grammar structure:
-          unnestFieldList: unnestField (COMMA unnestField)*;
-          unnestField: identifier                                    # SimpleField
-                     | identifier LBRACE unnestFieldList RBRACE      # NestedField
-
-        Args:
-            field_list_ctx: The unnestFieldList context from parser
-            parser_module: Either SMILE_SpecificParser or SMILE_GeneralizedParser
-
-        Returns:
-            tuple: (properties, nested)
-                   - properties: list of simple property names ['position', 'name']
-                   - nested: list of nested object dicts [{'name': 'company', 'children': {...}}]
-        """
+        """Recursively parse UNNEST field list to separate properties and nested objects."""
         properties = []
         nested = []
 
@@ -296,20 +246,13 @@ class BaseSMILEListener:
 
     @staticmethod
     def _strip_string_literal(text: str) -> str:
-        """Strip the outer quotes from an ANTLR STRING_LITERAL token. The
-        grammar admits both single- and double-quoted strings; either has the
-        same opening and closing character."""
+        """Strip the outer quotes from an ANTLR STRING_LITERAL token. The"""
         if len(text) >= 2 and text[0] in ("'", '"') and text[-1] == text[0]:
             return text[1:-1]
         return text
 
     def _parse_literal_value(self, lit_ctx):
-        """Convert a ``literal`` parse-tree node into a Python value.
-
-        STRING_LITERAL → ``str`` (quotes stripped).
-        INTEGER_LITERAL → ``int``. DECIMAL_LITERAL → ``float``.
-        TRUE / FALSE → ``bool``. NULL → ``None``.
-        """
+        """Convert a ``literal`` parse-tree node into a Python value."""
         if lit_ctx.STRING_LITERAL():
             return self._strip_string_literal(lit_ctx.STRING_LITERAL().getText())
         if lit_ctx.INTEGER_LITERAL():
@@ -325,14 +268,7 @@ class BaseSMILEListener:
         return lit_ctx.getText()
 
     def _build_check_expr(self, ctx):
-        """Recursively build a CheckExpr AST from a ``checkExpr`` /
-        ``checkAtom`` parse tree.
-
-        Dispatches on ``type(ctx).__name__`` so the same helper handles both
-        grammar variants — the labelled rule alternatives generate context
-        classes with identical names (e.g. ``CmpAtomContext``,
-        ``CheckAndExprContext``) in both parser modules.
-        """
+        """Recursively build a CheckExpr AST from a ``checkExpr`` /"""
         cls_name = type(ctx).__name__
 
         # Composite expression nodes. ANTLR accessor convention: a sub-rule
@@ -429,16 +365,10 @@ class BaseSMILEListener:
         raise ValueError(f"Unknown constraintBody context: {cls_name}")
 
 
-# ==============================================================================
 # SMILE_Specific Listener - For SMILE_Specific.g4
-# ==============================================================================
 
 class SMILESpecificListener(SMILE_SpecificListener, BaseSMILEListener):
-    """
-    Listener for SMILE_Specific.g4 grammar.
-
-    Uses specific keywords like ADD_PROPERTY, DELETE_ENTITY, RENAME_PROPERTY.
-    """
+    """Listener for SMILE_Specific.g4 grammar."""
 
     def __init__(self):
         BaseSMILEListener.__init__(self)
@@ -612,18 +542,7 @@ class SMILESpecificListener(SMILE_SpecificListener, BaseSMILEListener):
         ), original_keyword="ADD_FOREIGN_KEY"))
 
     def _extract_fk_source(self, ctx):
-        """Pull (entity_name, [column, ...]) out of an ADD_FOREIGN_KEY ctx.
-
-        Grammar: ``ADD_FOREIGN_KEY keyColumns (TO qualifiedName)? REFERENCES
-        qualifiedName LPAREN identifierList RPAREN constraintClause*;``
-
-        ``keyColumns`` admits two shapes — a dotted qualifiedName inside it
-        (single column with implicit entity) or a parenthesised identifierList
-        plus an explicit ``TO`` clause (composite). The TO and REFERENCES
-        targets both became top-level qualifiedName children, so
-        ``ctx.qualifiedName()`` at this level returns either ``[REFERENCES]``
-        (no TO) or ``[TO, REFERENCES]`` (TO present).
-        """
+        """Pull (entity_name, [column, ...]) out of an ADD_FOREIGN_KEY ctx."""
         kc = ctx.keyColumns()
         if kc.qualifiedName():
             # Single-column form: keyColumns is a dotted qualifiedName (entity.field).
@@ -643,11 +562,7 @@ class SMILESpecificListener(SMILE_SpecificListener, BaseSMILEListener):
         return None, cols
 
     def _extract_fk_target(self, ctx):
-        """Return (target_table, [target_column, ...]) from the REFERENCES side.
-
-        REFERENCES qualifiedName is always the LAST top-level qualifiedName in
-        the rule; the columns come from the trailing parenthesised identifierList.
-        """
+        """Return (target_table, [target_column, ...]) from the REFERENCES side."""
         top_qns = ctx.qualifiedName()
         target_table = top_qns[-1].getText()
         target_columns = [i.getText() for i in ctx.identifierList().identifier()]
@@ -677,8 +592,7 @@ class SMILESpecificListener(SMILE_SpecificListener, BaseSMILEListener):
         self.operations.append(Operation(OpType.ADD_ENTITY, params, original_keyword="ADD_ENTITY"))
 
     def _resolve_add_key_entity(self, ctx, entity_from_path):
-        """TO qualifiedName at top level, falling back to the entity inferred
-        from a dotted keyColumns. Shared by all four add_*_key handlers."""
+        """TO qualifiedName at top level, falling back to the entity inferred"""
         if ctx.qualifiedName():
             return ctx.qualifiedName().getText()
         return entity_from_path
@@ -771,8 +685,7 @@ class SMILESpecificListener(SMILE_SpecificListener, BaseSMILEListener):
         ), original_keyword="DELETE_ENTITY"))
 
     def _resolve_delete_key_entity(self, ctx, entity_from_path):
-        """FROM qualifiedName at top level, falling back to entity from
-        dotted keyColumns. Shared by all four delete_*_key handlers."""
+        """FROM qualifiedName at top level, falling back to entity from"""
         if ctx.qualifiedName():
             return ctx.qualifiedName().getText()
         return entity_from_path
@@ -971,17 +884,10 @@ class SMILESpecificListener(SMILE_SpecificListener, BaseSMILEListener):
 
 
 
-# ==============================================================================
 # SMILE_Generalized Listener - For SMILE_Generalized.g4
-# ==============================================================================
 
 class SMILEGeneralizedListener(SMILE_GeneralizedListener, BaseSMILEListener):
-    """
-    Listener for SMILE_Generalized.g4 grammar.
-
-    Uses generalized keywords like ADD, DELETE, RENAME with type parameters.
-    Reuses helper methods from BaseSMILEListener for common parsing logic.
-    """
+    """Listener for SMILE_Generalized.g4 grammar."""
 
     def __init__(self):
         BaseSMILEListener.__init__(self)

@@ -95,9 +95,7 @@ def count_operations(operations: list) -> dict:
     return counts
 
 
-# =============================================================================
 # pytest-compatible test functions
-# =============================================================================
 import pytest
 
 _tests_dir = Path(__file__).parent
@@ -121,9 +119,7 @@ def test_parse_generalized(filepath):
     assert len(operations) > 0, f"No operations parsed from {filepath.name}"
 
 
-# =============================================================================
 # Standalone execution (python tests/test_parser.py)
-# =============================================================================
 def main():
     """Main test function."""
     tests_dir = _tests_dir

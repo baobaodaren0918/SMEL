@@ -1,16 +1,4 @@
-"""Pipeline orchestration — the four-step flow that turns a source schema into a target one.
-
-``run_migration`` is the public entry point used by main.py and the web UI;
-internally it sequences ``run_load`` (parse SMILE + load source), constructs
-a ``SchemaTransformer``, calls ``run_apply`` (execute every operation),
-then ``run_export`` (paradigm-normalize + adapter export).
-
-This module also assembles ``SchemaTransformer`` from its four handler
-mixins and the base class. It is the assembly point — placing the class
-here (rather than in ``core/__init__.py``) keeps the package init free of
-imports that would otherwise create cycles when downstream code imports
-``run_migration`` and indirectly imports the mixins.
-"""
+"""Pipeline orchestration — the four-step flow that turns a source schema into a target one."""
 import copy
 import logging
 import dataclasses
@@ -104,27 +92,13 @@ class SchemaTransformer(
     ReshapeHandlersMixin,
     SchemaTransformerBase,
 ):
-    """Transform a schema based on parsed SMILE operations.
-
-    All instance state and shared helpers live in ``SchemaTransformerBase``;
-    each ``_handle_*`` operation method comes from one of the four handler
-    mixins. The class body is intentionally empty — no orchestration logic
-    belongs here, just the multi-inheritance composition.
-    """
+    """Transform a schema based on parsed SMILE operations."""
     pass
 
 
 
 def run_load(source_file, smile_file, source_type: str):
-    """Step 1 — Resolve adapters, read source schema + SMILE script, parse the
-    script, and snapshot Meta V1.
-
-    Returns:
-        (source_adapter, source_db, meta_v1_db, smile_content, raw_source,
-         operations, errors)
-        — `errors` is a non-empty list when the SMILE script has parse errors;
-        callers should bail out in that case.
-    """
+    """Step 1 — Resolve adapters, read source schema + SMILE script, parse the"""
     from parser.factory import parse_smile_auto
 
     source_adapter = ADAPTER_REGISTRY.get(source_type)
@@ -143,43 +117,7 @@ def run_load(source_file, smile_file, source_type: str):
 
 
 def run_apply(transformer: 'SchemaTransformer', operations) -> tuple:
-    """Step 2 — Apply parsed operations to a transformer's database, tracking
-    per-op success/skip/error and a diff of the entities each op touched.
-
-    Three terminal statuses are recorded per op:
-
-      * ``success`` — handler returned a truthy ``OperationResult``.
-      * ``skipped`` — handler returned a falsy ``OperationResult`` (with a
-        ``reason``); a *deliberate* business-level skip such as "entity
-        not found" or "no-op". Counted in ``skipped_count``.
-      * ``error``   — the handler raised an unexpected exception. Almost
-        always a real bug in the handler or its inputs, *not* a deliberate
-        skip. Counted in its own ``error_count`` so callers can fail loud
-        on bugs without conflating them with intentional skips. The full
-        traceback is logged via ``logger.exception`` (no longer just the
-        message), so the underlying defect is visible in CI output.
-
-    The pipeline does not abort on error so that subsequent ops still get
-    reported — a single broken handler shouldn't blank out the rest of the
-    migration trace. Callers that want strict behavior can assert
-    ``error_count == 0`` after the call (test_full_flow does this via the
-    ``operations_detail`` status field).
-
-    Performance:
-      - One ``db_to_dict`` snapshot per op (the previous "after" is reused
-        as the next "before"), down from two.
-      - ``status == "skipped"`` ops reuse ``prev_snapshot`` directly — the
-        handler returned via an early-return guard before mutating, so
-        the database is byte-identical to the previous snapshot and we
-        can skip serialization entirely. ``status == "error"`` still
-        snapshots, since an exception may have been thrown mid-mutation.
-      - Handlers may opportunistically call ``self._touch(name)`` to
-        declare which entities they modified. When set,
-        ``_calculate_changes`` skips deep-compare for unchanged entities.
-
-    Returns:
-        (operations_detail, success_count, skipped_count, error_count)
-    """
+    """Step 2 — Apply parsed operations to a transformer's database, tracking"""
     operations_detail = []
     success_count = 0
     skipped_count = 0
@@ -257,12 +195,7 @@ def run_apply(transformer: 'SchemaTransformer', operations) -> tuple:
 
 
 def run_export(transformer: 'SchemaTransformer', source_type: str, target_type: str) -> tuple:
-    """Step 3 — Set target db_type, normalize entity_kind, and export Meta V2
-    via the target adapter.
-
-    Returns:
-        (result_db, exported_target, target_adapter)
-    """
+    """Step 3 — Set target db_type, normalize entity_kind, and export Meta V2"""
     target_adapter = ADAPTER_REGISTRY.get(target_type)
     if not target_adapter:
         raise ValueError(f"No adapter for target type: {target_type}. Available: {list(ADAPTER_REGISTRY.keys())}")
@@ -292,18 +225,29 @@ def run_export(transformer: 'SchemaTransformer', source_type: str, target_type: 
     return result_db, exported_target, target_adapter
 
 
+def _early_exit(reason: str) -> Dict[str, Any]:
+    """Build an early-exit response that still carries the full set of
+    ``validation_*`` keys. All layers are reported as ``unverifiable`` so
+    callers (web UI, CLI, tests) can read the validation payload without
+    branching on whether the pipeline reached the validation stage."""
+    skipped = {"passed": None, "summary": f"Other reasons ({reason})",
+               "details": {}}
+    return {
+        "error": reason,
+        "validation_layer0": skipped,
+        "validation_meta": skipped,
+        "validation_export": skipped,
+        "validation_text_diff": skipped,
+        "validation_blame": "unverifiable",
+        "validation_summary": reason,
+    }
+
+
 def run_migration(direction: str) -> Dict[str, Any]:
-    """
-    Run a complete migration and return results.
-
-    Args:
-        direction: a key in MIGRATION_CONFIGS (e.g. "northwind_r2d_specific").
-
-    Returns:
-        Dictionary with migration results including source, meta_v1, result, changes, etc.
-    """
+    """Run a complete migration and return results."""
     if direction not in MIGRATION_CONFIGS:
-        return {"error": f"Unknown direction: {direction}. Available: {list(MIGRATION_CONFIGS.keys())}"}
+        return _early_exit(f"Unknown direction: {direction}. "
+                           f"Available: {list(MIGRATION_CONFIGS.keys())}")
 
     config = MIGRATION_CONFIGS[direction]
     source_file = config.source_file
@@ -313,16 +257,16 @@ def run_migration(direction: str) -> Dict[str, Any]:
 
     for f in [source_file, smile_file]:
         if not f.exists():
-            return {"error": f"File not found: {f}"}
+            return _early_exit(f"File not found: {f}")
 
     # Step 1: source DDL → Meta V1, parse SMILE
     try:
         (source_adapter, source_db, meta_v1_db, smile_content, raw_source,
          operations, errors) = run_load(source_file, smile_file, source_type)
     except ValueError as e:
-        return {"error": str(e)}
+        return _early_exit(str(e))
     if errors:
-        return {"error": f"SMILE parse errors: {errors}"}
+        return _early_exit(f"SMILE parse errors: {errors}")
 
     # Step 2: apply ops → Meta V2
     transformer = SchemaTransformer(source_db)
@@ -332,7 +276,7 @@ def run_migration(direction: str) -> Dict[str, Any]:
     try:
         result_db, exported_target, _ = run_export(transformer, source_type, target_type)
     except ValueError as e:
-        return {"error": str(e)}
+        return _early_exit(str(e))
 
     result_dict = {
         "source_type": source_type,

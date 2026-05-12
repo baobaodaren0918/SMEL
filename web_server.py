@@ -1,7 +1,4 @@
-"""
-SMILE Web Server - Web interface for schema migration visualization.
-Run this file and open http://localhost:5601 in your browser.
-"""
+"""SMILE Web Server - Web interface for schema migration visualization."""
 import sys
 import json
 import re
@@ -188,7 +185,21 @@ class SMILEHandler(SimpleHTTPRequestHandler):
                     parser.removeErrorListeners(); parser.addErrorListener(err)
                     tree = parser.migration()
                     if err.errors:
-                        result = {"ok": False, "errors": err.errors, "stage": "parse"}
+                        # Parse failed: validation can't run, but surface
+                        # ``unverifiable`` placeholders so the frontend gets a
+                        # consistent validation_* shape across endpoints.
+                        skipped = {"passed": None,
+                                   "summary": "Other reasons (parse failed)",
+                                   "details": {}}
+                        result = {
+                            "ok": False, "errors": err.errors, "stage": "parse",
+                            "validation_layer0": skipped,
+                            "validation_meta": skipped,
+                            "validation_export": skipped,
+                            "validation_text_diff": skipped,
+                            "validation_blame": "unverifiable",
+                            "validation_summary": "SMILE parse failed",
+                        }
                     else:
                         listener = ListenerCls()
                         walker = ParseTreeWalker()
@@ -411,10 +422,7 @@ def _parse_schema_text(text: str, db_type: str, name: str):
 
 
 def _parse_multipart_inspect(body: bytes, content_type: str):
-    """Manually parse multipart/form-data for /api/inspect (cgi removed in 3.13).
-
-    Returns (text, db_type). Expects two parts: 'db_type' (text) and 'file' (binary).
-    """
+    """Manually parse multipart/form-data for /api/inspect (cgi removed in 3.13)."""
     # Extract boundary from "multipart/form-data; boundary=..."
     boundary = None
     for piece in content_type.split(';'):

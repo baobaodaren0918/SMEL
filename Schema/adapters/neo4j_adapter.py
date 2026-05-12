@@ -1,21 +1,4 @@
-"""
-Neo4j Adapter - Parse Neo4j Graph JSON Schema to Unified Meta Schema.
-Converts Neo4j node/relationship definitions to Database/EntityType/Property objects.
-
-This adapter provides bidirectional conversion:
-  - load_from_file(): Neo4j Graph JSON -> Unified Meta Schema
-  - export_to_cypher(): Unified Meta Schema -> Cypher DDL (constraints + comments)
-
-Data Flow:
-  Neo4j Graph JSON                       Unified Meta Schema
-  ─────────────────────────────────────────────────────────────
-  Node label "customers"              ->     EntityType(entity_kind=VERTEX)
-  Relationship type "PURCHASED"     ->     EntityType(EDGE) + Edge
-  Property { "type": "string" }    ->     PrimitiveType.STRING
-  primary_key field                ->     UniqueConstraint (is_primary_key=True)
-
-Design: from Andre Conrad
-"""
+"""Neo4j Adapter - Parse Neo4j Graph JSON Schema to Unified Meta Schema."""
 import json
 import logging
 import re
@@ -32,15 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 class Neo4jAdapter(DatabaseAdapter):
-    """
-    Adapter to parse Neo4j graph schema JSON and create Unified Meta Schema.
-
-    This class acts as a translator between Neo4j's graph schema format
-    and the internal Unified Meta Schema used by SMILE.
-
-    Example:
-        database = Neo4jAdapter.load_from_file("graph_schema.json", db_name="mydb")
-    """
+    """Adapter to parse Neo4j graph schema JSON and create Unified Meta Schema."""
 
     # =========================================================================
     # TYPE MAPPING (from centralized TypeMappings)
@@ -69,79 +44,7 @@ class Neo4jAdapter(DatabaseAdapter):
     # =========================================================================
 
     def parse(self, schema: Union[Dict[str, Any], str], db_name: str = "database") -> Database:
-        """
-        Parse Neo4j graph schema and return Database object.
-
-        Accepts:
-          * a JSON dict (legacy);
-          * a JSON string (auto-detected by leading ``{``/``[``);
-          * a Cypher script (auto-detected; routed to ``parse_cypher``).
-
-        Using the string form lets callers treat all four adapters uniformly
-        via the ``DatabaseAdapter`` ABC.
-
-        Example Input (Neo4j Graph JSON):
-            {
-                "nodes": [
-                    {
-                        "label": "customers",
-                        "properties": [
-                            {"name": "name", "type": "string"},
-                            {"name": "age", "type": "integer"}
-                        ],
-                        "primary_key": "name"
-                    },
-                    {
-                        "label": "orders",
-                        "properties": [
-                            {"name": "title", "type": "string"},
-                            {"name": "year", "type": "integer"}
-                        ],
-                        "primary_key": "title"
-                    }
-                ],
-                "relationships": [
-                    {
-                        "type": "PURCHASED",
-                        "source": "customers",
-                        "target": "orders",
-                        "properties": [{"name": "role", "type": "string"}],
-                        "cardinality": "0..n"
-                    }
-                ]
-            }
-
-        Example Output (Unified Meta Schema):
-            Database(
-                db_name="mydb",
-                db_type=DatabaseType.GRAPH,
-                entity_types={
-                    "customers": EntityType(
-                        object_name=["customers"],
-                        entity_kind=EntityKind.VERTEX,
-                        properties=[
-                            Property("name", STRING, is_key=True),
-                            Property("age", INTEGER)
-                        ],
-                        constraints=[UniqueConstraint(is_primary_key=True, ...)]
-                    ),
-                    "orders": EntityType(...)
-                },
-                    "PURCHASED": EntityType(
-                        object_name=["PURCHASED"],
-                        entity_kind=EntityKind.EDGE,
-                        source_entity="customers",
-                        target_entity="orders",
-                        properties=[Property("role", STRING)],
-                        edge_cardinality=ZERO_TO_MANY
-                    )
-            )
-
-        Processing Flow:
-            1. Create Database with db_type=GRAPH
-            2. Parse each node -> EntityType(entity_kind=VERTEX)
-            3. Parse each relationship -> EntityType(EDGE) + Edge on source entity
-        """
+        """Parse Neo4j graph schema and return Database object."""
         # Auto-detect string input (canonical entry per DatabaseAdapter ABC).
         if isinstance(schema, str):
             stripped = schema.lstrip()
@@ -165,29 +68,7 @@ class Neo4jAdapter(DatabaseAdapter):
         return self.database
 
     def _parse_node(self, node_def: Dict[str, Any]) -> EntityType:
-        """
-        Parse a single node definition into EntityType.
-
-        Example:
-            node_def = {
-                "label": "customers",
-                "properties": [
-                    {"name": "name", "type": "string"},
-                    {"name": "age", "type": "integer"}
-                ],
-                "primary_key": "name"
-            }
-
-            -> EntityType(
-                 object_name=["customers"],
-                 entity_kind=EntityKind.VERTEX,
-                 properties=[
-                     Property("name", STRING, is_key=True),
-                     Property("age", INTEGER)
-                 ],
-                 constraints=[UniqueConstraint(is_primary_key=True, ...)]
-               )
-        """
+        """Parse a single node definition into EntityType."""
         label = node_def.get("label", "Unknown")
         primary_key = node_def.get("primary_key")
         # Normalise primary_key to a list so single-column and composite NODE KEYs
@@ -252,25 +133,7 @@ class Neo4jAdapter(DatabaseAdapter):
         return entity
 
     def _parse_relationship(self, rel_def: Dict[str, Any]):
-        """
-        Parse a single relationship definition into EntityType(EDGE) and Edge.
-
-        Creates two things:
-          1. EntityType(EDGE) on Database (schema-level edge definition)
-          2. Edge on source EntityType's relationships list (instance-level link)
-
-        Example:
-            rel_def = {
-                "type": "PURCHASED",
-                "source": "customers",
-                "target": "orders",
-                "properties": [{"name": "role", "type": "string"}],
-                "cardinality": "0..n"
-            }
-
-            -> EntityType(EDGE)("PURCHASED", source="customers", target="orders", ...)
-            -> Edge on customers entity (rel_type_name="PURCHASED", target="orders")
-        """
+        """Parse a single relationship definition into EntityType(EDGE) and Edge."""
         rel_name = rel_def.get("type", "RELATED_TO")
         source_label = rel_def.get("source", "")
         target_label = rel_def.get("target", "")
@@ -328,15 +191,7 @@ class Neo4jAdapter(DatabaseAdapter):
             source_entity.add_relationship(edge)
 
     def _parse_data_type(self, type_name: str) -> PrimitiveDataType:
-        """
-        Parse a Neo4j property type string to PrimitiveDataType.
-
-        Examples:
-            "string"    -> PrimitiveDataType(STRING)
-            "integer"   -> PrimitiveDataType(INTEGER)
-            "boolean"   -> PrimitiveDataType(BOOLEAN)
-            "unknown"   -> PrimitiveDataType(STRING) (fallback)
-        """
+        """Parse a Neo4j property type string to PrimitiveDataType."""
         primitive = self.TYPE_MAP.get(type_name, PrimitiveType.STRING)
         return PrimitiveDataType(primitive_type=primitive)
 
@@ -353,18 +208,7 @@ class Neo4jAdapter(DatabaseAdapter):
     }
 
     def parse_cypher(self, cypher_content: str, db_name: str = "database") -> Database:
-        """
-        Parse Neo4j Cypher DDL text and return Database object.
-
-        Parses the Cypher DDL format produced by export_to_cypher():
-          // Node: <Label>
-          CREATE CONSTRAINT ... FOR (n:<Label>) REQUIRE n.<field> IS UNIQUE;
-          // Properties: field1 (type), field2 (type), ...
-
-          // Relationship: <NAME> (<Source> -> <Target>)
-          // Properties: field1 (type), ...
-          // Cardinality: 0..n
-        """
+        """Parse Neo4j Cypher DDL text and return Database object."""
         self.database = Database(db_name=db_name, db_type=DatabaseType.GRAPH)
 
         lines = cypher_content.split('\n')
@@ -509,14 +353,7 @@ class Neo4jAdapter(DatabaseAdapter):
 
     @staticmethod
     def load_from_file(file_path: str, db_name: str = None) -> Database:
-        """
-        Load Neo4j graph schema from file and parse to Database.
-        Supports both JSON (.json) and Cypher DDL (.cypher) formats.
-
-        Example:
-            database = Neo4jAdapter.load_from_file("graph_schema.cypher", db_name="mydb")
-            database = Neo4jAdapter.load_from_file("graph_schema.json", db_name="mydb")
-        """
+        """Load Neo4j graph schema from file and parse to Database."""
         from pathlib import Path
 
         if db_name is None:
@@ -542,33 +379,7 @@ class Neo4jAdapter(DatabaseAdapter):
 
     @classmethod
     def export_to_cypher(cls, database: Database) -> str:
-        """
-        Export Unified Meta Schema to Neo4j Cypher DDL format.
-
-        Generates constraint statements and property/relationship comments
-        that describe the graph schema in a Cypher-compatible format.
-
-        Example Output:
-            // Neo4j Graph Schema
-            // Generated by SMILE
-
-            // Node: customers
-            CREATE CONSTRAINT customer_name_unique IF NOT EXISTS
-              FOR (n:customers) REQUIRE n.name IS UNIQUE;
-            // Properties: name (string), age (integer)
-
-            // Node: orders
-            CREATE CONSTRAINT movie_title_unique IF NOT EXISTS
-              FOR (n:orders) REQUIRE n.title IS UNIQUE;
-            // Properties: title (string), year (integer)
-
-            // Relationship: PURCHASED (customers -> orders)
-            // Properties: role (string)
-            // Cardinality: 0..n
-
-            // Relationship: SOLD (customers -> orders)
-            // Cardinality: 0..n
-        """
+        """Export Unified Meta Schema to Neo4j Cypher DDL format."""
         lines = []
         lines.append("// Neo4j Graph Schema")
         lines.append("// Generated by SMILE")
@@ -591,15 +402,7 @@ class Neo4jAdapter(DatabaseAdapter):
 
     @classmethod
     def _export_node(cls, entity: EntityType) -> List[str]:
-        """
-        Export a single node entity to Cypher constraint and property comments.
-
-        Example Output:
-            // Node: customers
-            CREATE CONSTRAINT customer_name_unique IF NOT EXISTS
-              FOR (n:customers) REQUIRE n.name IS UNIQUE;
-            // Properties: name (string), age (integer)
-        """
+        """Export a single node entity to Cypher constraint and property comments."""
         lines = []
         label = entity.name
         # Include additional labels (e.g. customers:Employee)
@@ -644,14 +447,7 @@ class Neo4jAdapter(DatabaseAdapter):
 
     @classmethod
     def _export_relationship(cls, edge_entity: EntityType) -> List[str]:
-        """
-        Export a single EDGE entity type to Cypher comments.
-
-        Example Output:
-            // Relationship: PURCHASED (customers -> orders)
-            // Properties: role (string)
-            // Cardinality: 0..n
-        """
+        """Export a single EDGE entity type to Cypher comments."""
         lines = []
         lines.append(
             f"// Relationship: {edge_entity.name} "
@@ -676,160 +472,12 @@ class Neo4jAdapter(DatabaseAdapter):
 
     @classmethod
     def export(cls, database: Database) -> str:
-        """
-        Convenience method that calls export_to_cypher().
-
-        Example:
-            cypher_ddl = Neo4jAdapter.export(database)
-        """
+        """Convenience method that calls export_to_cypher()."""
         return cls.export_to_cypher(database)
 
     @classmethod
     def export_to_cypher_file(cls, database: Database, file_path: str) -> None:
-        """
-        Export to Cypher DDL file.
-
-        Example:
-            Neo4jAdapter.export_to_cypher_file(database, "output.cypher")
-        """
+        """Export to Cypher DDL file."""
         cypher = cls.export_to_cypher(database)
         with open(file_path, 'w', encoding='utf-8') as f:
             f.write(cypher)
-
-
-# =============================================================================
-# USAGE EXAMPLES
-# =============================================================================
-#
-# Example 1: Parse Neo4j Graph JSON to Unified Meta Schema
-# ---------------------------------------------------------
-#
-# graph_schema = {
-#     "nodes": [
-#         {
-#             "label": "customers",
-#             "properties": [
-#                 {"name": "name", "type": "string"},
-#                 {"name": "age", "type": "integer"}
-#             ],
-#             "primary_key": "name"
-#         },
-#         {
-#             "label": "orders",
-#             "properties": [
-#                 {"name": "title", "type": "string"},
-#                 {"name": "year", "type": "integer"}
-#             ],
-#             "primary_key": "title"
-#         }
-#     ],
-#     "relationships": [
-#         {
-#             "type": "PURCHASED",
-#             "source": "customers",
-#             "target": "orders",
-#             "properties": [{"name": "role", "type": "string"}],
-#             "cardinality": "0..n"
-#         },
-#         {
-#             "type": "SOLD",
-#             "source": "customers",
-#             "target": "orders",
-#             "properties": [],
-#             "cardinality": "0..n"
-#         }
-#     ]
-# }
-#
-# adapter = Neo4jAdapter()
-# database = adapter.parse(graph_schema, db_name="movies")
-#
-# Result:
-#   database.db_name = "movies"
-#   database.db_type = DatabaseType.GRAPH
-#   database.entity_types = {
-#       "customers": EntityType(
-#           object_name=["customers"],
-#           entity_kind=EntityKind.VERTEX,
-#           properties=[
-#               Property("name", STRING, is_key=True),
-#               Property("age", INTEGER)
-#           ],
-#           constraints=[UniqueConstraint(is_primary_key=True, ...)],
-#           relationships=[
-#               Edge(rel_type_name="PURCHASED", target="orders"),
-#               Edge(rel_type_name="SOLD", target="orders")
-#           ]
-#       ),
-#       "orders": EntityType(
-#           object_name=["orders"],
-#           entity_kind=EntityKind.VERTEX,
-#           properties=[
-#               Property("title", STRING, is_key=True),
-#               Property("year", INTEGER)
-#           ]
-#       )
-#   }
-#   database.relationship_types = {
-#       "PURCHASED": EntityType(EDGE)(
-#           rel_name="PURCHASED",
-#           source_entity="customers",
-#           target_entity="orders",
-#           properties=[Property("role", STRING)],
-#           cardinality=ZERO_TO_MANY
-#       ),
-#       "SOLD": EntityType(EDGE)(
-#           rel_name="SOLD",
-#           source_entity="customers",
-#           target_entity="orders",
-#           properties=[],
-#           cardinality=ZERO_TO_MANY
-#       )
-#   }
-#
-#
-# Example 2: Load from file
-# -------------------------
-#
-# database = Neo4jAdapter.load_from_file("graph_schema.json", db_name="movies")
-#
-#
-# Example 3: Export to Cypher DDL
-# -------------------------------
-#
-# cypher_ddl = Neo4jAdapter.export_to_cypher(database)
-# print(cypher_ddl)
-#
-# Output:
-#   -- Neo4j Graph Schema
-#   -- Generated by SMILE
-#
-#   -- Node: customers
-#   CREATE CONSTRAINT customer_name_unique IF NOT EXISTS
-#     FOR (n:customers) REQUIRE n.name IS UNIQUE;
-#   -- Properties: name (string), age (integer)
-#
-#   -- Node: orders
-#   CREATE CONSTRAINT movie_title_unique IF NOT EXISTS
-#     FOR (n:orders) REQUIRE n.title IS UNIQUE;
-#   -- Properties: title (string), year (integer)
-#
-#   -- Relationship: PURCHASED (customers -> orders)
-#   -- Properties: role (string)
-#   -- Cardinality: 0..n
-#
-#   -- Relationship: SOLD (customers -> orders)
-#   -- Cardinality: 0..n
-#
-#
-# Example 4: Export using convenience method
-# -------------------------------------------
-#
-# cypher_ddl = Neo4jAdapter.export(database)
-#
-#
-# Example 5: Export to file
-# -------------------------
-#
-# Neo4jAdapter.export_to_cypher_file(database, "output.cypher")
-#

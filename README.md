@@ -62,17 +62,22 @@ result = run_migration('northwind_g2c_specific')    # Graph -> Columnar
 # Same-model evolution (Northwind)
 result = run_migration('northwind_r2r_specific')    # Relational V1 -> V2
 
-print(result['exported_target'])     # Generated target schema
-print(result['validation_meta'])     # Layer 1 validation result
-print(result['validation_export'])   # Layer 2 validation result
+print(result['exported_target'])       # Generated target schema
+print(result['validation_meta'])       # Layer 1 validation result
+print(result['validation_export'])     # Layer 2 validation result
+print(result['validation_text_diff'])  # Layer 3 validation result
+print(result['validation_blame'])      # Verdict: ok / smile_script / adapter / text_diff / ...
 ```
 
 ### Run Tests
 ```bash
 python -m pytest tests/ -q
-# 89 tests: 32 full-flow (Northwind 4×4 × 2 grammars)
-#         + 33 parser  (16 specific + 16 generalized + 1 grammar-completeness)
-#         + 24 negative (graceful-failure surfaces)
+# 141 tests:
+#   * test_full_flow.py                       — 34 (32 Northwind + 2 grammar-completeness)
+#   * test_parser.py                          — 33 (16 specific + 16 generalized + 1)
+#   * test_negative.py                        — 28+ (graceful-failure surfaces)
+#   * test_nested_paths.py                    — 30 (nested-path resolution)
+#   * test_specific_generalized_equivalence.py — 16 (cross-grammar IR equivalence)
 
 python -m pytest tests/test_full_flow.py -k r2d -q
 # Run only tests matching a keyword
@@ -148,7 +153,7 @@ SMILE/
 │   ├── pipeline.py                    #   run_load / run_apply / run_export / run_migration
 │   ├── normalization.py               #   _calculate_changes + entity-kind / cardinality passes
 │   ├── serialization.py               #   db_to_dict / parse_original_source helpers
-│   └── handlers/                      #   30 handlers split into 4 mixin files
+│   └── handlers/                      #   32 handlers split into 4 mixin files
 │       ├── structural.py              #     NEST/UNNEST/FLATTEN/UNFLATTEN/WIND/UNWIND
 │       ├── crud.py                    #     ADD/DELETE/RENAME × {PROPERTY,ENTITY,EMBEDDED} + COPY/MOVE
 │       ├── keys_constraints.py        #     FK/KEY/LABEL/CAST_CONSTRAINT/RECARD/TRANSFORM
@@ -193,7 +198,7 @@ SMILE/
  ┌──────────┐  Meta V1  ┌──────────────┐  Meta V2  ┌──────────┐  │
  │ Phase 1  │──────────►│   Phase 3    │──────────►│ Phase 4  │──┘
  │ Reverse  │           │SchemaTransf. │           │ Forward  │
- │ Engineer │           │ (30 handlers)│           │ Engineer │
+ │ Engineer │           │ (32 handlers)│           │ Engineer │
  └──────────┘           └──────────────┘           └──────────┘
                                │                        │
                                ▼                        ▼
@@ -209,7 +214,7 @@ SMILE/
 |-------|-----------|---------------|
 | 1. Reverse Engineering | `ADAPTER_REGISTRY[source_type]` (driven by `core.run_load`) | Native DDL → Meta V1 (M-Model+) |
 | 2. SMILE Parsing | `parser.factory.parse_smile_auto()` | `.smile` / `.smile_gen` → `Operation` list |
-| 3. Transformation | `SchemaTransformer` (30 handlers, called via `core.run_apply`) | Meta V1 + Operations → Meta V2 |
+| 3. Transformation | `SchemaTransformer` (32 handlers, called via `core.run_apply`) | Meta V1 + Operations → Meta V2 |
 | 4. Forward Engineering | `ADAPTER_REGISTRY[target_type]` (driven by `core.run_export`) | Meta V2 → Target DDL |
 | 5. Validation | `validation.meta` + `validation.export` + `validation.text_diff` (composed by `validation.pipeline`) | Three-layer correctness check + blame attribution |
 
@@ -435,6 +440,8 @@ ADD_FOREIGN_KEY (col1, col2) TO entity REFERENCES target(c1, c2)       -- compos
 The composite form requires the explicit `TO entity` because the parenthesised column list is not dotted. Single-column FKs use the dotted `entity.field` form and need no `TO` clause. Add `WITH CARDINALITY <ZERO|ONE>_TO_<ONE|MANY>` after the `REFERENCES(...)` clause to make the relationship multiplicity explicit.
 
 ## SMILE Script Examples
+
+Cross-paradigm scripts open with the `MIGRATION` keyword; same-paradigm V1→V2 evolution scripts open with `EVOLUTION`. Both forms parse to the same `Operation` list internally and share every operator.
 
 ### Cross-Model: Relational → Document (R2D)
 

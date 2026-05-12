@@ -1,43 +1,4 @@
-"""
-Layer 3 Validation: Text-level diff between FE-exported native and the
-project's hand-written ground-truth native file, with set-based normalization.
-
-Pipeline position:
-  Meta V2 -> [Adapter FE] -> exported native text
-                                    |
-                                    +-- compare with native ground-truth file
-                                        (same shape Layer 1 / Layer 2 use)
-
-What "set-based" means here
----------------------------
-Schema equivalence is set-equivalence, not text-equivalence:
-
-  * JSON Schema spec (draft 2020-12 6.5.3) defines ``required`` as a set
-    (elements MUST be unique).
-  * Codd's relational model treats tables as unordered sets of attributes.
-  * Mainstream schema-diff tools (Liquibase, Flyway, Atlas, apgdiff, ...)
-    all ignore textual ordering and compare at the element level.
-
-Layer 3 therefore strips formatting noise (header comments, blank lines,
-keyword case) AND treats table order, column order within a table, and
-JSON object/array ordering as *non-differences*. What remains is the
-schema's structural content.
-
-Layer 3 vs Layer 1 / Layer 2
-----------------------------
-* Layer 1 (validate_meta):   M_V2 == parse(native_target)?  -- PIM equivalence
-* Layer 2 (validate_export): parse(export(M_V2)) == parse(native_target)?
-                                -- adapter round-trip
-* Layer 3 (validate_text_diff): export(M_V2) ~set~ native_target?
-                                -- exporter style alignment with the
-                                   project's chosen native style
-
-Layer 1 / Layer 2 can pass while Layer 3 fails -- that surfaces a
-PSM-style drift between adapter output and the project's hand-written
-ground truth (e.g. the adapter writes precision constraints the ground
-truth omits, or uses an executable form where the ground truth uses a
-comment form).
-"""
+"""Layer 3 Validation: Text-level diff between FE-exported native and the"""
 from typing import Any, Dict, List
 import difflib
 import json
@@ -49,9 +10,7 @@ from config import (
 )
 
 
-# ---------------------------------------------------------------------------
 # Per-paradigm normalizers
-# ---------------------------------------------------------------------------
 
 # Mongo / JSON Schema: title and description are descriptive metadata not
 # part of the schema's structural content; sort_keys handles object member
@@ -83,8 +42,7 @@ def _normalize_json(text: str) -> str:
 
 
 def _split_top_level(s: str) -> List[str]:
-    """Split a comma-separated string but ignore commas inside parentheses
-    (so ``PRIMARY KEY ((a, b), c)`` stays as a single chunk)."""
+    """Split a comma-separated string but ignore commas inside parentheses"""
     parts: List[str] = []
     depth = 0
     cur: List[str] = []
@@ -104,11 +62,7 @@ def _split_top_level(s: str) -> List[str]:
 
 
 def _normalize_sql_like(text: str, comment_prefix: str) -> str:
-    """SQL / CQL: strip comments and blank lines, lowercase keywords, then
-    parse each ``CREATE TABLE`` statement and sort its column / constraint
-    list. Tables are emitted in alphabetical order. The result is a
-    deterministic string that captures *what* a schema declares, not in
-    *what order* the file declares it."""
+    """SQL / CQL: idempotent normalization to a canonical string."""
     # 1. Strip line comments + blank lines, collapse whitespace.
     cleaned: List[str] = []
     for raw in text.splitlines():
@@ -119,15 +73,24 @@ def _normalize_sql_like(text: str, comment_prefix: str) -> str:
         if s:
             cleaned.append(s)
     flat = " ".join(cleaned)
-    # Collapse runs of whitespace introduced by joining.
     flat = re.sub(r"\s+", " ", flat)
 
-    # 2. Split on ';' to separate statements.
+    # 2. Split into statements by ``CREATE TABLE`` keyword rather than by
+    #    the trailing ``;``. The first normalization pass drops ``;``, so a
+    #    ``;``-based splitter would collapse every CREATE TABLE into one
+    #    blob on the second pass — breaking idempotency.
+    stmt_pattern = re.compile(r"\bcreate\s+table\b", re.IGNORECASE)
+    positions = [m.start() for m in stmt_pattern.finditer(flat)]
+    raw_statements: List[str] = []
+    if positions:
+        for idx, start in enumerate(positions):
+            end = positions[idx + 1] if idx + 1 < len(positions) else len(flat)
+            raw_statements.append(flat[start:end].strip().rstrip(";").strip())
+    elif flat.strip():
+        raw_statements.append(flat.strip().rstrip(";").strip())
+
     statements: List[str] = []
-    for stmt in flat.split(";"):
-        s = stmt.strip()
-        if not s:
-            continue
+    for s in raw_statements:
         # Lowercase keywords (rough but sufficient for diff).
         s = re.sub(
             r"\b(CREATE|TABLE|PRIMARY|KEY|FOREIGN|REFERENCES|NOT|NULL|"
@@ -139,7 +102,7 @@ def _normalize_sql_like(text: str, comment_prefix: str) -> str:
             s,
             flags=re.IGNORECASE,
         )
-        # 3. For CREATE TABLE statements: parse out (name, body) and sort body.
+        # For CREATE TABLE statements: parse out (name, body) and sort body.
         m = re.match(r"create\s+table\s+(\w+)\s*\((.*)\)\s*$", s, re.DOTALL)
         if m:
             name = m.group(1)
@@ -149,39 +112,37 @@ def _normalize_sql_like(text: str, comment_prefix: str) -> str:
             s = f"create table {name} ({', '.join(cols_sorted)})"
         statements.append(s)
 
-    # 4. Sort statements (tables) alphabetically.
+    # Sort statements (tables) alphabetically.
     return "\n".join(sorted(statements))
 
 
+_BLOCK_HEADER_RE = re.compile(r"^//\s*(node|relationship)\s*:", re.IGNORECASE)
+_CARD_RE = re.compile(r"^//\s*(cardinality|per\s+\w+)\s*:", re.IGNORECASE)
+_PROPS_RE = re.compile(r"^//\s*properties\s*:\s*(.+)$", re.IGNORECASE)
+
+
 def _normalize_cypher(text: str) -> str:
-    """Cypher: split into ``// Node:`` and ``// Relationship:`` blocks,
-    lowercase, sort the ``// Properties:`` list inside each block, then sort
-    blocks themselves. Header comments and blank lines are stripped."""
+    """Cypher: idempotent normalization. Splits on ``// Node:`` / ``// Relationship:``
+    headers regardless of case, so a first-pass output (which has been
+    lower-cased) still splits correctly on subsequent passes.
+    """
     blocks: List[List[str]] = []
     cur: List[str] = []
     for raw in text.splitlines():
         s = raw.strip()
         if not s:
             continue
-        if s.startswith("// Node:") or s.startswith("// Relationship:"):
+        if _BLOCK_HEADER_RE.match(s):
             if cur:
                 blocks.append(cur)
                 cur = []
         cur.append(s)
     if cur:
         blocks.append(cur)
-    # Drop any "preamble" block that is not anchored to a Node / Relationship
-    # heading -- those are file-level header comments.
-    blocks = [b for b in blocks
-              if b and (b[0].startswith("// Node:") or b[0].startswith("// Relationship:"))]
 
-    # Cardinality lines are descriptive comments in Cypher (the language
-    # itself does not enforce cardinality), and the project's native files
-    # use a different documentation phrasing than the FE
-    # ("// Per X: 0..n Y; per Y: 0..n X" vs "// Cardinality: 0..n"). Both
-    # are stylistic choices that carry no structural information beyond the
-    # relationship's existence and direction, so Layer 3 ignores them.
-    _CARD_RE = re.compile(r"^//\s*(cardinality|per\s+\w+):", re.IGNORECASE)
+    # Drop any preamble block that is not anchored to a Node / Relationship
+    # heading — those are file-level header comments.
+    blocks = [b for b in blocks if b and _BLOCK_HEADER_RE.match(b[0])]
 
     normalized: List[str] = []
     for blk in blocks:
@@ -190,7 +151,7 @@ def _normalize_cypher(text: str) -> str:
             s = re.sub(r"\s+", " ", l).lower()
             if _CARD_RE.match(s):
                 continue
-            m = re.match(r"^//\s*properties:\s*(.+)$", s)
+            m = _PROPS_RE.match(s)
             if m:
                 items = sorted(p.strip() for p in m.group(1).split(","))
                 s = f"// properties: {', '.join(items)}"
@@ -207,20 +168,11 @@ _NORMALIZERS = {
 }
 
 
-# ---------------------------------------------------------------------------
 # Main entry
-# ---------------------------------------------------------------------------
 
 def validate_text_diff(result_dict: Dict[str, Any], target_type: str,
                        config_key: str = "") -> Dict[str, Any]:
-    """
-    Layer 3: Compare FE-exported native text against the project's
-    hand-written ground-truth native file under set-based normalization.
-
-    Returns the same shape as Layer 1 / Layer 2: ``{passed, summary, details}``.
-    ``passed=None`` means the layer was not evaluated (no target file or no
-    normalizer for the target type) -- treated as ``unverifiable`` upstream.
-    """
+    """Layer 3: Compare FE-exported native text against the project's"""
     from validation.meta import _resolve_target_file
 
     exported = result_dict.get("exported_target", "")
@@ -283,13 +235,10 @@ def validate_text_diff(result_dict: Dict[str, Any], target_type: str,
     }
 
 
-# ---------------------------------------------------------------------------
 # Standalone runner: report on the 4 cross-paradigm directions
-# ---------------------------------------------------------------------------
 
 def _report(directions: List[str]) -> int:
-    """Run validate_text_diff over the given config keys and print a table.
-    Returns process exit code (0 if all pass / unverifiable, 1 if any fail)."""
+    """Run validate_text_diff over the given config keys and print a table."""
     from core import run_migration
 
     print("=" * 76)

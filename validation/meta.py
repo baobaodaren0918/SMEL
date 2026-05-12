@@ -1,43 +1,10 @@
-"""
-Layer 1 Validation: Meta Schema V2 Comparison.
-
-Compares the migration result (Meta V2) against the expected target schema
-parsed from the native schema file. Proves SMILE script correctness.
-
-Pipeline position:
-  Source -> [RE] -> Meta V1 -> [SMILE] -> Meta V2  <-  compare  ->  Expected Meta
-                                       ^                          ^
-                                  migration result       target native file parsed
-
-Normalization:
-  For Document targets, the migration result uses flat entity names (customer, address)
-  while MongoDB adapter uses path names (orders.customer, orders.customer.address).
-  The normalizer expands flat names to path names before comparison.
-"""
+"""Layer 1 Validation: Meta Schema V2 Comparison."""
 from typing import Dict, Any
 import copy
 
 
 def _normalize_to_paths(meta: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Normalize a flat-named meta dict to use path-based entity names.
-
-    Migration results use flat names like 'customer', 'address' with embedded
-    relationships linking them. The MongoDB adapter, after parsing a native
-    schema, uses path names like 'orders.customer', 'orders.customer.address'.
-
-    Handles both Mongo schema shapes uniformly:
-
-    * **Single-root** — one document at the top, all other entities embedded
-      beneath it. Most cross-model migrations into Document produce this.
-    * **Multi-root** — several independent collections (the multi-root
-      northwind schema has ``orders`` and ``customers`` as siblings).
-
-    The algorithm is identical in both cases: any entity that is not the
-    embedded target of another entity is treated as a root, and the embedded
-    subtree under each root is rewritten to dotted-path names. The root set
-    is the input — single-root just happens to produce a singleton list.
-    """
+    """Normalize a flat-named meta dict to use path-based entity names."""
     entities = {k: v for k, v in meta.items() if not k.startswith("__")}
     if not entities:
         return meta
@@ -101,17 +68,7 @@ def _walk_embedded(entities: Dict, entity_name: str, path: str, result: Dict):
 
 
 def compare_meta_schemas(actual: Dict[str, Any], expected: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Compare two meta schema dicts (from db_to_dict()) and return structured diff.
-
-    Thin wrapper over the unified ``database_diff.compute_diff`` engine plus
-    the ``database_diff_formatters.to_validation_report`` formatter. Both
-    Layer 1 and the per-op UI panel now share the same comparison engine.
-
-    Args:
-        actual: Migration result meta schema dict
-        expected: Expected target meta schema dict (from parsing native file)
-    """
+    """Compare two meta schema dicts (from db_to_dict()) and return structured diff."""
     from diff.engine import compute_diff
     from diff.formatters import to_validation_report
     diff = compute_diff(actual, expected)
@@ -119,16 +76,7 @@ def compare_meta_schemas(actual: Dict[str, Any], expected: Dict[str, Any]) -> Di
 
 
 def _resolve_target_file(config_key: str, target_type: str):
-    """
-    Resolve the target native file for validation.
-
-    Priority:
-    1. MIGRATION_TARGET_FILES: per-direction target (customers, same-model)
-    2. TARGET_SCHEMA_FILES: shared target by type — *only* for Northwind
-       cross-model configs, since the shared Northwind file is meaningful
-       only when the source schema is also Northwind. Other configs
-       (grammar_completeness etc.) get None → validation returns N/A.
-    """
+    """Resolve the target native file for validation."""
     from config import TARGET_SCHEMA_FILES, MIGRATION_TARGET_FILES
 
     # Check per-direction target first (strip _specific/_generalized suffix)
@@ -150,12 +98,7 @@ def _resolve_target_file(config_key: str, target_type: str):
 
 def validate_meta(result_dict: Dict[str, Any], target_type: str,
                   config_key: str = "") -> Dict[str, Any]:
-    """
-    Layer 1: Compare migration Meta V2 result against expected target schema.
-
-    For Document targets, normalizes flat entity names to path-based names
-    before comparison (migration uses 'customer', MongoDB adapter uses 'orders.customer').
-    """
+    """Layer 1: Compare migration Meta V2 result against expected target schema."""
     from config import SOURCE_TYPE_DOCUMENT
     from Schema.adapters import ADAPTER_REGISTRY
     from core import db_to_dict

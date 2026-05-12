@@ -1,21 +1,4 @@
-"""
-PostgreSQL Adapter - Parse SQL DDL to Unified Meta Schema.
-Converts CREATE TABLE statements to Database/EntityType/Property objects.
-
-This adapter provides bidirectional conversion:
-  - parse(): PostgreSQL DDL (CREATE TABLE) -> Unified Meta Schema
-  - export_to_sql(): Unified Meta Schema -> PostgreSQL DDL
-
-Data Flow:
-  PostgreSQL DDL                         Unified Meta Schema
-  ─────────────────────────────────────────────────────────────
-  VARCHAR(255)                    ->     PrimitiveType.STRING
-  INTEGER / SERIAL                ->     PrimitiveType.INTEGER
-  REFERENCES table(col)           ->     Reference relationship
-  PRIMARY KEY                     ->     UniqueConstraint (is_primary_key=True)
-
-Design: from André Conrad
-"""
+"""PostgreSQL Adapter - Parse SQL DDL to Unified Meta Schema."""
 import re
 from typing import Any, Dict, List, Optional, Tuple
 from ..unified_meta_schema import (
@@ -32,30 +15,12 @@ from ._base import DatabaseAdapter
 
 
 class _CheckParseError(Exception):
-    """Raised internally by the CHECK expression parser to signal that the
-    input cannot be decoded into the structured CheckExpr atoms.
-
-    Caught by ``PostgreSQLAdapter._parse_check_expression`` which converts
-    any parse failure into a ``CheckRaw`` carrying the original text — so
-    a malformed-or-exotic CHECK constraint is preserved verbatim rather
-    than silently dropped. Never escapes this module.
-    """
+    """Raised internally by the CHECK expression parser to signal that the"""
     pass
 
 
 class _CheckExprParser:
-    """Recursive-descent parser for SQL CHECK boolean expressions.
-
-    Operates on the token stream produced by
-    ``PostgreSQLAdapter._tokenize_check`` and yields a ``CheckExpr`` AST
-    matching the meta-model atoms (``CheckCmp``, ``CheckIn``,
-    ``CheckBetween``, ``CheckIsNull`` plus ``CheckAnd`` / ``CheckOr`` /
-    ``CheckNot``). Anything not in this whitelist throws
-    ``_CheckParseError`` so the caller can fall back to ``CheckRaw``.
-
-    Precedence (lowest → highest, mirroring SQL):
-        OR  →  AND  →  NOT  →  primary (paren / atomic predicate)
-    """
+    """Recursive-descent parser for SQL CHECK boolean expressions."""
 
     def __init__(self, tokens: List[Tuple[str, Any]], original: str) -> None:
         self.tokens = tokens
@@ -78,9 +43,7 @@ class _CheckExprParser:
         return tok
 
     def _match_ident(self, *names: str) -> bool:
-        """Peek; if next token is an ident matching (case-insensitive) any of
-        the given names, consume it and return True. Otherwise leave pos and
-        return False. Used for keyword recognition (AND, OR, NOT, etc.)."""
+        """Peek; if next token is an ident matching (case-insensitive) any of"""
         tok = self._peek()
         if tok is None or tok[0] != 'ident':
             return False
@@ -125,8 +88,7 @@ class _CheckExprParser:
         return self._parse_predicate()
 
     def _parse_predicate(self) -> CheckExpr:
-        """One of: ``ident IS [NOT] NULL``, ``ident IN (...)``,
-        ``ident BETWEEN lo AND hi``, ``ident op literal``."""
+        """One of: ``ident IS [NOT] NULL``, ``ident IN (...)``,"""
         tok = self._peek()
         if tok is None or tok[0] != 'ident':
             raise _CheckParseError(f"expected column identifier, got {tok!r}")
@@ -217,16 +179,7 @@ class _CheckExprParser:
 
 
 class PostgreSQLAdapter(DatabaseAdapter):
-    """
-    Adapter to parse PostgreSQL DDL and create Unified Meta Schema.
-
-    This class acts as a translator between PostgreSQL's DDL format
-    and the internal Unified Meta Schema used by SMILE.
-
-    Example:
-        adapter = PostgreSQLAdapter()
-        database = adapter.parse(ddl_content, db_name="mydb")
-    """
+    """Adapter to parse PostgreSQL DDL and create Unified Meta Schema."""
 
     # =========================================================================
     # TYPE MAPPING (from centralized TypeMappings)
@@ -256,49 +209,7 @@ class PostgreSQLAdapter(DatabaseAdapter):
     # =========================================================================
 
     def parse(self, ddl_content: str, db_name: str = "database") -> Database:
-        """
-        Parse SQL DDL content and return Database object.
-
-        Example Input (PostgreSQL DDL):
-            CREATE TABLE customers (
-                id SERIAL PRIMARY KEY,
-                name VARCHAR(100) NOT NULL,
-                email VARCHAR(255)
-            );
-
-            CREATE TABLE address (
-                id SERIAL PRIMARY KEY,
-                street VARCHAR(200),
-                customer_id INTEGER REFERENCES customers(id)
-            );
-
-        Example Output (Unified Meta Schema):
-            Database(
-                db_name="mydb",
-                db_type=DatabaseType.RELATIONAL,
-                entity_types={
-                    "customers": EntityType(
-                        object_name=["customers"],
-                        properties=[
-                            Property("id", INTEGER, is_key=True),
-                            Property("name", STRING(100)),
-                            Property("email", STRING(255))
-                        ]
-                    ),
-                    "address": EntityType(
-                        object_name=["address"],
-                        properties=[...],
-                        relationships=[Reference("customer_id" -> "customers")]
-                    )
-                }
-            )
-
-        Processing Flow:
-            1. Remove SQL comments (-- and /* */)
-            2. Extract CREATE TABLE statements
-            3. Parse each table -> EntityType
-            4. Resolve REFERENCES -> Reference relationships
-        """
+        """Parse SQL DDL content and return Database object."""
         self.database = Database(db_name=db_name, db_type=DatabaseType.RELATIONAL)
         self._pending_references = []
         self._pending_table_fks = []
@@ -321,37 +232,13 @@ class PostgreSQLAdapter(DatabaseAdapter):
         return self.database
 
     def _extract_create_tables(self, ddl: str) -> List[Tuple[str, str]]:
-        """
-        Extract CREATE TABLE statements from DDL.
-
-        Returns:
-            List of (table_name, table_body) tuples
-
-        Example:
-            "CREATE TABLE customers (id INT, name VARCHAR);"
-            -> [("customers", "id INT, name VARCHAR")]
-        """
+        """Extract CREATE TABLE statements from DDL."""
         pattern = r'CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?(?:\w+\.)?(\w+)\s*\((.*?)\);'
         matches = re.findall(pattern, ddl, re.IGNORECASE | re.DOTALL)
         return matches
 
     def _parse_table(self, table_name: str, table_body: str) -> EntityType:
-        """
-        Parse a single CREATE TABLE body into EntityType.
-
-        Example:
-            table_name = "customers"
-            table_body = "id SERIAL PRIMARY KEY, name VARCHAR(100) NOT NULL"
-
-            -> EntityType(
-                 object_name=["customers"],
-                 properties=[
-                     Property("id", INTEGER, is_key=True),
-                     Property("name", STRING(100), is_optional=False)
-                 ],
-                 constraints=[UniqueConstraint(is_primary_key=True, ...)]
-               )
-        """
+        """Parse a single CREATE TABLE body into EntityType."""
         entity = EntityType(object_name=[table_name.lower()], entity_kind=EntityKind.TABLE)
 
         # Split by comma, but handle parentheses in type definitions
@@ -540,12 +427,7 @@ class PostgreSQLAdapter(DatabaseAdapter):
 
     @staticmethod
     def _parse_check_expression(text: str) -> CheckExpr:
-        """Parse a SQL boolean expression into a CheckExpr AST.
-
-        Returns a ``CheckRaw`` carrying the original text when the parser
-        cannot decode the expression — so any CHECK constraint round-trips
-        intact even if its predicate falls outside the structured atoms.
-        """
+        """Parse a SQL boolean expression into a CheckExpr AST."""
         try:
             tokens = PostgreSQLAdapter._tokenize_check(text)
             parser = _CheckExprParser(tokens, text)
@@ -559,16 +441,7 @@ class PostgreSQLAdapter(DatabaseAdapter):
 
     @staticmethod
     def _tokenize_check(text: str) -> List[Tuple[str, Any]]:
-        """Split a SQL CHECK expression into a stream of typed tokens.
-
-        Tokens are ``(kind, value)`` pairs where ``kind`` is one of:
-          ``ident``  - bare identifier (column or keyword)
-          ``int``    - integer literal (Python int)
-          ``float``  - decimal literal (Python float)
-          ``string`` - quoted string literal (quotes stripped)
-          ``op``     - comparison operator string (=, ==, !=, <>, <, >, <=, >=)
-          ``punct``  - one of ``(``, ``)``, ``,``
-        """
+        """Split a SQL CHECK expression into a stream of typed tokens."""
         tokens: List[Tuple[str, Any]] = []
         i = 0
         n = len(text)
@@ -652,13 +525,7 @@ class PostgreSQLAdapter(DatabaseAdapter):
 
     @staticmethod
     def _check_expr_to_sql(expr: CheckExpr) -> str:
-        """Render a CheckExpr AST back to a SQL boolean expression string.
-
-        Symmetric inverse of ``_parse_check_expression``. Used by the table
-        export path to emit ``CHECK (...)`` clauses for CheckConstraint
-        objects in the meta model. ``CheckRaw`` round-trips verbatim — that's
-        the whole point of the raw escape hatch.
-        """
+        """Render a CheckExpr AST back to a SQL boolean expression string."""
         if isinstance(expr, CheckRaw):
             return expr.raw_text
         if isinstance(expr, CheckCmp):
@@ -687,12 +554,7 @@ class PostgreSQLAdapter(DatabaseAdapter):
 
     @staticmethod
     def _cmp_op_to_sql(op: str) -> str:
-        """Normalise a CheckCmp op back to a SQL comparison operator.
-
-        SMILE atoms accept both ``=`` and ``==`` for equality (matching the
-        grammar's tolerance); SQL only accepts ``=``. Inequality is always
-        rendered as ``<>`` (SQL standard) rather than ``!=``.
-        """
+        """Normalise a CheckCmp op back to a SQL comparison operator."""
         if op in ('=', '=='):
             return '='
         if op in ('!=', '<>'):
@@ -701,9 +563,7 @@ class PostgreSQLAdapter(DatabaseAdapter):
 
     @staticmethod
     def _literal_to_sql(lit: Any) -> str:
-        """Render a Python literal as SQL: strings get quoted with `` ' ``
-        (single quote escaped by doubling), booleans become TRUE/FALSE,
-        None becomes NULL, numbers render via ``str()``."""
+        """Render a Python literal as SQL: strings get quoted with `` ' ``"""
         if lit is None:
             return 'NULL'
         if isinstance(lit, bool):
@@ -717,22 +577,7 @@ class PostgreSQLAdapter(DatabaseAdapter):
 
     @staticmethod
     def _find_check_anchor(entity: EntityType, expr: CheckExpr) -> Optional[Property]:
-        """Pick which entity property to anchor a CheckConstraint to.
-
-        SMILE's ADD_CONSTRAINT requires a target property name (e.g.
-        ``ADD_CONSTRAINT entity.field AS CHECK ...``) so DELETE_CONSTRAINT
-        can find the constraint by qualified name later. The expression
-        itself may reference multiple columns; ``target_property_id`` only
-        names the *anchor*. Strategy:
-
-        1. Walk the AST and collect the field names it mentions.
-        2. Return the first one that exists on the entity.
-        3. If no field names are visible (CheckRaw fallback) or none match
-           an entity property, anchor to the entity's first property — any
-           existing column is a valid anchor for delete-by-name.
-        4. Return ``None`` only if the entity has no properties at all
-           (in which case the constraint can't be attached anywhere).
-        """
+        """Pick which entity property to anchor a CheckConstraint to."""
         names = PostgreSQLAdapter._collect_field_names(expr)
         for name in names:
             attr = entity.get_property(name)
@@ -746,10 +591,7 @@ class PostgreSQLAdapter(DatabaseAdapter):
 
     @staticmethod
     def _collect_field_names(expr: CheckExpr) -> List[str]:
-        """Walk a CheckExpr AST and return the field names it references in
-        order of first appearance. Used to pick a CheckConstraint anchor
-        column. CheckRaw contributes no structured field names (the raw
-        text is opaque to the analyser)."""
+        """Walk a CheckExpr AST and return the field names it references in"""
         out: List[str] = []
         seen = set()
 
@@ -775,28 +617,7 @@ class PostgreSQLAdapter(DatabaseAdapter):
         return out
 
     def _parse_column(self, col_def: str) -> Tuple[Optional[Property], Optional[Tuple[str, str]], Optional[CheckExpr]]:
-        """
-        Parse a single column definition.
-
-        Example Input:
-            "customer_id INTEGER NOT NULL REFERENCES customers(id)"
-
-        Example Output:
-            Property("customer_id", INTEGER, is_key=False, is_optional=False)
-            ref_info  = ("customer_id", "customers")
-            check_ast = None
-
-        With a column-level CHECK clause:
-            "amount DECIMAL CHECK (amount > 0)"
-            -> Property("amount", DECIMAL, ...)
-               ref_info  = None
-               check_ast = CheckCmp("amount", ">", 0)
-
-        Returns:
-            (Property, ref_info, check_ast) where ref_info is
-            ``(fk_column, target_table)`` or None, and check_ast is a
-            CheckExpr for any inline CHECK clause or None when absent.
-        """
+        """Parse a single column definition."""
         # Normalize whitespace (handle multi-line definitions)
         col_def = ' '.join(col_def.split())
 
@@ -858,14 +679,7 @@ class PostgreSQLAdapter(DatabaseAdapter):
 
     @staticmethod
     def _extract_inline_check(constraints: str) -> Optional[str]:
-        """Pull the body of an inline ``CHECK (...)`` clause from the trailing
-        column-constraint text.
-
-        Returns the inner expression text (without the outer parens) or
-        ``None`` when no CHECK clause is present. Handles nested parens by
-        tracking depth, so ``CHECK (LOWER(name) = 'a')`` extracts
-        ``LOWER(name) = 'a'`` rather than clipping at the inner ``)``.
-        """
+        """Pull the body of an inline ``CHECK (...)`` clause from the trailing"""
         m = re.search(r'CHECK\s*\(', constraints, re.IGNORECASE)
         if not m:
             return None
@@ -900,14 +714,7 @@ class PostgreSQLAdapter(DatabaseAdapter):
         return None
 
     def _parse_data_type(self, type_name: str, params: Optional[str]) -> PrimitiveDataType:
-        """
-        Parse SQL type to PrimitiveDataType.
-
-        Examples:
-            ("VARCHAR", "100")     -> PrimitiveDataType(STRING, max_length=100)
-            ("DECIMAL", "15,2")    -> PrimitiveDataType(DECIMAL, precision=15, scale=2)
-            ("INTEGER", None)      -> PrimitiveDataType(INTEGER)
-        """
+        """Parse SQL type to PrimitiveDataType."""
         primitive = self.TYPE_MAP.get(type_name, PrimitiveType.STRING)
 
         max_length = None
@@ -932,18 +739,7 @@ class PostgreSQLAdapter(DatabaseAdapter):
         )
 
     def _resolve_references(self):
-        """
-        Resolve foreign key references after all entities are created.
-
-        Why delayed resolution?
-            REFERENCES clauses may refer to tables defined later in DDL.
-            By collecting all references during parsing and resolving after,
-            we ensure the target table exists.
-
-        Example:
-            _pending_references = [("address", "customer_id", "customers")]
-            -> address entity gets Reference("customer_id" -> "customers")
-        """
+        """Resolve foreign key references after all entities are created."""
         for entity_name, ref_name, target_name in self._pending_references:
             entity = self.database.get_entity_type(entity_name)
             target = self.database.get_entity_type(target_name)
@@ -1073,12 +869,7 @@ class PostgreSQLAdapter(DatabaseAdapter):
 
     @staticmethod
     def load_from_file(file_path: str, db_name: str = None) -> Database:
-        """
-        Load SQL DDL from file and parse to Database.
-
-        Example:
-            database = PostgreSQLAdapter.load_from_file("schema.sql", db_name="mydb")
-        """
+        """Load SQL DDL from file and parse to Database."""
         with open(file_path, 'r', encoding='utf-8') as f:
             content = f.read()
 
@@ -1099,23 +890,7 @@ class PostgreSQLAdapter(DatabaseAdapter):
 
     @classmethod
     def export_to_sql(cls, database: Database) -> str:
-        """
-        Export Unified Meta Schema to PostgreSQL DDL format.
-
-        Example Output:
-            TABLE customers (
-                id SERIAL PRIMARY KEY,
-                name VARCHAR(100) NOT NULL
-            );
-
-            TABLE address (
-                id SERIAL PRIMARY KEY,
-                street VARCHAR(200),
-                customer_id INTEGER NOT NULL REFERENCES customers(id)
-            );
-
-        Note: Tables are sorted by dependency order (referenced tables first)
-        """
+        """Export Unified Meta Schema to PostgreSQL DDL format."""
         lines = []
 
         # Sort entities by dependency order (entities with no FK first)
@@ -1139,15 +914,7 @@ class PostgreSQLAdapter(DatabaseAdapter):
 
     @classmethod
     def _sort_entities_by_dependency(cls, database: Database) -> list:
-        """
-        Sort entities so that referenced tables come before referencing tables.
-
-        Uses topological sort to handle FK dependencies.
-
-        Example:
-            address -> customers (address has FK to customers)
-            Result: [customers, address] (customers first)
-        """
+        """Sort entities so that referenced tables come before referencing tables."""
         entities = list(database.entity_types.values())
 
         # Build dependency graph: entity -> set of entities it depends on
@@ -1182,21 +949,7 @@ class PostgreSQLAdapter(DatabaseAdapter):
 
     @classmethod
     def _export_entity_to_ddl(cls, entity: EntityType, database: Database) -> str:
-        """
-        Export a single entity to CREATE TABLE DDL format.
-
-        Example Output:
-            TABLE customers (
-                id SERIAL PRIMARY KEY,
-                name VARCHAR(100) NOT NULL,
-                email VARCHAR(255)
-            );
-
-        Handles:
-            - Single-column PRIMARY KEY (inline)
-            - Composite PRIMARY KEY (separate constraint)
-            - REFERENCES clauses for FK columns
-        """
+        """Export a single entity to CREATE TABLE DDL format."""
         lines = []
         lines.append(f"CREATE TABLE {entity.name} (")
 
@@ -1317,12 +1070,7 @@ class PostgreSQLAdapter(DatabaseAdapter):
     @classmethod
     def _resolve_fk_target_col(cls, target_up_id: str, target_entity_name: str,
                                database: Database) -> str:
-        """Look up the property name behind a ForeignKeyProperty.points_to_unique_property_id.
-
-        Returns ``""`` if the lookup fails (target entity gone, stale id, etc.).
-        Used by the table-level composite FK exporter so it can emit
-        ``REFERENCES target(col1, col2)`` with the right target column names.
-        """
+        """Look up the property name behind a ForeignKeyProperty.points_to_unique_property_id."""
         if not target_up_id or not target_entity_name or database is None:
             return ""
         target = database.get_entity_type(target_entity_name)
@@ -1340,16 +1088,7 @@ class PostgreSQLAdapter(DatabaseAdapter):
 
     @classmethod
     def _export_property_to_column(cls, attr: Property, fk_ref: Reference = None, database: Database = None, is_composite_pk: bool = False) -> str:
-        """
-        Export a property to column definition.
-
-        Examples:
-            Single PK:    "id SERIAL PRIMARY KEY"
-            Required:     "name VARCHAR(100) NOT NULL"
-            Optional:     "email VARCHAR(255)"
-            FK:           "customer_id INTEGER NOT NULL REFERENCES customers(id)"
-            Composite PK: "customer_id VARCHAR(255) NOT NULL" (PK constraint is separate)
-        """
+        """Export a property to column definition."""
         parts = [attr.name]
 
         # Data type (VARCHAR, INTEGER, SERIAL, etc.)
@@ -1376,17 +1115,7 @@ class PostgreSQLAdapter(DatabaseAdapter):
 
     @classmethod
     def _get_sql_type(cls, attr: Property) -> str:
-        """
-        Get SQL type string from property.
-
-        Examples:
-            STRING with max_length=100             -> "VARCHAR(100)"
-            STRING without max_length              -> "VARCHAR(255)" (default)
-            DECIMAL(15,2)                          -> "DECIMAL(15,2)"
-            INTEGER with is_auto_generated=True    -> "SERIAL"
-            BIGINT  with is_auto_generated=True    -> "BIGSERIAL"
-            INTEGER with is_auto_generated=False   -> "INTEGER" (user-supplied PK)
-        """
+        """Get SQL type string from property."""
         # Complex types -> JSONB in PostgreSQL
         if isinstance(attr.data_type, ListDataType):
             return 'JSONB'
@@ -1427,16 +1156,7 @@ class PostgreSQLAdapter(DatabaseAdapter):
 
     @classmethod
     def _get_target_pk_name(cls, entity_name: str, database: Database = None) -> str:
-        """
-        Get the PK column name for a target entity.
-
-        Used for REFERENCES clause: REFERENCES target_entity(pk_column)
-
-        Example:
-            entity_name = "customers"
-            -> Looks up customers's PK -> "_id" or "id"
-            -> Returns "_id"
-        """
+        """Get the PK column name for a target entity."""
         # Try to get PK from database metadata
         if database:
             target_entity = database.get_entity_type(entity_name)
@@ -1453,130 +1173,12 @@ class PostgreSQLAdapter(DatabaseAdapter):
 
     @classmethod
     def export(cls, database: Database) -> str:
-        """
-        Convenience method that calls export_to_sql().
-        Used by the adapter registry for polymorphic export.
-        """
+        """Convenience method that calls export_to_sql()."""
         return cls.export_to_sql(database)
 
     @classmethod
     def export_to_sql_file(cls, database: Database, file_path: str) -> None:
-        """
-        Export to SQL file.
-
-        Example:
-            PostgreSQLAdapter.export_to_sql_file(database, "output.sql")
-        """
+        """Export to SQL file."""
         sql = cls.export_to_sql(database)
         with open(file_path, 'w', encoding='utf-8') as f:
             f.write(sql)
-
-
-# =============================================================================
-# USAGE EXAMPLES
-# =============================================================================
-#
-# Example 1: Parse PostgreSQL DDL to Unified Meta Schema
-# -------------------------------------------------------
-#
-# ddl_content = '''
-# CREATE TABLE customers (
-#     id SERIAL PRIMARY KEY,
-#     name VARCHAR(100) NOT NULL,
-#     email VARCHAR(255)
-# );
-#
-# CREATE TABLE address (
-#     id SERIAL PRIMARY KEY,
-#     street VARCHAR(200),
-#     city VARCHAR(100),
-#     customer_id INTEGER NOT NULL REFERENCES customers(id)
-# );
-# '''
-#
-# adapter = PostgreSQLAdapter()
-# database = adapter.parse(ddl_content, db_name="mydb")
-#
-# Result:
-#   database.db_name = "mydb"
-#   database.db_type = DatabaseType.RELATIONAL
-#   database.entity_types = {
-#       "customers": EntityType(
-#           object_name=["customers"],
-#           properties=[
-#               Property("id", INTEGER, is_key=True),
-#               Property("name", STRING(100), is_optional=False),
-#               Property("email", STRING(255), is_optional=True)
-#           ],
-#           constraints=[UniqueConstraint(is_primary_key=True, ...)]
-#       ),
-#       "address": EntityType(
-#           object_name=["address"],
-#           properties=[
-#               Property("id", INTEGER, is_key=True),
-#               Property("street", STRING(200)),
-#               Property("city", STRING(100)),
-#               Property("customer_id", INTEGER, is_optional=False)
-#           ],
-#           relationships=[Reference("customer_id" -> "customers")]
-#       )
-#   }
-#
-#
-# Example 2: Load from file
-# -------------------------
-#
-# database = PostgreSQLAdapter.load_from_file("schema.sql", db_name="mydb")
-#
-#
-# Example 3: Export back to PostgreSQL DDL
-# ----------------------------------------
-#
-# sql_ddl = PostgreSQLAdapter.export_to_sql(database)
-# print(sql_ddl)
-#
-# Output:
-#   TABLE customers (
-#       id SERIAL PRIMARY KEY,
-#       name VARCHAR(100) NOT NULL,
-#       email VARCHAR(255)
-#   );
-#
-#   TABLE address (
-#       id SERIAL PRIMARY KEY,
-#       street VARCHAR(200),
-#       city VARCHAR(100),
-#       customer_id INTEGER NOT NULL REFERENCES customers(id)
-#   );
-#
-#
-# Example 4: Export to file
-# -------------------------
-#
-# PostgreSQLAdapter.export_to_sql_file(database, "output.sql")
-#
-#
-# Example 5: Composite Primary Key (M:N join table from FLATTEN without GENERATE KEY)
-# ------------------------------------------------------------------------------------
-#
-# After FLATTEN customers.knows[] AS customer_knows (no GENERATE KEY -> composite PK):
-#
-# customer_knows = EntityType(
-#     object_name=["customer_knows"],
-#     properties=[
-#         Property("customer_id", STRING, is_key=True),
-#         Property("knows_customer_id", STRING, is_key=True)
-#     ],
-#     constraints=[UniqueConstraint(
-#         is_primary_key=True,
-#         unique_properties=[customer_id, knows_customer_id]  # Composite!
-#     )]
-# )
-#
-# Export result:
-#   TABLE customer_knows (
-#       customer_id VARCHAR(255) NOT NULL REFERENCES customers(_id),
-#       knows_customer_id VARCHAR(255) NOT NULL REFERENCES customers(_id),
-#       PRIMARY KEY (customer_id, knows_customer_id)
-#   );
-#

@@ -1,22 +1,4 @@
-"""DatabaseAdapter — abstract base class for the four schema adapters.
-
-Concrete subclasses (PostgreSQL / MongoDB / Neo4j / Cassandra) implement
-the same three-method contract:
-
-* ``load_from_file(path, db_name)``  — reverse-engineer a native file → Database
-* ``parse(content, db_name)``        — reverse-engineer in-memory native text → Database
-* ``export(database)``               — forward-engineer Database → native text
-
-Adapters whose native format is JSON (MongoDB, optionally Neo4j) accept the
-*string* form on ``parse``; they ``json.loads`` internally. Neo4j additionally
-auto-detects JSON vs Cypher input. This unifies the call surface so callers
-never need to ask "what format does this particular adapter want?".
-
-Shared parsing helpers (``_remove_sql_comments``, ``_split_columns``) live on
-this base class as static methods so the SQL-style adapters (PostgreSQL and
-Cassandra) can reuse them without duplicating identical regex / state-machine
-logic in each file.
-"""
+"""DatabaseAdapter — abstract base class for the four schema adapters."""
 import re
 from abc import ABC, abstractmethod
 from typing import List, Optional
@@ -41,11 +23,7 @@ class DatabaseAdapter(ABC):
 
     @abstractmethod
     def parse(self, content: str, db_name: str = "database") -> Database:
-        """Parse in-memory native schema content into a Database.
-
-        ``content`` is always a string. Adapters whose native format is JSON
-        call ``json.loads`` internally before consuming it.
-        """
+        """Parse in-memory native schema content into a Database."""
         ...
 
     # ----------------------------------------------------------------------
@@ -56,12 +34,7 @@ class DatabaseAdapter(ABC):
 
     @staticmethod
     def _remove_sql_comments(ddl: str) -> str:
-        """Strip SQL-style ``--`` line comments and ``/* ... */`` block comments.
-
-        Used by both PostgreSQL DDL and Cassandra CQL because their comment
-        syntax is identical. Neo4j's Cypher uses ``//`` line comments and is
-        not handled here.
-        """
+        """Strip SQL-style ``--`` line comments and ``/* ... */`` block comments."""
         # Remove single-line comments (-- ...)
         ddl = re.sub(r'--.*$', '', ddl, flags=re.MULTILINE)
         # Remove multi-line comments (/* ... */)
@@ -70,18 +43,7 @@ class DatabaseAdapter(ABC):
 
     @staticmethod
     def _split_columns(body: str) -> List[str]:
-        """Split a CREATE TABLE body on top-level commas, ignoring those
-        inside parentheses.
-
-        A naïve ``body.split(',')`` mis-splits on commas inside type or
-        constraint expressions, e.g. ``DECIMAL(15,2)`` or
-        ``PRIMARY KEY ((part_col), clust_col)``. This helper tracks paren
-        depth and only splits when ``depth == 0``.
-
-        Example:
-            "id INT, price DECIMAL(15,2), PRIMARY KEY ((a), b)"
-            -> ["id INT", "price DECIMAL(15,2)", "PRIMARY KEY ((a), b)"]
-        """
+        """Split a CREATE TABLE body on top-level commas, ignoring those"""
         result = []
         current = ""
         depth = 0

@@ -1,13 +1,4 @@
-"""Handlers for constraint-aware ops — keys, FKs, labels, cardinality, vertex/edge transforms.
-
-The most internally-coupled handler group. Every method here reads or
-writes a UniqueConstraint, ForeignKeyConstraint, edge cardinality, or
-graph label, and they share a thick band of private helpers
-(``_upsert_key_properties``, ``_remove_key_constraint``,
-``_get_target_unique_property_id``, ``_sync_edge_cardinality``). Splitting
-this group further would force those helpers into a separate util module
-and add cross-imports for marginal benefit.
-"""
+"""Handlers for constraint-aware ops — keys, FKs, labels, cardinality, vertex/edge transforms."""
 
 import logging
 from typing import List
@@ -61,17 +52,7 @@ class KeysConstraintsHandlersMixin:
 
     @register_handler(OpType.ADD_FOREIGN_KEY)
     def _handle_add_foreign_key(self, params: AddForeignKeyParams) -> OperationResult:
-        """ADD_FOREIGN_KEY <columns> [TO entity] REFERENCES target(<columns>).
-
-        Single-column FKs (length-1 lists) keep their long-standing layout —
-        one ``Reference`` relationship plus one ``ForeignKeyConstraint``
-        carrying one ``ForeignKeyProperty``. Composite FKs (length>1) emit
-        one ``Reference`` *per* source column (each column individually points
-        at the same target entity) but bundle every column into a *single*
-        ``ForeignKeyConstraint``: that single constraint with N matched
-        ``ForeignKeyProperty`` entries is what makes it "composite" (vs N
-        independent FKs that would have N separate constraints).
-        """
+        """ADD_FOREIGN_KEY <columns> [TO entity] REFERENCES target(<columns>)."""
         field_names = params.field_names
         target_table = params.target_table
         target_columns = params.target_columns
@@ -185,9 +166,7 @@ class KeysConstraintsHandlersMixin:
 
     @register_handler(OpType.ADD_CONSTRAINT)
     def _handle_add_constraint(self, params: AddConstraintParams) -> OperationResult:
-        """Dispatcher for ADD_CONSTRAINT. Delegates to a body-kind-specific
-        sub-handler depending on whether the user wrote AS REFERENCE / CHECK
-        / EXISTENCE."""
+        """Dispatcher for ADD_CONSTRAINT. Delegates to a body-kind-specific"""
         if params.body_kind == ConstraintBodyKind.REFERENCE:
             return self._handle_add_constraint_reference(params)
         if params.body_kind == ConstraintBodyKind.CHECK:
@@ -198,21 +177,7 @@ class KeysConstraintsHandlersMixin:
             f"add_constraint: unknown body kind {params.body_kind!r}")
 
     def _handle_add_constraint_reference(self, params: AddConstraintParams) -> OperationResult:
-        """ADD_CONSTRAINT entity.field AS REFERENCE LOGICAL TO target(col).
-
-        Creates a single ``Reference(is_enforced=False)`` on the source entity
-        — a logical (non-enforced) cross-entity reference. No
-        ``ForeignKeyConstraint`` is created (that path belongs to
-        ``ADD_FOREIGN_KEY``, which is also the only operator that supports
-        composite multi-column FKs).
-
-        If an existing Reference is already present for this column, this op
-        upserts it: refs_to and cardinality are updated and ``is_enforced``
-        is forced back to ``False``. This makes ``ADD_CONSTRAINT REFERENCE
-        LOGICAL`` a clean "downgrade enforced -> logical" path; any FK
-        constraint covering the same column is also dropped to keep the
-        meta-model state consistent with the new logical-only intent.
-        """
+        """ADD_CONSTRAINT entity.field AS REFERENCE LOGICAL TO target(col)."""
         entity_name, field_name = self._split_path(params.target)
         if not entity_name or not field_name:
             return OperationResult.skipped(
@@ -301,13 +266,7 @@ class KeysConstraintsHandlersMixin:
         return OperationResult.ok()
 
     def _handle_add_constraint_check(self, params: AddConstraintParams) -> OperationResult:
-        """ADD_CONSTRAINT entity.field AS CHECK <expr>.
-
-        Anchors the CheckConstraint to the named property's meta_id so
-        DELETE_CONSTRAINT can locate it later by qualified name. The CHECK
-        expression itself may reference multiple properties of the entity;
-        the anchor only controls which property the constraint is *attached
-        to* in the meta model."""
+        """ADD_CONSTRAINT entity.field AS CHECK <expr>."""
         entity, field_name = self._resolve_entity_attr(
             params.target, "ADD_CONSTRAINT")
         if not entity or not field_name:
@@ -328,12 +287,7 @@ class KeysConstraintsHandlersMixin:
         return OperationResult.ok()
 
     def _handle_add_constraint_existence(self, params: AddConstraintParams) -> OperationResult:
-        """ADD_CONSTRAINT entity.field AS EXISTENCE.
-
-        Sets the property's ``is_optional`` flag to ``False`` (the in-memory
-        equivalent of NOT NULL) and records an ExistenceConstraint marker so
-        the meta model can express "constraint added post-hoc" distinctly
-        from "property declared NOT NULL on creation"."""
+        """ADD_CONSTRAINT entity.field AS EXISTENCE."""
         entity, field_name = self._resolve_entity_attr(
             params.target, "ADD_CONSTRAINT")
         if not entity or not field_name:
@@ -359,18 +313,7 @@ class KeysConstraintsHandlersMixin:
 
     @register_handler(OpType.DELETE_CONSTRAINT)
     def _handle_delete_constraint(self, params: DeleteConstraintParams) -> OperationResult:
-        """DELETE_CONSTRAINT entity.field.
-
-        Removes whichever ADD_CONSTRAINT-produced object is currently anchored
-        at the named property — in priority order: a logical Reference (the
-        Reference.ref_name == field_name and is_enforced=False), a
-        CheckConstraint with target_property_id == property.meta_id, or an
-        ExistenceConstraint (which also restores ``is_optional=True``).
-
-        Constraints from the narrow operators (PK / FK / UNIQUE / PARTITION
-        / CLUSTERING / LABEL) are NOT deleted by this handler; use
-        DELETE_PRIMARY_KEY / DELETE_FOREIGN_KEY / etc. for those.
-        """
+        """DELETE_CONSTRAINT entity.field."""
         entity, field_name = self._resolve_entity_attr(
             params.target, "DELETE_CONSTRAINT")
         if not entity or not field_name:
@@ -478,32 +421,7 @@ class KeysConstraintsHandlersMixin:
         return OperationResult.ok()
 
     def _upsert_key_properties(self, entity, key_columns, key_data_type, data_type_explicit):
-        """Look up or create a Property for each member of a (possibly
-        composite) key, enforcing the strict explicit-type rule.
-
-        Decision matrix on ``(property exists?, AS provided?)``:
-
-        * **(exists, no AS)** — case ①: promote to key, keep existing type.
-        * **(exists, AS matches)** — case ②a: AS is redundant; keep existing
-          type unchanged. The AS is silently accepted because re-declaring
-          the same type is harmless.
-        * **(exists, AS differs)** — case ②b: REJECT. Silent rewrite of an
-          existing property's type is the worst-possible outcome (it
-          changes meta-model semantics without the user seeing it). Return
-          a non-None reason; the caller surfaces it as a Layer 0 skip.
-        * **(absent, AS provided)** — case ③: create the property with the
-          declared type.
-        * **(absent, no AS)** — case ④: REJECT. The previous default-INTEGER
-          fallback caused cross-paradigm divergence (the contact_id incident
-          documented in N5-1: Cassandra evolution silently created INTEGER
-          while the relational counterpart used VARCHAR). Forcing an
-          explicit declaration eliminates that whole class of silent bug.
-
-        Returns ``(key_attrs, None)`` on success, or ``([], reason)`` on
-        rejection — the caller decides how to surface the rejection.
-        Wording in the reasons is paradigm-neutral ("property" rather than
-        "column") so the same handler serves all four database paradigms.
-        """
+        """Look up or create a Property for each member of a (possibly"""
         key_attrs = []
         for col_name in key_columns:
             attr = entity.get_property(col_name)
@@ -564,22 +482,14 @@ class KeysConstraintsHandlersMixin:
         return key_attrs, None
 
     def _resolve_pk_type(self, key_type_param):
-        """Translate the SMILE key_type string into (sql_kind, PKTypeEnum).
-
-        PARTITION/CLUSTERING are Cassandra-specific variants of PRIMARY, so
-        their sql_kind folds to "primary" and the distinction survives only
-        in PKTypeEnum. Every other key_type yields PKTypeEnum.SIMPLE.
-        """
+        """Translate the SMILE key_type string into (sql_kind, PKTypeEnum)."""
         mapped = KEY_TYPE_MAP.get(key_type_param, "primary")
         if isinstance(mapped, PKTypeEnum):
             return "primary", mapped
         return mapped, PKTypeEnum.SIMPLE
 
     def _build_key_constraint(self, key_attrs, key_type_str, pk_type_enum, clauses):
-        """Construct a ForeignKeyConstraint or UniqueConstraint from resolved
-        key info. `clauses` is the dict produced by `_parse_key_clauses`
-        and may carry a REFERENCES sub-dict for FK definitions.
-        """
+        """Construct a ForeignKeyConstraint or UniqueConstraint from resolved"""
         if key_type_str == "foreign":
             references = (clauses or {}).get("references", {})
             ref_entity_name = references.get("table")
@@ -605,11 +515,7 @@ class KeysConstraintsHandlersMixin:
         )
 
     def _append_to_existing_pk(self, entity, constraint, pk_type_enum):
-        """If the new key is a Cassandra PARTITION/CLUSTERING column and the
-        entity already has a primary-key constraint, append the new columns
-        to it (skipping duplicates) and return True so the caller skips the
-        usual `entity.add_constraint` step. Otherwise return False.
-        """
+        """If the new key is a Cassandra PARTITION/CLUSTERING column and the"""
         if pk_type_enum not in (PKTypeEnum.PARTITION, PKTypeEnum.CLUSTERING):
             return OperationResult.skipped("add_key: precondition not met")
         existing_pk = next(
@@ -626,20 +532,7 @@ class KeysConstraintsHandlersMixin:
         return OperationResult.ok()
 
     def _clear_existing_pk(self, entity, incoming_key_columns):
-        """Drop any existing primary-key constraint and strip `is_key` from
-        every old PK property that is NOT in the new key column set.
-
-        ``is_optional`` is intentionally left untouched. Auto-restoring it
-        to True would silently turn a previously-NOT-NULL property into
-        nullable on PK demotion — a hidden semantic decision that loses
-        the explicit constraint a PG / Mongo source may have carried (and
-        that has no SMILE op to revert). Users who genuinely want the
-        post-demotion property to be nullable should declare that
-        explicitly via ``ADD_CONSTRAINT field AS EXISTENCE`` followed by
-        ``DELETE_CONSTRAINT field``; Layer 1 NOTICEs flag the cases where
-        such an explicit decision was not made so the user can act on
-        them rather than have the handler decide on their behalf.
-        """
+        """Drop any existing primary-key constraint and strip `is_key` from"""
         for old_c in entity.constraints:
             if old_c.kind == "unique" and old_c.is_primary_key:
                 for up in old_c.unique_properties:
@@ -782,12 +675,7 @@ class KeysConstraintsHandlersMixin:
 
     @register_handler(OpType.CAST_CONSTRAINT)
     def _handle_cast_constraint(self, params: CastConstraintParams) -> OperationResult:
-        """CAST_CONSTRAINT: Change the type of a constraint.
-
-        Reference: Orion "Cast Reference" - change the type of a constraint.
-        Example: CAST_CONSTRAINT customers.email TO UNIQUE KEY
-        Example: CAST_CONSTRAINT customers.city TO PARTITION KEY
-        """
+        """CAST_CONSTRAINT: Change the type of a constraint."""
         target = params.target
         new_type = params.constraint_type  # PRIMARY_KEY, UNIQUE_KEY, PARTITION_KEY, CLUSTERING_KEY, NODE_KEY, DOCUMENT_ID
 
@@ -829,11 +717,7 @@ class KeysConstraintsHandlersMixin:
 
     @register_handler(OpType.RECARD)
     def _handle_recard(self, params: RecardParams) -> OperationResult:
-        """RECARD: Change the multiplicity/cardinality of a reference.
-
-        Reference: Orion "Mult Reference" - change the multiplicity of a reference.
-        Example: RECARD orders.customer_id TO ONE_TO_MANY
-        """
+        """RECARD: Change the multiplicity/cardinality of a reference."""
         target = params.target
         new_cardinality_str = params.cardinality
 
@@ -863,13 +747,7 @@ class KeysConstraintsHandlersMixin:
         return OperationResult.skipped("recard: precondition not met")
 
     def _sync_edge_cardinality(self, edge_name: str, new_cardinality: Cardinality) -> None:
-        """Keep the cardinality of an EDGE consistent across its two storage sites.
-
-        An edge's cardinality is duplicated in the data model: once on the
-        EDGE entity itself (`entity.edge_cardinality`) and once on the `Edge`
-        relationship object sitting in the source entity's `relationships`
-        list. This helper writes both so the two never drift apart.
-        """
+        """Keep the cardinality of an EDGE consistent across its two storage sites."""
         edge_entity = self.database.get_entity_type(edge_name)
         if not edge_entity or edge_entity.entity_kind != EntityKind.EDGE:
             return
@@ -884,18 +762,7 @@ class KeysConstraintsHandlersMixin:
 
     @register_handler(OpType.TRANSFORM)
     def _handle_transform(self, params: TransformParams) -> OperationResult:
-        """TRANSFORM: Convert between entity (node) and relationship type (edge).
-
-        Based on Hausler et al. - nodeToRel / relToNode graph evolution operations.
-
-        TO RELATIONSHIP: EntityType (VERTEX) -> EntityType (EDGE)
-          - Changes entity_kind to EDGE, sets source/target
-          - Adds Edge to source entity's relationships
-
-        TO ENTITY: EntityType (EDGE) -> EntityType (VERTEX)
-          - Changes entity_kind to VERTEX, clears source/target
-          - Removes Edge from source entity's relationships
-        """
+        """TRANSFORM: Convert between entity (node) and relationship type (edge)."""
         name = params.name
         target_type = params.target_type
 

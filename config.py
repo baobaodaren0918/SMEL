@@ -1,9 +1,4 @@
-"""
-SMILE Configuration - Centralized path and settings management.
-
-This module contains all configurable paths and settings for the SMILE project.
-Users can modify these values to customize the behavior of the migration tool.
-"""
+"""SMILE Configuration - Centralized path and settings management."""
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict
@@ -11,23 +6,14 @@ from typing import Dict
 
 @dataclass(frozen=True)
 class MigrationConfig:
-    """One registered migration scenario.
-
-    Using a frozen dataclass instead of a plain dict turns config typos
-    (missing keys, misspelled keys) into a TypeError at module load time
-    instead of a KeyError deep inside ``run_migration`` at runtime.
-    Attribute access (``cfg.source_file``) also lets the IDE catch typos
-    and supports refactoring tools.
-    """
+    """One registered migration scenario."""
     source_file: Path
     smile_file: Path
     source_type: str
     target_type: str
     display_name: str
 
-# =============================================================================
 # PATH CONFIGURATION
-# =============================================================================
 
 # Base directory (project root)
 BASE_DIR = Path(__file__).parent
@@ -42,9 +28,7 @@ TESTS_DIR = BASE_DIR / "tests"
 GRAMMAR_DIR = BASE_DIR / "grammar"
 
 
-# =============================================================================
 # SOURCE/TARGET TYPE CONSTANTS
-# =============================================================================
 # Used throughout the codebase — never use raw strings for these.
 
 SOURCE_TYPE_RELATIONAL = "Relational"
@@ -106,9 +90,7 @@ MIGRATION_TARGET_FILES = {
 }
 
 
-# =============================================================================
 # MIGRATION CONFIGURATIONS
-# =============================================================================
 # Define available migration scenarios with their source/target files.
 # The literal dict below is kept for readability; the MigrationConfig
 # wrapper at the bottom of this section enforces the schema.

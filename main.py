@@ -136,23 +136,7 @@ def print_exported_target(result):
 
 
 def print_validation(result):
-    """Print three-layer validation results.
-
-    Layer 0 (script execution) is rendered first because it dominates blame:
-    if the SMILE script didn't run cleanly, Layer 1 / Layer 2 verdicts on
-    the partial Meta V2 are downstream consequences. The failed-step list
-    under Layer 0 answers the user's "where did it fail?" question
-    directly — each failed step is shown with its index, op type, status,
-    and the reason the handler reported.
-
-    Validation-crash detection: if ``validate_pipeline`` itself raised
-    (caught by ``core.run_migration``'s outer try/except), all three
-    layers come back with ``passed=None`` *and* ``validation_summary``
-    starting with ``"validation crashed:"``. We surface that explicitly
-    rather than silently hiding the entire panel, so users (and thesis
-    evaluators) can never mistake a crashed validation pipeline for a
-    successful run.
-    """
+    """Print three-layer validation results."""
     v_layer0 = result.get("validation_layer0", {})
     v_meta = result.get("validation_meta", {})
     v_export = result.get("validation_export", {})

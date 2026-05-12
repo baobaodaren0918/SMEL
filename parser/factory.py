@@ -1,11 +1,4 @@
-"""
-Parser Factory - Auto-select parser based on file extension
-
-This module provides a unified entry point for parsing SMILE files.
-It automatically selects the appropriate parser based on file extension:
-- .smile     -> SMILE_Specific parser
-- .smile_gen -> SMILE_Generalized parser
-"""
+"""Parser Factory - Auto-select parser based on file extension"""
 import sys
 from pathlib import Path
 from typing import Tuple, List
@@ -41,15 +34,7 @@ class SyntaxErrorListener(ErrorListener):
 
 
 def detect_grammar_type(file_path: str) -> str:
-    """
-    Detect which grammar to use based on file extension.
-
-    Args:
-        file_path: Path to SMILE file
-
-    Returns:
-        Grammar type: 'specific' or 'generalized'
-    """
+    """Detect which grammar to use based on file extension."""
     path = Path(file_path)
     suffix = path.suffix.lower()
 
@@ -63,15 +48,7 @@ def detect_grammar_type(file_path: str) -> str:
 
 
 def get_parser_components(grammar_type: str):
-    """
-    Get Lexer, Parser, and base Listener classes for the specified grammar.
-
-    Args:
-        grammar_type: 'specific' or 'generalized'
-
-    Returns:
-        Tuple of (Lexer class, Parser class, Listener base class)
-    """
+    """Get Lexer, Parser, and base Listener classes for the specified grammar."""
     if grammar_type == 'specific':
         return SMILE_SpecificLexer, SMILE_SpecificParser, SMILE_SpecificListener
     elif grammar_type == 'generalized':
@@ -81,16 +58,7 @@ def get_parser_components(grammar_type: str):
 
 
 def parse_smile_file(file_path: str, listener_class):
-    """
-    Parse a SMILE file using the appropriate grammar.
-
-    Args:
-        file_path: Path to SMILE file
-        listener_class: Custom listener class (must inherit from appropriate base)
-
-    Returns:
-        Tuple of (listener instance, error_list)
-    """
+    """Parse a SMILE file using the appropriate grammar."""
     # Detect grammar type
     grammar_type = detect_grammar_type(file_path)
 
@@ -134,15 +102,7 @@ def parse_smile_file(file_path: str, listener_class):
 
 
 def get_grammar_info(file_path: str) -> dict:
-    """
-    Get information about which grammar will be used for a file.
-
-    Args:
-        file_path: Path to SMILE file
-
-    Returns:
-        Dict with grammar information
-    """
+    """Get information about which grammar will be used for a file."""
     grammar_type = detect_grammar_type(file_path)
     LexerClass, ParserClass, ListenerClass = get_parser_components(grammar_type)
 
@@ -156,23 +116,7 @@ def get_grammar_info(file_path: str) -> dict:
 
 
 def parse_smile_auto(file_path: str):
-    """
-    Automatically parse a SMILE file using the appropriate grammar.
-
-    This is the main entry point for parsing SMILE files. It:
-    1. Detects the grammar type from file extension
-    2. Selects the appropriate lexer, parser, and listener
-    3. Parses the file and returns operations
-
-    Args:
-        file_path: Path to SMILE file (.smile or .smile_gen)
-
-    Returns:
-        Tuple of (context, operations, errors)
-        - context: MigrationContext with header information
-        - operations: List of Operation objects
-        - errors: List of error messages (empty if no errors)
-    """
+    """Automatically parse a SMILE file using the appropriate grammar."""
     # Detect grammar type
     grammar_type = detect_grammar_type(file_path)
 

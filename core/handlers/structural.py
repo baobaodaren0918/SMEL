@@ -1,10 +1,4 @@
-"""Handlers for structural reshaping ops — NEST/UNNEST, FLATTEN/UNFLATTEN, WIND/UNWIND.
-
-These are the document-level "rearrange the tree" operators: they don't
-add or remove logical fields, they just shift how those fields are
-nested. They cluster naturally because their helpers (e.g.
-``_build_unnest_target_entity``) are shared across NEST and UNNEST.
-"""
+"""Handlers for structural reshaping ops — NEST/UNNEST, FLATTEN/UNFLATTEN, WIND/UNWIND."""
 
 import copy
 import logging
@@ -33,27 +27,7 @@ class StructuralHandlersMixin:
 
     @register_handler(OpType.NEST)
     def _handle_nest(self, params: NestParams) -> OperationResult:
-        """
-        NEST: Embed separate table into parent as nested object (denormalization).
-
-        Syntax: NEST suppliers:company_name,phone IN products.supplier WHERE products.supplier_id = suppliers.supplier_id
-
-        Example: NEST suppliers:company_name,phone IN products.supplier WHERE products.supplier_id = suppliers.supplier_id
-          Before: products { product_id, supplier_id }
-                  suppliers { supplier_id, company_name, phone }
-          After:  products { product_id, supplier: { company_name, phone } }
-
-        Parameters:
-        - source: suppliers (source entity to embed)
-        - target: products (target entity)
-        - alias: supplier (embedded field name)
-        - properties: [company_name, phone] (properties to embed)
-        - source_fk: products.supplier_id (source FK for matching)
-        - target_pk: suppliers.supplier_id (target PK for matching)
-
-        Note: source entity is not removed automatically; use DELETE_ENTITY explicitly
-        if the source table should be dropped after the embedding.
-        """
+        """NEST: Embed separate table into parent as nested object (denormalization)."""
         source_name = params.source
         target_name = params.target
         alias = params.alias
@@ -174,18 +148,7 @@ class StructuralHandlersMixin:
 
     @register_handler(OpType.FLATTEN)
     def _handle_flatten(self, params: FlattenParams) -> OperationResult:
-        """
-        FLATTEN: Flatten nested object fields into parent table (reduce depth by 1).
-
-        Reference: André Conrad - "Die Operation FLATTEN erstellt aus dem Objekt in der Spalte
-                   jeweils eine Spalte für jedes Attribut dieses Objekts"
-
-        Example: FLATTEN customers.address
-          Before: customers { customer_id, address: { street, city, region } }
-          After:  customers { customer_id, address_street, address_city, address_region }
-
-        The nested object's fields are flattened with a prefix (nested_fieldname).
-        """
+        """FLATTEN: Flatten nested object fields into parent table (reduce depth by 1)."""
         source_path = params.source
 
         # Parse path: customers.address -> parent=customers, nested=address
@@ -241,15 +204,7 @@ class StructuralHandlersMixin:
 
     @register_handler(OpType.UNFLATTEN)
     def _handle_unflatten(self, params: UnflattenParams) -> OperationResult:
-        """
-        UNFLATTEN: Combine flat fields into nested object (reverse of FLATTEN).
-
-        Example: UNFLATTEN customers:street, city, region AS address
-          Before: customers { customer_id, street, city, region }
-          After:  customers { customer_id, address: { street, city, region } }
-
-        The specified fields are moved into a new nested object.
-        """
+        """UNFLATTEN: Combine flat fields into nested object (reverse of FLATTEN)."""
         entity_name = params.entity
         fields = params.fields
         nested_name = params.nested_name
@@ -297,16 +252,7 @@ class StructuralHandlersMixin:
 
     @register_handler(OpType.UNNEST)
     def _handle_unnest(self, params: UnnestParams) -> OperationResult:
-        """
-        UNNEST: Extract nested object to separate table (normalization).
-
-        Syntax: UNNEST orders.customer:company_name,phone AS customers WITH orders.order_id TO customers.order_id
-
-        Example:
-          Before: orders { order_id, customer: { company_name, phone } }
-          After:  orders { order_id }
-                  customers { order_id, company_name, phone }
-        """
+        """UNNEST: Extract nested object to separate table (normalization)."""
         source_path = params.source_path
         target_name = params.target
         if not source_path or not target_name:
@@ -351,14 +297,7 @@ class StructuralHandlersMixin:
         return OperationResult.ok()
 
     def _resolve_unnest_source(self, parent_entity, nested_name, source_path):
-        """Locate the embedded entity referenced by an UNNEST.
-
-        Prefer a matching Embedded relationship on the parent (which gives us
-        the authoritative aggregates path); fall back to a direct lookup of
-        the source_path when no relationship was declared.
-
-        Returns (embedded_entity_or_None, embedded_rel_or_None, full_path).
-        """
+        """Locate the embedded entity referenced by an UNNEST."""
         full_path = source_path
         for rel in parent_entity.get_embedded():
             if rel.aggr_name == nested_name:
@@ -370,13 +309,7 @@ class StructuralHandlersMixin:
 
     def _build_unnest_target_entity(self, target_name, carry_fields, parent_entity,
                                     properties, embedded_entity):
-        """Construct the new entity extracted by UNNEST.
-
-        Populated in two passes: carry_fields copied from the parent (WITH
-        clause, e.g. `orders.order_id TO customers.order_id`) and the
-        specified properties copied from the embedded source (falling back to
-        STRING when a name is not found on the source).
-        """
+        """Construct the new entity extracted by UNNEST."""
         new_entity = EntityType(object_name=[target_name])
 
         for carry in carry_fields:
@@ -408,15 +341,7 @@ class StructuralHandlersMixin:
 
     def _transfer_nested_embeddeds(self, new_entity, nested_objects, embedded_map,
                                    old_prefix, new_prefix):
-        """Relocate any embedded objects named in the UNNEST field list from
-        under the old source path to under the new target.
-
-        For each explicitly listed embedded (e.g. `UNNEST orders.customer:
-        company_name, address` – `address` moves with it), all entities whose
-        path begins with `old_prefix` are re-homed under `new_prefix`, inner
-        Embedded.aggregates paths are rewritten, and a fresh Embedded
-        relationship is attached to `new_entity`.
-        """
+        """Relocate any embedded objects named in the UNNEST field list from"""
         specified = set(nested_objects) & set(embedded_map.keys())
         if not specified:
             return
@@ -454,17 +379,7 @@ class StructuralHandlersMixin:
 
     @register_handler(OpType.UNWIND)
     def _handle_unwind(self, params: UnwindParams) -> OperationResult:
-        """
-        UNWIND: Expand array field.
-
-        Supports two modes:
-        1. Create new table: UNWIND customers.tags[] INTO customer_tag
-           Creates a new table for the array elements.
-        2. Expand in place: UNWIND customer_tag.value
-           Expands the array within an existing table (per reference definition).
-
-        The subsequent ADD KEY and ADD CONSTRAINT operations define the structure.
-        """
+        """UNWIND: Expand array field."""
         mode = params.mode
         source_path = params.source
 
@@ -523,16 +438,7 @@ class StructuralHandlersMixin:
 
     @register_handler(OpType.WIND)
     def _handle_wind(self, params: WindParams) -> OperationResult:
-        """
-        WIND: Convert scalar property back to array (reverse of UNWIND).
-
-        Syntax: WIND customer_tag.tags
-          Before: customer_tag { customer_id, tags } (multiple rows, scalar)
-          After:  customer_tag { customer_id, tags[] } (single row, array)
-          Reverse of: UNWIND customer_tag.tags
-
-        Note: Cross-entity movement is handled by MERGE, not WIND.
-        """
+        """WIND: Convert scalar property back to array (reverse of UNWIND)."""
         source_path = params.source
         entity, attr_name = self._resolve_entity_attr(source_path)
         if entity:

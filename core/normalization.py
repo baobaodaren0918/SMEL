@@ -1,17 +1,4 @@
-"""Cross-paradigm normalization passes — applied during ``run_export``.
-
-Two single-responsibility helpers:
-
-* ``normalize_entity_kinds`` — flips each non-EDGE entity's ``entity_kind``
-  to the target paradigm so the target adapter can export it cleanly.
-* ``normalize_document_cardinality`` — promotes ``Embedded`` cardinality
-  from optional (``ZERO_TO_*``) to required (``ONE_TO_*``) when migrating
-  *into* Document targets, mirroring MongoDB JSON Schema's required-or-not
-  binary representation.
-
-Plus ``_calculate_changes`` — thin wrapper around the unified
-``database_diff`` engine that produces the per-op UI change record.
-"""
+"""Cross-paradigm normalization passes — applied during ``run_export``."""
 from typing import Dict, List, Optional
 
 from Schema.unified_meta_schema import (
@@ -34,18 +21,7 @@ _ENTITY_KIND_DEFAULT = {
 
 def _calculate_changes(prev: Dict, after: Dict, op,
                        hint_entity_names: Optional[List[str]] = None) -> Dict:
-    """Calculate the changes made by an operation (web-UI shape).
-
-    Thin wrapper around the unified ``database_diff.compute_diff`` core +
-    ``database_diff_formatters.to_ui_changes`` formatter. The shared core
-    is the *single* source of truth for "how do two snapshots differ"; the
-    Layer 1 / Layer 2 validators use the same engine via a different
-    formatter.
-
-    ``hint_entity_names`` restricts the per-entity deep-compare loop (the
-    handler's ``_touch`` mechanism). Set-difference checks for added/deleted
-    entities still scan the full key set so add/delete are never missed.
-    """
+    """Calculate the changes made by an operation (web-UI shape)."""
     from diff.engine import compute_diff
     from diff.formatters import to_ui_changes
     only = set(hint_entity_names) if hint_entity_names is not None else None
@@ -54,25 +30,7 @@ def _calculate_changes(prev: Dict, after: Dict, op,
 
 
 def normalize_entity_kinds(db: Database, target_type: str) -> None:
-    """Convert each entity's ``entity_kind`` to match the target paradigm.
-
-    Cross-model migrations (e.g., R→G, G→R, D→C) leave entities tagged with
-    the source paradigm's kind. The target adapter expects every non-EDGE
-    entity to be in its own paradigm (TABLE / DOCUMENT / VERTEX /
-    WIDE_COLUMN_TABLE), so this pass rewrites those tags in place.
-
-    Document target carries an extra distinction: entities that are the
-    target of an ``Embedded`` relationship become ``EMBEDDED`` rather than
-    ``DOCUMENT`` (which is reserved for root collections). This matches the
-    parse-time labelling produced by ``MongoDBAdapter._parse_object_schema``
-    and keeps the meta model consistent in both directions.
-
-    Entities marked ``kind_locked = True`` (set by ``CAST_ENTITY``) are
-    preserved as-is — the user explicitly chose a kind that should survive
-    paradigm normalization. EDGE entities are never normalized — they are
-    relationship-type artifacts that don't belong to any single paradigm's
-    "table" concept.
-    """
+    """Convert each entity's ``entity_kind`` to match the target paradigm."""
     target_kind = _ENTITY_KIND_DEFAULT.get(target_type, EntityKind.TABLE)
 
     # For Document target, identify embedded entities (those that are the
@@ -110,33 +68,7 @@ def normalize_entity_kinds(db: Database, target_type: str) -> None:
 
 
 def normalize_document_full_paths(db: Database) -> None:
-    """Walk Embedded relationships from each root entity and rewrite each
-    embedded entity's ``object_name`` (full_path) to be
-    ``parent_full_path + [aggr_name]``.
-
-    Why this exists
-    ---------------
-    Handlers like ``NEST`` / ``UNFLATTEN`` that create new embedded entities
-    only know the local alias they are introducing — they cannot, on their
-    own, know the full chain of ancestors that the entity will end up under.
-    A nested NEST (``NEST a IN parent.child`` where ``a`` itself contains
-    further embedded children) leaves those grandchildren still pointing
-    at their old, source-side full paths.
-
-    This pass closes the loop: from each root entity, walk every
-    ``Embedded`` relationship, recompute the ideal full path
-    (``parent.aggr_name``), and rename both the embedded entity (its
-    ``object_name`` and the dictionary key on ``database.entity_types``) and
-    the ``Embedded.aggregates`` pointer that names it. The walk is
-    breadth-first to avoid re-renaming an entity that has already been
-    moved earlier in the traversal.
-
-    Idempotent: running this on an already-normalized database is a no-op.
-    Only called when the target paradigm is Document (the only paradigm
-    where embedded entity full paths are part of the canonical
-    representation). Cross-paradigm round-trip cycles
-    (``Mongo -> X -> Mongo'``) close cleanly with this pass in place.
-    """
+    """Walk Embedded relationships from each root entity and rewrite each"""
     # Roots: any entity that is not the embedded target of another entity.
     embedded_targets = set()
     for e in db.entity_types.values():
@@ -181,22 +113,7 @@ def normalize_document_full_paths(db: Database) -> None:
 
 
 def normalize_property_psm(db: Database, source_type: str, target_type: str) -> None:
-    """Strip source-paradigm property-level PSM that doesn't apply to the
-    target paradigm.
-
-    Counterpart to ``normalize_entity_kinds`` (entity-level PSM) and
-    ``normalize_document_cardinality`` (relationship-level PSM): handles the
-    Property layer.
-
-    Currently strips ``max_length`` on cross-paradigm migrations whose target
-    is not Relational. Rationale: ``VARCHAR(N)`` length is a relational PSM
-    concept; document/graph/columnar native schemas in this project do not
-    declare per-string length constraints. Carrying ``max_length`` through to
-    e.g. MongoDB JSON Schema produces a stricter target than the project's
-    hand-written ground-truth files, which encode the idiomatic style of
-    each paradigm. Same-paradigm migrations (R→R, D→D, ...) preserve
-    ``max_length`` so an explicit ``VARCHAR(100)`` survives a R→R rename.
-    """
+    """Strip source-paradigm property-level PSM that doesn't apply to the"""
     if source_type == target_type:
         return
     if target_type == SOURCE_TYPE_RELATIONAL:
@@ -220,17 +137,7 @@ def normalize_property_psm(db: Database, source_type: str, target_type: str) -> 
 
 
 def normalize_document_cardinality(db: Database, source_type: str) -> None:
-    """Promote ``Embedded`` relationships to required cardinality for D targets.
-
-    MongoDB's JSON Schema uses a top-level ``required`` array, so reverse
-    engineering of a Mongo schema always produces ``ONE_TO_ONE`` for object
-    sub-documents and ``ONE_TO_MANY`` for arrays — there is no representation
-    for "optional but present-as-empty". When migrating *into* Document from
-    a different paradigm, the source ``ZERO_TO_ONE`` / ``ZERO_TO_MANY``
-    cardinalities don't round-trip through Mongo's schema, so we promote
-    them here. D→D (source already Mongo) is skipped because its
-    cardinalities are already in the right shape.
-    """
+    """Promote ``Embedded`` relationships to required cardinality for D targets."""
     if source_type == SOURCE_TYPE_DOCUMENT:
         return
     for entity in db.entity_types.values():

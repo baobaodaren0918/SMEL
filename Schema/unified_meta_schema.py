@@ -12,9 +12,7 @@ from typing import ClassVar, Dict, List, Optional, Any, Union
 logger = logging.getLogger(__name__)
 
 
-# ============================================================================
 # ENUMS
-# ============================================================================
 
 class DatabaseType(str, Enum):
     """Abstract database model types (not product-specific)."""
@@ -94,9 +92,7 @@ class Cardinality(str, Enum):
         return self in (self.ONE_TO_ONE, self.ONE_TO_MANY)
 
 
-# ============================================================================
 # SMILE STRING <-> META ENUM MAPPINGS
-# ============================================================================
 # Translate SMILE-script literals into meta-model enum values. Centralized here
 # so that the transformer, validators, and any future consumer share one
 # canonical vocabulary instead of reaching into SchemaTransformer or cloning
@@ -129,9 +125,7 @@ TYPE_STR_MAP: Dict[str, PrimitiveType] = {
 }
 
 
-# ============================================================================
 # TYPE MAPPINGS
-# ============================================================================
 
 # DatabaseType -> TypeMappings PRIMITIVE_TO_* dict (single source of truth)
 _NATIVE_TYPE_REGISTRY: Dict[DatabaseType, Dict] = {}  # populated after TypeMappings class
@@ -142,9 +136,7 @@ def _get_native_type(ptype: PrimitiveType, db: DatabaseType) -> str:
     return _NATIVE_TYPE_REGISTRY[db].get(ptype, 'VARCHAR')
 
 
-# ============================================================================
 # ADAPTER TYPE MAPPINGS (Centralized)
-# ============================================================================
 # These mappings are used by adapters for parsing and exporting schemas.
 # All adapters should import these from here to avoid duplication.
 
@@ -383,26 +375,14 @@ _NATIVE_TYPE_REGISTRY[DatabaseType.GRAPH] = TypeMappings.PRIMITIVE_TO_NEO4J
 _NATIVE_TYPE_REGISTRY[DatabaseType.COLUMNAR] = TypeMappings.PRIMITIVE_TO_CASSANDRA
 
 
-# ============================================================================
 # DATA TYPES
-# ============================================================================
 
 def _uid() -> str:
     return str(uuid.uuid4())
 
 
 def _apply_id_map(obj: Any, id_map: Dict[str, str]) -> Any:
-    """Recursively rebuild ``obj`` with every string value rewritten via ``id_map``.
-
-    Used by ``Database.to_dict`` to swap runtime UUIDs (in ``meta_id``,
-    ``property_id``, ``points_to_unique_property_id`` fields) for the
-    deterministic path-based ids produced by
-    ``Database._build_deterministic_id_map``. The walk only touches strings
-    that are *exact* keys of ``id_map``, so unrelated string values
-    (entity names, types, descriptions) pass through unchanged — UUID-shaped
-    accidental matches in user data would be vanishingly rare and the map
-    only contains values from the actual object graph.
-    """
+    """Recursively rebuild ``obj`` with every string value rewritten via ``id_map``."""
     if isinstance(obj, dict):
         return {k: _apply_id_map(v, id_map) for k, v in obj.items()}
     if isinstance(obj, list):
@@ -561,9 +541,7 @@ class TupleDataType(DataType):
         return cls(elem_types=elem_types)
 
 
-# ============================================================================
 # PROPERTY (formerly Attribute)
-# ============================================================================
 
 @dataclass
 class Property:
@@ -622,15 +600,11 @@ class Property:
         )
 
 
-# ============================================================================
 # CONSTRAINTS (from André Conrad)
-# ============================================================================
 
 @dataclass
 class UniqueProperty:
-    """Property that is part of a unique/primary key constraint (from André Conrad).
-    Uses property_id to reference Property by meta_id instead of embedding the object.
-    """
+    """Property that is part of a unique/primary key constraint (from André Conrad)."""
     primary_key_type: PKTypeEnum
     property_id: str  # References Property.meta_id
     # ``clustering_order`` is meaningful only when ``primary_key_type ==
@@ -672,9 +646,7 @@ class UniqueProperty:
 
 @dataclass
 class ForeignKeyProperty:
-    """Property that is part of a foreign key constraint (from André Conrad).
-    Uses IDs to reference properties instead of embedding objects.
-    """
+    """Property that is part of a foreign key constraint (from André Conrad)."""
     property_id: str  # References Property.meta_id (the FK column)
     points_to_unique_property_id: str  # References target UniqueProperty.meta_id
 
@@ -771,9 +743,7 @@ class ForeignKeyConstraint(Constraint):
         return [fkp.property_id for fkp in self.foreign_key_properties]
 
 
-# ============================================================================
 # CHECK EXPRESSION AST
-# ============================================================================
 # Tree representation of CHECK predicates produced by the ADD_CONSTRAINT AS
 # CHECK grammar branch. Atoms (Cmp / In / Between / Regex / IsNull) carry the
 # structured form for clean cross-paradigm translation; And / Or / Not compose
@@ -927,9 +897,7 @@ class CheckNot(CheckExpr):
 
 @dataclass
 class CheckRaw(CheckExpr):
-    """Escape hatch: arbitrary predicate text. Adapter visitors fall back to
-    paradigm-specific tunnelling (PG: original text; Mongo: ``$expr`` + raw
-    string preserved in description; Neo4j/Cass: comment)."""
+    """Escape hatch: arbitrary predicate text. Adapter visitors fall back to"""
     raw_text: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
@@ -940,9 +908,7 @@ class CheckRaw(CheckExpr):
         return cls(raw_text=data.get("raw_text", ""))
 
 
-# ============================================================================
 # CHECK + EXISTENCE CONSTRAINTS
-# ============================================================================
 # These cover the gaps left by the narrow constraint operators
 # (ADD_PRIMARY_KEY / ADD_UNIQUE_KEY / ADD_FOREIGN_KEY / ADD_PARTITION_KEY /
 # ADD_CLUSTERING_KEY / ADD_LABEL). They are produced by the ADD_CONSTRAINT
@@ -952,16 +918,7 @@ class CheckRaw(CheckExpr):
 
 @dataclass
 class CheckConstraint(Constraint):
-    """CHECK predicate over one or more properties of an entity.
-
-    ``expression`` holds the structured AST tree; ``target_property_id`` is the
-    meta_id of the property the constraint is anchored to (the property named
-    in the ``ADD_CONSTRAINT entity.field AS CHECK ...`` statement) — used to
-    locate and remove the constraint by qualified name on DELETE_CONSTRAINT
-    even though the predicate itself may reference multiple properties.
-    ``constraint_name`` is an optional human-friendly name used by paradigms
-    (e.g. PostgreSQL) that name CHECK constraints in DDL.
-    """
+    """CHECK predicate over one or more properties of an entity."""
     kind: ClassVar[str] = "check"
     expression: Optional[CheckExpr] = None
     target_property_id: str = ""
@@ -988,11 +945,7 @@ class CheckConstraint(Constraint):
 
 @dataclass
 class ExistenceConstraint(Constraint):
-    """A property must always have a value. Equivalent to NOT NULL but expressed
-    as a first-class constraint so it can be added to an already-existing
-    property after creation. Adapters map this to: PG ``SET NOT NULL``, Mongo
-    ``required`` array entry, Neo4j ``IS NOT NULL`` constraint, Cassandra
-    implicit non-null on key columns (warning otherwise)."""
+    """A property must always have a value. Equivalent to NOT NULL but expressed"""
     kind: ClassVar[str] = "existence"
     target_property_id: str = ""
     constraint_name: str = ""
@@ -1010,20 +963,11 @@ class ExistenceConstraint(Constraint):
                    constraint_name=data.get("constraint_name", ""))
 
 
-# ============================================================================
 # RELATIONSHIPS
-# ============================================================================
 
 @dataclass
 class Relationship(ABC):
-    """Base for Reference / Embedded / Edge.
-
-    Discrimination between the three flavours is done via ``isinstance``
-    against the concrete subclass — there is no string discriminator on
-    the in-memory object. JSON serialization still emits a ``"kind"`` field
-    (handled per-subclass in ``to_dict``) so external consumers and the
-    ``from_dict`` factory keep working.
-    """
+    """Base for Reference / Embedded / Edge."""
     cardinality: Cardinality = Cardinality.ONE_TO_ONE
     is_optional: bool = True
     description: Optional[str] = None
@@ -1149,9 +1093,7 @@ class Embedded(Relationship):
 
 @dataclass
 class Edge(Relationship):
-    """Graph edge relationship (from Andre Conrad's paper Figure 2).
-    References a RelationshipType by name, linking source to target entity.
-    """
+    """Graph edge relationship (from Andre Conrad's paper Figure 2)."""
     rel_type_name: str = ""    # Name of the RelationshipType (e.g. "PURCHASED")
     source_entity: str = ""    # Source entity name
     target_entity: str = ""    # Target entity name
@@ -1186,9 +1128,7 @@ class Edge(Relationship):
         )
 
 
-# ============================================================================
 # ENTITY TYPE
-# ============================================================================
 
 @dataclass
 class EntityType:
@@ -1341,9 +1281,7 @@ class EntityType:
         )
 
 
-# ============================================================================
 # RELATIONSHIP TYPE (Neo4j edge type)
-# ============================================================================
 
 @dataclass
 class RelationshipType:
@@ -1400,9 +1338,7 @@ class RelationshipType:
         )
 
 
-# ============================================================================
 # DATABASE (TOP-LEVEL)
-# ============================================================================
 
 @dataclass
 class Database:
@@ -1419,32 +1355,11 @@ class Database:
         self.entity_types[e.full_path] = e
 
     def get_entity_strict(self, full_path: str) -> Optional[EntityType]:
-        """Look up an entity by its exact ``full_path`` (no simple-name fallback).
-
-        Use this in code that has already constructed a fully-qualified path
-        (adapter parsers, ``_normalize_to_paths``, internal traversals): if the
-        path is wrong we want a clean ``None`` rather than a silently-picked
-        sibling that happens to share a leaf name. ``get_entity_type`` keeps
-        the lenient fallback for user-facing scripts where bare ``customers``
-        is the expected style.
-        """
+        """Look up an entity by its exact ``full_path`` (no simple-name fallback)."""
         return self.entity_types.get(full_path)
 
     def get_entity_type(self, name: str) -> Optional[EntityType]:
-        """Look up an entity by full path or simple name (lenient).
-
-        * Exact ``full_path`` match wins outright (always unambiguous).
-        * If no full-path match, fall back to comparing leaf names. When the
-          simple name matches *exactly one* entity, return it. When it matches
-          two or more, log a warning and return ``None`` — silently picking
-          the first match was the historical behaviour and risked selecting
-          the wrong entity in multi-root / deeply-nested schemas (e.g. an
-          ``UNFLATTEN address: ...`` script in a schema that has both
-          ``customers.address`` and ``orders.employee.address``).
-
-        Callers that already know the full path should use
-        ``get_entity_strict`` instead.
-        """
+        """Look up an entity by full path or simple name (lenient)."""
         if name in self.entity_types:
             return self.entity_types[name]
         matches = [e for e in self.entity_types.values() if e.name == name]
@@ -1492,25 +1407,7 @@ class Database:
 
     # Serialization
     def to_dict(self) -> Dict[str, Any]:
-        """Serialize the Database to a JSON-ready dict with deterministic ids.
-
-        Runtime ``meta_id`` values are random UUIDs (cheap to allocate at
-        construction time, guaranteed unique). They make the in-memory model
-        easy to reason about, but they leak into the JSON output as noise:
-        running the *same* migration twice produces two different JSONs that
-        differ only in UUIDs, which makes git diffs unreadable, breaks
-        snapshot tests, and prevents byte-level comparison between the
-        Specific and Generalized grammar variants of the same migration.
-
-        ``to_dict`` therefore post-processes the raw dict and rewrites every
-        runtime UUID into a deterministic path-based id of the form
-        ``E:<entity_path>``, ``P:<entity_path>:<prop_name>`` etc. The
-        rewrite is applied recursively to *all* string values in the dict
-        tree, which covers both ``meta_id`` keys and the cross-references
-        (``property_id``, ``points_to_unique_property_id``) that point at
-        them. Two semantically-equivalent Databases now serialize byte-for-
-        byte identical.
-        """
+        """Serialize the Database to a JSON-ready dict with deterministic ids."""
         # Build the dict with the raw UUIDs first — keeps the per-class
         # to_dict() implementations untouched.
         d: Dict[str, Any] = {
@@ -1535,13 +1432,7 @@ class Database:
         return _apply_id_map(d, self._build_deterministic_id_map())
 
     def _build_deterministic_id_map(self) -> Dict[str, str]:
-        """Map every runtime UUID in this Database to a path-based id.
-
-        Covers Database, EntityType, Property, UniqueProperty, Reference,
-        Embedded, Edge, and edge_properties on References. Constraints
-        themselves carry no ``meta_id`` (only their UniqueProperty children
-        do), so they are addressed positionally instead.
-        """
+        """Map every runtime UUID in this Database to a path-based id."""
         m: Dict[str, str] = {self.meta_id: "db"}
         for ent_path, entity in self.entity_types.items():
             m[entity.meta_id] = f"E:{ent_path}"

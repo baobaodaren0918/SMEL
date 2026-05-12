@@ -20,9 +20,7 @@ from core import run_migration
 from config import MIGRATION_CONFIGS
 
 
-# =============================================================================
 # Notice classification: helps distinguish DB-technical limitations from bugs
-# =============================================================================
 NOTICE_REASONS = {
     "cardinality": "Adapter representation difference (e.g. 1..1 vs 0..N default)",
     "entity_kind": "Target type normalization (e.g. table vs document vs vertex)",
@@ -340,9 +338,7 @@ def _print_verbose(r: dict):
         print(line)
 
 
-# =============================================================================
 # pytest-compatible test functions
-# =============================================================================
 import pytest
 
 _northwind_same_keys = sorted(
@@ -406,9 +402,7 @@ def test_grammar_completeness_handlers_execute(direction):
     assert stats.get("success", 0) == stats.get("total", 0)
 
 
-# =============================================================================
 # Standalone execution (python tests/test_full_flow.py)
-# =============================================================================
 def main():
     import argparse
     parser = argparse.ArgumentParser(description="SMILE Full Flow Verification")

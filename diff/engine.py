@@ -1,34 +1,9 @@
-"""
-DatabaseDiff — single source of truth for "how do two db_to_dict snapshots differ".
-
-Replaces the previously duplicated structural-comparison logic in:
-
-* ``core._calculate_changes``      — used per-op for the web UI changes panel
-* ``validate_meta.compare_meta_schemas`` — used by Layer 1 / Layer 2 validators
-
-Both consumers now build their output through the single ``compute_diff``
-function plus a thin formatter (``to_ui_changes`` / ``to_validation_report``).
-
-Design notes
-------------
-* Inputs are the dict snapshots produced by ``core.db_to_dict`` (NOT raw
-  Database objects). This decouples the diff from the Meta-Schema classes
-  and matches what both legacy callers were already doing.
-* The diff is *neutral*: ``left`` and ``right`` have no semantic preference.
-  Formatters interpret the asymmetry — UI calls them ``prev``/``after``,
-  validation calls them ``actual``/``expected``.
-* ``compute_diff(only_entities=...)`` restricts the per-entity deep-compare
-  loop to a hint set (used by ``_calculate_changes`` for the touch-based
-  fast path). Entity-level set diff still scans the full key set so
-  add/delete are never missed.
-"""
+"""DatabaseDiff — single source of truth for "how do two db_to_dict snapshots differ"."""
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 
-# ============================================================================
 # Sub-records used inside EntityDiff / RelationshipTypeDiff
-# ============================================================================
 
 @dataclass
 class PropertyTypeChange:
@@ -69,9 +44,7 @@ class ReferenceAttrChange:
     right_attrs: Dict[str, str]
 
 
-# ============================================================================
 # Constraint diff
-# ============================================================================
 
 @dataclass
 class ConstraintDiff:
@@ -87,9 +60,7 @@ class ConstraintDiff:
                     or self.fk_missing or self.fk_extra)
 
 
-# ============================================================================
 # Per-entity diff
-# ============================================================================
 
 @dataclass
 class EntityDiff:
@@ -144,12 +115,7 @@ class EntityDiff:
         )
 
     def has_hard_issues(self) -> bool:
-        """True if anything beyond a 'warning'-class difference exists.
-
-        Hard = anything that affects schema topology: missing/extra collection
-        members, type or target mismatches. Warnings are cardinality,
-        key_type, is_optional differences and entity_kind.
-        """
+        """True if anything beyond a 'warning'-class difference exists."""
         return bool(
             self.props_only_left or self.props_only_right or self.prop_type_changes
             or self.embedded_only_left or self.embedded_only_right or self.embedded_target_changes
@@ -161,9 +127,7 @@ class EntityDiff:
         )
 
 
-# ============================================================================
 # Relationship_type diff (graph schemas only)
-# ============================================================================
 
 @dataclass
 class RelationshipTypeDiff:
@@ -173,18 +137,11 @@ class RelationshipTypeDiff:
     attr_mismatches: List[ReferenceAttrChange] = field(default_factory=list)
 
 
-# ============================================================================
 # Top-level diff
-# ============================================================================
 
 @dataclass
 class DatabaseDiff:
-    """Structural delta between two db_to_dict snapshots.
-
-    ``left`` / ``right`` naming is neutral. Per consumer:
-      * UI per-op formatter: left=prev snapshot, right=after snapshot
-      * Validation formatter: left=actual (migration result), right=expected
-    """
+    """Structural delta between two db_to_dict snapshots."""
     entities_only_left: List[str] = field(default_factory=list)
     entities_only_right: List[str] = field(default_factory=list)
     entity_diffs: Dict[str, EntityDiff] = field(default_factory=dict)
@@ -195,9 +152,7 @@ class DatabaseDiff:
     rel_diffs: Dict[str, RelationshipTypeDiff] = field(default_factory=dict)
 
 
-# ============================================================================
 # Core diff computation
-# ============================================================================
 
 def _by_name(items: List[Dict]) -> Dict[str, Dict]:
     return {x["name"]: x for x in items}
@@ -394,16 +349,7 @@ def compute_diff(
     right: Dict[str, Any],
     only_entities: Optional[Set[str]] = None,
 ) -> DatabaseDiff:
-    """Compute the structural diff between two ``db_to_dict`` snapshots.
-
-    Args:
-        left, right: dicts produced by ``core.db_to_dict``. Keys starting with
-            ``__`` are sidecars (``__relationship_types__``, ``__db_meta__``)
-            and are not treated as entities.
-        only_entities: when set, restrict the per-entity deep-compare loop to
-            these names. Entity-level set diff (added/removed) still runs on
-            the full key set so add/delete are never missed.
-    """
+    """Compute the structural diff between two ``db_to_dict`` snapshots."""
     diff = DatabaseDiff()
 
     l_names = {k for k in left  if not k.startswith("__")}

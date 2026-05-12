@@ -1,19 +1,4 @@
-"""
-MongoDB Adapter - Parse MongoDB JSON Schema to Unified Meta Schema.
-Converts MongoDB JSON Schema (with bsonType) to Database/EntityType/Property objects.
-
-This adapter provides bidirectional conversion:
-  - parse(): MongoDB JSON Schema -> Unified Meta Schema
-  - export_to_json(): Unified Meta Schema -> MongoDB JSON Schema
-
-Data Flow:
-  MongoDB JSON Schema                    Unified Meta Schema
-  ─────────────────────────────────────────────────────────────
-  { "bsonType": "string" }        ->     PrimitiveType.STRING
-  { "bsonType": "objectId" }      ->     PrimitiveType.OBJECT_ID
-  { "bsonType": "array", items }  ->     ListDataType / Embedded
-  { "bsonType": "object" }        ->     EntityType (nested)
-"""
+"""MongoDB Adapter - Parse MongoDB JSON Schema to Unified Meta Schema."""
 import json
 import re
 from typing import Dict, Any, Optional, List, Tuple, Union
@@ -57,16 +42,7 @@ _SELF_REFERENCE_RE = re.compile(r"\A\s*Self-reference", re.IGNORECASE)
 
 
 class MongoDBAdapter(DatabaseAdapter):
-    """
-    Adapter to parse MongoDB JSON Schema and create Unified Meta Schema.
-
-    This class acts as a translator between MongoDB's JSON Schema format
-    and the internal Unified Meta Schema used by SMILE.
-
-    Example:
-        adapter = MongoDBAdapter()
-        database = adapter.parse(mongo_schema, db_name="mydb")
-    """
+    """Adapter to parse MongoDB JSON Schema and create Unified Meta Schema."""
 
     # BSON type to PrimitiveType mapping (from centralized TypeMappings)
     TYPE_MAP = TypeMappings.MONGODB_TO_PRIMITIVE
@@ -75,37 +51,7 @@ class MongoDBAdapter(DatabaseAdapter):
         self.database: Optional[Database] = None
 
     def parse(self, schema: Union[Dict[str, Any], str], db_name: str = "database") -> Database:
-        """
-        Parse MongoDB JSON Schema and return Database object.
-
-        Two input shapes are accepted, distinguished by whether a ``collections``
-        wrapper is present at the top level:
-
-        * **Multi-root** — top-level ``{"collections": {name: schema, ...}}``
-          maps each entry to its own root document entity. Use this for
-          schemas that model independent collections (e.g. ``orders`` and
-          ``customers`` referencing each other by ObjectId).
-
-        * **Single-root** (legacy) — top-level object is the root document
-          itself, with ``"title"`` providing the collection name. Kept for
-          back-compat with schemas authored before multi-root support.
-
-        Example multi-root input:
-            {
-                "title": "northwind_mongodb",
-                "collections": {
-                    "orders":    {"bsonType": "object", "properties": {...}},
-                    "customers": {"bsonType": "object", "properties": {...}}
-                }
-            }
-
-        Example single-root input:
-            {
-                "title": "customers",
-                "bsonType": "object",
-                "properties": {"_id": {"bsonType": "objectId"}, "name": {"bsonType": "string"}}
-            }
-        """
+        """Parse MongoDB JSON Schema and return Database object."""
         if isinstance(schema, str):
             schema = json.loads(schema)
         self.database = Database(db_name=db_name, db_type=DatabaseType.DOCUMENT)
@@ -133,19 +79,7 @@ class MongoDBAdapter(DatabaseAdapter):
         return self.database
 
     def _parse_object_schema(self, schema: Dict[str, Any], name: str, parent_path: List[str] = None, is_root: bool = False) -> EntityType:
-        """
-        Parse an object schema into EntityType.
-
-        Uses André Conrad's object_name: List[str] design for nested paths.
-
-        Example - Nested object:
-            Input: customers.address (parent_path=["customers"], name="address")
-            Output: EntityType(object_name=["customers", "address"])
-
-        Example - Deep nested:
-            Input: customers.address.location (parent_path=["customers", "address"], name="location")
-            Output: EntityType(object_name=["customers", "address", "location"])
-        """
+        """Parse an object schema into EntityType."""
         if parent_path is None:
             parent_path = []
         # Build full object_name path (from André Conrad)
@@ -280,28 +214,7 @@ class MongoDBAdapter(DatabaseAdapter):
     @staticmethod
     def _extract_logical_ref_target(prop_schema: Dict[str, Any],
                                     owner_entity: EntityType) -> Tuple[Optional[str], Optional[str]]:
-        """Identify the target of a logical reference (cross-collection *or*
-        self-reference) from a property schema.
-
-        Recognised forms, in priority order:
-          1. **Canonical structured marker** —
-             ``"_smile_logical_ref": {"refs_to": "<entity_full_path>", "column": "<col>"}``.
-             A self-reference is encoded by ``refs_to`` matching the owning
-             entity's own ``full_path``.
-          2. **Legacy cross-collection description regex** —
-             ``"description": "Cross-collection reference to <table>.<col>"``.
-          3. **Legacy self-reference description regex** —
-             ``"description": "Self-reference ..."``. Returns the owning
-             entity's ``full_path`` as the target (with ``"_id"`` as a
-             placeholder column) so the parse-side branch sees a uniform
-             "I have a target" signal regardless of which marker shape was
-             present in the source.
-
-        The parse-side branch in ``_parse_object_schema`` decides whether
-        the Reference is self vs cross by comparing ``target_table`` to the
-        owning entity's full_path — both shapes funnel through the same
-        ``Reference(...)`` construction afterwards.
-        """
+        """Identify the target of a logical reference (cross-collection *or*"""
         marker = prop_schema.get(_SMILE_LOGICAL_REF_KEY)
         if isinstance(marker, dict):
             refs_to = marker.get("refs_to")
@@ -353,19 +266,7 @@ class MongoDBAdapter(DatabaseAdapter):
 
     @classmethod
     def export_to_json(cls, database: Database, root_entity_name: str = None) -> Dict[str, Any]:
-        """
-        Export Unified Meta Schema to MongoDB JSON Schema format.
-
-        Output shape is decided by how many root collections the database
-        contains (computed via ``_find_root_entities``):
-
-        * **One root** → a flat single-collection JSON Schema (back-compat).
-        * **Multiple roots** → a ``{"collections": {...}}`` envelope with one
-          entry per root.
-
-        ``root_entity_name`` forces single-root mode against the named entity
-        and is kept for callers that already do the picking themselves.
-        """
+        """Export Unified Meta Schema to MongoDB JSON Schema format."""
         if not database.entity_types:
             return {"bsonType": "object", "properties": {}}
 
@@ -397,12 +298,7 @@ class MongoDBAdapter(DatabaseAdapter):
     @classmethod
     def _build_single_collection_schema(cls, database: Database, root_name: str,
                                         *, is_top_level: bool) -> Dict[str, Any]:
-        """Render one collection (root + its embedded subtree) as a JSON Schema dict.
-
-        ``is_top_level=True`` adds the document-level ``$schema``/``title``/
-        ``description`` keys; ``False`` skips them (used by the multi-root
-        envelope, which owns those fields itself).
-        """
+        """Render one collection (root + its embedded subtree) as a JSON Schema dict."""
         root_entity = database.get_entity_type(root_name) if root_name else None
         if not root_entity:
             raise ValueError(f"Root entity '{root_name}' not found")
@@ -438,12 +334,7 @@ class MongoDBAdapter(DatabaseAdapter):
 
     @classmethod
     def _find_root_entities(cls, database: Database) -> List[str]:
-        """Return all root collection names, in declaration order.
-
-        A "root" is an entity whose ``full_path`` is not the embedded target
-        of any other entity. With single-root MongoDB schemas this returns one
-        name; with the multi-root format it returns every top-level collection.
-        """
+        """Return all root collection names, in declaration order."""
         from ..unified_meta_schema import Embedded, EntityKind
 
         embedded_targets = set()
@@ -464,8 +355,7 @@ class MongoDBAdapter(DatabaseAdapter):
 
     @classmethod
     def _find_root_entity(cls, database: Database) -> str:
-        """Single-root convenience wrapper preserved for callers that pre-date
-        multi-root support. New code should call ``_find_root_entities``."""
+        """Single-root convenience wrapper preserved for callers that pre-date"""
         roots = cls._find_root_entities(database)
         if roots:
             return roots[0]
@@ -562,21 +452,7 @@ class MongoDBAdapter(DatabaseAdapter):
 
     @classmethod
     def _export_property_to_bson_type(cls, attr: Property) -> Dict[str, Any]:
-        """
-        Export a property to MongoDB BSON type schema.
-
-        Example 1 - Primitive type:
-            Input:  Property("name", PrimitiveDataType(STRING))
-            Output: {"bsonType": "string"}
-
-        Example 2 - Array type:
-            Input:  Property("tags", ListDataType(element_type=PrimitiveDataType(STRING)))
-            Output: {"bsonType": "array", "items": {"bsonType": "string"}}
-
-        Example 3 - ObjectId type:
-            Input:  Property("_id", PrimitiveDataType(OBJECT_ID))
-            Output: {"bsonType": "objectId"}
-        """
+        """Export a property to MongoDB BSON type schema."""
         data_type = attr.data_type
 
         # Handle ListDataType (arrays)
@@ -640,80 +516,5 @@ class MongoDBAdapter(DatabaseAdapter):
 
     @classmethod
     def export(cls, database: Database) -> str:
-        """
-        Convenience method that calls export_to_json_string().
-        Used by the adapter registry for polymorphic export.
-        """
+        """Convenience method that calls export_to_json_string()."""
         return cls.export_to_json_string(database)
-
-
-# =============================================================================
-# USAGE EXAMPLES
-# =============================================================================
-#
-# Example 1: Parse MongoDB JSON Schema to Unified Meta Schema
-# ------------------------------------------------------------
-#
-# mongo_schema = {
-#     "title": "customers",
-#     "bsonType": "object",
-#     "properties": {
-#         "_id": {"bsonType": "objectId"},
-#         "name": {"bsonType": "string"},
-#         "age": {"bsonType": "int"},
-#         "tags": {"bsonType": "array", "items": {"bsonType": "string"}},
-#         "address": {
-#             "bsonType": "object",
-#             "properties": {
-#                 "street": {"bsonType": "string"},
-#                 "city": {"bsonType": "string"}
-#             }
-#         }
-#     }
-# }
-#
-# adapter = MongoDBAdapter()
-# database = adapter.parse(mongo_schema, db_name="mydb")
-#
-# Result:
-#   database.db_name = "mydb"
-#   database.db_type = DatabaseType.DOCUMENT
-#   database.entity_types = {
-#       "customers": EntityType(
-#           object_name=["customers"],
-#           properties=[
-#               Property("_id", PrimitiveType.OBJECT_ID, is_key=True),
-#               Property("name", PrimitiveType.STRING),
-#               Property("age", PrimitiveType.INTEGER),
-#               Property("tags", ListDataType(element_type=PrimitiveDataType(STRING)))
-#           ],
-#           relationships=[
-#               Embedded(aggr_name="address", aggregates="customers.address", cardinality=ZERO_TO_ONE)
-#           ]
-#       ),
-#       "customers.address": EntityType(
-#           object_name=["person", "address"],  # from André Conrad
-#           properties=[
-#               Property("street", PrimitiveType.STRING),
-#               Property("city", PrimitiveType.STRING)
-#           ]
-#       )
-#   }
-#
-#
-# Example 2: Load from file
-# -------------------------
-#
-# database = MongoDBAdapter.load_from_file("customers.json", db_name="mydb")
-#
-#
-# Example 3: Export back to MongoDB JSON Schema
-# ---------------------------------------------
-#
-# json_schema = MongoDBAdapter.export_to_json(database)
-# json_string = MongoDBAdapter.export_to_json_string(database, indent=2)
-#
-# Result preserves types:
-#   {"bsonType": "objectId"} -> OBJECT_ID -> {"bsonType": "objectId"}
-#   {"bsonType": "array", "items": ...} -> ListDataType -> {"bsonType": "array", "items": ...}
-#

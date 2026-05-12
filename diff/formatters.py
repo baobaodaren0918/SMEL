@@ -1,32 +1,14 @@
-"""
-Formatters that convert a ``DatabaseDiff`` into the dict shapes expected by
-the two legacy consumers:
-
-* ``to_ui_changes(diff, prev, after)``        — replaces the body of
-  ``core._calculate_changes``; output is consumed by the web UI's per-op
-  changes panel.
-* ``to_validation_report(diff, actual, expected)`` — replaces the body of
-  ``validate_meta.compare_meta_schemas``; output is consumed by Layer 1
-  and (via round-trip) Layer 2 validators.
-
-Each formatter is a *pure dict shaper* — no comparison logic lives here;
-all structural diffing happens once in ``database_diff.compute_diff``.
-"""
+"""Formatters that convert a ``DatabaseDiff`` into the dict shapes expected by"""
 from dataclasses import asdict
 from typing import Any, Dict, List
 
 from diff.engine import DatabaseDiff, EntityDiff, ConstraintDiff
 
 
-# ============================================================================
 # UI formatter (legacy shape from core._calculate_changes)
-# ============================================================================
 
 def to_ui_changes(diff: DatabaseDiff, prev: Dict, after: Dict) -> Dict[str, Any]:
-    """Format a DatabaseDiff for the per-op web-UI changes panel.
-
-    Maps left → "deleted" (was in prev, now gone), right → "new" (just added).
-    """
+    """Format a DatabaseDiff for the per-op web-UI changes panel."""
     changes: Dict[str, Any] = {
         "affected_entities": [],
         "new_entities": [],
@@ -90,17 +72,11 @@ def to_ui_changes(diff: DatabaseDiff, prev: Dict, after: Dict) -> Dict[str, Any]
     return changes
 
 
-# ============================================================================
 # Validation formatter (legacy shape from validate_meta.compare_meta_schemas)
-# ============================================================================
 
 def _pack_diff(missing: List, extra: List, hard: Dict[str, list],
                warn: Dict[str, list]) -> Dict[str, Any]:
-    """Pack into the legacy {issue_count, missing, extra, ...} shape.
-
-    `hard` are issue-counted groups; `warn` groups are surfaced but not
-    counted into ``issue_count``.
-    """
+    """Pack into the legacy {issue_count, missing, extra, ...} shape."""
     issue_count = len(missing) + len(extra) + sum(len(v) for v in hard.values())
     if issue_count == 0 and not any(warn.values()):
         return {}
@@ -247,11 +223,7 @@ def _format_entity_validation(ed: EntityDiff) -> Dict[str, Any]:
 def to_validation_report(
     diff: DatabaseDiff, actual: Dict[str, Any], expected: Dict[str, Any]
 ) -> Dict[str, Any]:
-    """Format a DatabaseDiff as a Layer 1 / Layer 2 validation report.
-
-    Maps left → "actual" (what the migration produced or round-tripped to),
-    right → "expected" (what the native target file describes).
-    """
+    """Format a DatabaseDiff as a Layer 1 / Layer 2 validation report."""
     actual_count = sum(1 for k in actual if not k.startswith("__"))
     expected_count = sum(1 for k in expected if not k.startswith("__"))
 

@@ -1,22 +1,4 @@
-"""
-Schema Inspector — Reverse Engineering interface for SMILE.
-
-Allows users to upload/paste a source schema file and get back the
-Meta Schema V1 (M-Model) as JSON, along with a summary and SMILE template.
-
-Usage:
-    # File mode
-    python schema_inspector.py --file tests/northwind_postgresql.sql --type relational
-    python schema_inspector.py --file tests/northwind_mongodb.json --type document
-    python schema_inspector.py --file tests/northwind_neo4j.cypher --type graph
-    python schema_inspector.py --file tests/northwind_cassandra.cql --type columnar
-
-    # File mode with auto-detected type
-    python schema_inspector.py --file tests/northwind_postgresql.sql
-
-    # Text mode (reads from stdin)
-    python schema_inspector.py --type relational --text < schema.sql
-"""
+"""Schema Inspector — Reverse Engineering interface for SMILE."""
 import sys
 import json
 import argparse
@@ -137,19 +119,7 @@ def _build_smile_template(db_type: str) -> str:
 
 def inspect_schema(source: str, db_type: str, input_mode: str = "file",
                     db_name: str = "database") -> dict:
-    """
-    Inspect a source schema and return Meta Schema V1 as JSON.
-
-    Args:
-        source: File path (input_mode="file") or text content (input_mode="text")
-        db_type: Database type - "relational", "document", "graph", "columnar"
-                 (or aliases like "postgresql", "mongodb", "neo4j", "cassandra")
-        input_mode: "file" or "text"
-        db_name: Name for the database in Meta Schema
-
-    Returns:
-        dict with keys: db_type, meta_schema, summary, smile_template
-    """
+    """Inspect a source schema and return Meta Schema V1 as JSON."""
     # Resolve db_type
     resolved_type = _resolve_db_type(db_type)
     adapter_class = ADAPTER_REGISTRY.get(resolved_type)

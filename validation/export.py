@@ -1,16 +1,4 @@
-"""
-Layer 2 Validation: Adapter Export Round-Trip Comparison.
-
-Parses the exported target (DDL/JSON/Cypher/CQL) back into Meta Schema,
-then compares against the expected target schema from the native file.
-Proves adapter forward engineering correctness.
-
-Pipeline position:
-  Meta V2 → [Adapter FE] → Exported Target → [Adapter RE] → Round-trip Meta
-                                                                  ↑
-                                                     compare with expected Meta
-                                                     (from native target file)
-"""
+"""Layer 2 Validation: Adapter Export Round-Trip Comparison."""
 from typing import Dict, Any
 
 from validation.meta import compare_meta_schemas
@@ -18,17 +6,7 @@ from validation.meta import compare_meta_schemas
 
 def validate_export(result_dict: Dict[str, Any], target_type: str,
                     config_key: str = "") -> Dict[str, Any]:
-    """
-    Layer 2: Parse exported target back and compare with expected target schema.
-
-    Args:
-        result_dict: Output from run_migration()
-        target_type: Target database type
-        config_key: Migration config key
-
-    Returns:
-        Validation result dict with passed/summary/details
-    """
+    """Layer 2: Parse exported target back and compare with expected target schema."""
     from Schema.adapters import ADAPTER_REGISTRY
     from core import db_to_dict
     from validation.meta import _resolve_target_file
@@ -68,9 +46,5 @@ def validate_export(result_dict: Dict[str, Any], target_type: str,
 
 
 def _parse_exported(exported_text: str, target_type: str, adapter_class) -> Any:
-    """Parse exported target text back into a Database object.
-
-    All four adapters share a uniform ``parse(content: str)`` entry via the
-    DatabaseAdapter ABC, so a single dispatch line covers every target type.
-    """
+    """Parse exported target text back into a Database object."""
     return adapter_class().parse(exported_text, "roundtrip_validation")

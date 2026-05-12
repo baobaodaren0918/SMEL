@@ -33,9 +33,7 @@ from Schema.unified_meta_schema import (
 )
 
 
-# ============================================================================
 # 1. OpParams self-validation (#13 from stage 1)
-# ============================================================================
 
 class TestOpParamsValidation:
     """Constructing an OpParams with an empty required identifier must raise."""
@@ -70,9 +68,7 @@ class TestOpParamsValidation:
         assert p.key_type is KeyType.PRIMARY
 
 
-# ============================================================================
 # 2. Handler graceful failure (#7 OperationResult)
-# ============================================================================
 
 def _make_one_entity_db() -> Database:
     """Build a trivial Database with one entity ('users') for handler tests."""
@@ -131,9 +127,7 @@ class TestHandlerGracefulFailure:
         assert result.reason is None
 
 
-# ============================================================================
 # 3. Pipeline continues after a bad op
-# ============================================================================
 
 class TestPipelineContinuesAfterFailure:
     """run_apply should not bail on the first failed op."""
@@ -188,9 +182,7 @@ class TestPipelineContinuesAfterFailure:
         assert details[1].get("reason")
 
 
-# ============================================================================
 # 4. Parser handles malformed input
-# ============================================================================
 
 class TestMalformedSmileScript:
     """parse_smile_auto must collect ANTLR syntax errors into errors list,
@@ -244,9 +236,7 @@ class TestMalformedSmileScript:
             Path(path).unlink(missing_ok=True)
 
 
-# ============================================================================
 # 5. Adapters reject corrupted native input
-# ============================================================================
 
 class TestAdapterMalformedInput:
     """Each adapter's parse() should raise an informative exception on garbage,
@@ -288,9 +278,7 @@ class TestAdapterMalformedInput:
             Neo4jAdapter().parse('{"nodes": [missing-quotes', "t")
 
 
-# ============================================================================
 # 6. Validation pipeline blame attribution
-# ============================================================================
 
 class TestValidationBlame:
     """validate_pipeline must attribute blame correctly when L1/L2 disagree."""
