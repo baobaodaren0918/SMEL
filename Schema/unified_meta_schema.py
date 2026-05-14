@@ -521,7 +521,7 @@ class MapDataType(DataType):
 
 @dataclass
 class TupleDataType(DataType):
-    """Tuple data type: ordered collection of typed elements (from Andre Conrad's paper)."""
+    """Tuple data type: ordered collection of typed elements. M-Model+ extension."""
     elem_types: List[DataType] = field(default_factory=list)
 
     def to_native(self, db: DatabaseType) -> str:
@@ -1093,7 +1093,7 @@ class Embedded(Relationship):
 
 @dataclass
 class Edge(Relationship):
-    """Graph edge relationship (from Andre Conrad's paper Figure 2)."""
+    """Graph edge relationship. M-Model+ extension: part of the Reference / Embedded / Edge hierarchy that replaces the original flat connector model."""
     rel_type_name: str = ""    # Name of the RelationshipType (e.g. "PURCHASED")
     source_entity: str = ""    # Source entity name
     target_entity: str = ""    # Target entity name
@@ -1291,7 +1291,7 @@ class RelationshipType:
     target_entity: str = ""  # Entity name (string only)
     properties: List[Property] = field(default_factory=list)
     cardinality: Cardinality = Cardinality.ZERO_TO_MANY
-    bidirectional: Optional[bool] = None  # from Andre Conrad's paper Figure 2
+    bidirectional: Optional[bool] = None  # bidirectional edge flag
     description: Optional[str] = None
     meta_id: str = field(default_factory=_uid)
 
