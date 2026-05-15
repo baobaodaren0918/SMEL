@@ -1,4 +1,4 @@
-# SMILE - Schema Migration & Evolution Language
+# SMILE - Schema Transformation and Evolution Language
 
 A formally defined DSL for schema migration and evolution between heterogeneous database systems, supporting 4 data models with a full 4×4 migration matrix and three-layer automated validation.
 
@@ -19,7 +19,7 @@ A formally defined DSL for schema migration and evolution between heterogeneous 
 
 ### Setup
 ```bash
-git clone https://github.com/baobaodaren0918/SMILE-3.0.git
+git clone <anonymized-repository-url>
 cd SMILE-3.0
 
 python -m venv .venv

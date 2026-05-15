@@ -82,7 +82,7 @@ class MongoDBAdapter(DatabaseAdapter):
         """Parse an object schema into EntityType."""
         if parent_path is None:
             parent_path = []
-        # Build full object_name path (from André Conrad)
+        # Build full object_name path (from AC)
         # Example: parent_path=["customers"], name="address" -> ["customers", "address"]
         object_name = parent_path + [name]
         entity = EntityType(

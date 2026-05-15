@@ -1,4 +1,4 @@
-# Generated from C:/Users/baoba/PycharmProjects/MA_Hagen_Lu/schema_evolution_language/grammar/generalized/SMILE_Generalized.g4 by ANTLR 4.13.1
+# Generated from grammar/generalized/SMILE_Generalized.g4 by ANTLR 4.13.1
 from antlr4 import *
 if "." in __name__:
     from .SMILE_GeneralizedParser import SMILE_GeneralizedParser

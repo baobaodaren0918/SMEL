@@ -1,5 +1,5 @@
 # Unified Meta Schema - Supports: PostgreSQL, MongoDB, Neo4j, Cassandra
-# Based on André Conrad's meta_model design with extensions
+# Based on AC's meta_model design with extensions
 
 import json
 import logging
@@ -52,7 +52,7 @@ class PrimitiveType(str, Enum):
 
 
 class PKTypeEnum(str, Enum):
-    """Primary key type for different database systems (from André Conrad)."""
+    """Primary key type for different database systems (from AC)."""
     SIMPLE = "simple"           # Relational PRIMARY KEY
     PARTITION = "partition"     # Cassandra partition key
     CLUSTERING = "clustering"   # Cassandra clustering key
@@ -600,11 +600,11 @@ class Property:
         )
 
 
-# CONSTRAINTS (from André Conrad)
+# CONSTRAINTS (from AC)
 
 @dataclass
 class UniqueProperty:
-    """Property that is part of a unique/primary key constraint (from André Conrad)."""
+    """Property that is part of a unique/primary key constraint (from AC)."""
     primary_key_type: PKTypeEnum
     property_id: str  # References Property.meta_id
     # ``clustering_order`` is meaningful only when ``primary_key_type ==
@@ -646,7 +646,7 @@ class UniqueProperty:
 
 @dataclass
 class ForeignKeyProperty:
-    """Property that is part of a foreign key constraint (from André Conrad)."""
+    """Property that is part of a foreign key constraint (from AC)."""
     property_id: str  # References Property.meta_id (the FK column)
     points_to_unique_property_id: str  # References target UniqueProperty.meta_id
 
@@ -688,7 +688,7 @@ class Constraint(ABC):
 
 @dataclass
 class UniqueConstraint(Constraint):
-    """Unique or Primary Key constraint (from André Conrad)."""
+    """Unique or Primary Key constraint (from AC)."""
     kind: ClassVar[str] = "unique"
     is_primary_key: bool
     is_managed: bool
@@ -718,7 +718,7 @@ class UniqueConstraint(Constraint):
 
 @dataclass
 class ForeignKeyConstraint(Constraint):
-    """Foreign Key constraint (from André Conrad)."""
+    """Foreign Key constraint (from AC)."""
     kind: ClassVar[str] = "foreign_key"
     is_managed: bool
     foreign_key_properties: List[ForeignKeyProperty] = field(default_factory=list)
@@ -1132,8 +1132,8 @@ class Edge(Relationship):
 
 @dataclass
 class EntityType:
-    """Unifies the definition of database entities (from André Conrad with List[str] naming)."""
-    object_name: List[str]  # from André Conrad: ["schema", "table"] or ["collection", "embedded"]
+    """Unifies the definition of database entities (from AC with List[str] naming)."""
+    object_name: List[str]  # from AC: ["schema", "table"] or ["collection", "embedded"]
     entity_kind: EntityKind = EntityKind.TABLE
     is_root: bool = True
     constraints: List[Constraint] = field(default_factory=list)
@@ -1233,7 +1233,7 @@ class EntityType:
     def to_dict(self) -> Dict[str, Any]:
         d = {
             "meta_id": self.meta_id,
-            "object_name": self.object_name,  # from André Conrad: List[str]
+            "object_name": self.object_name,  # from AC: List[str]
             "entity_kind": self.entity_kind.value,
             "is_root": self.is_root,
             "constraints": [c.to_dict() for c in self.constraints],

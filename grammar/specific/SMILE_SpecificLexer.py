@@ -1,4 +1,4 @@
-# Generated from C:/Users/baoba/PycharmProjects/MA_Hagen_Lu/schema_evolution_language/grammar/specific/SMILE_Specific.g4 by ANTLR 4.13.1
+# Generated from grammar/specific/SMILE_Specific.g4 by ANTLR 4.13.1
 from antlr4 import *
 from io import StringIO
 import sys

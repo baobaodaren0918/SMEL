@@ -9,7 +9,7 @@
  * for the "Specific" version that uses independent keywords for each operation.
  *
  * Supported database models: RELATIONAL, DOCUMENT, GRAPH, COLUMNAR
- * Design: from André Conrad
+ * Design: from AC
  *
  * Example SMILE migration script:
  *   MIGRATION customer_migration:1.0
@@ -222,7 +222,7 @@ entityRename: ENTITY qualifiedName TO qualifiedName;
 // ----------------------------------------------------------------------------
 // KEY TYPES - Constraint types for different database models
 // ----------------------------------------------------------------------------
-// Matches PKTypeEnum in unified_meta_schema.py (from André Conrad)
+// Matches PKTypeEnum in unified_meta_schema.py (from AC)
 //
 //   PRIMARY:    Standard primary key (all databases)
 //   UNIQUE:     Unique constraint (all databases)
@@ -241,7 +241,7 @@ identifierList: identifier (COMMA identifier)*;
 // ============================================================================
 
 // FLATTEN - Flatten nested object fields into parent table (reduce depth by 1)
-// Reference: André Conrad - "Die Operation FLATTEN erstellt aus dem Objekt in der Spalte
+// Reference: AC - "Die Operation FLATTEN erstellt aus dem Objekt in der Spalte
 //            jeweils eine Spalte für jedes Attribut dieses Objekts"
 // Example: FLATTEN customers.address
 //   Before: customers { name: { first_name, last_name }, age }
@@ -281,7 +281,7 @@ unnestField: identifier                                    # SimpleField
            ;
 
 // UNWIND - Expand array field into multiple rows
-// Reference: André Conrad - array expansion operation
+// Reference: AC - array expansion operation
 // Supports two modes:
 //   1. Expand in place: UNWIND customer_tag.tags (expands array within existing table)
 //   2. Create new table: UNWIND customers.tags[] INTO customer_tag (legacy, creates new table)
@@ -323,7 +323,7 @@ move_gen: MOVE PROPERTY identifier FROM qualifiedName TO qualifiedName;
 merge_gen: MERGE qualifiedName COMMA qualifiedName INTO identifier (AS identifier)?;
 
 // SPLIT: Divide one entity into multiple separate entities (vertical partitioning)
-// Reference: André Conrad - "SPLIT Person into Person:id, firstname, lastname AND knows:id, knows"
+// Reference: AC - "SPLIT Person into Person:id, firstname, lastname AND knows:id, knows"
 // Example: SPLIT customers INTO customers:customer_id, first_name, last_name, age; customer_tag:customer_id, tags
 //   Before: customers { customer_id, first_name, last_name, age, tags[] }
 //   After:  customers { customer_id, first_name, last_name, age }

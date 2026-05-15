@@ -39,3 +39,9 @@ ENV/
 
 # Paper / thesis sources (kept local only)
 paper/
+
+# Local config — Flask secret_key, web-server config (unrelated to project), runtime logs
+config/
+
+# Reference PDFs in tests/ — documentation resources, not test inputs
+tests/*.pdf
