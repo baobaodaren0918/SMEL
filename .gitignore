@@ -45,3 +45,6 @@ config/
 
 # Reference PDFs in tests/ — documentation resources, not test inputs
 tests/*.pdf
+
+# Drawio source files — kept local only, unrelated to project code
+diagrams/
