@@ -7,8 +7,8 @@
 --           -> Forward Engineering -> Target Neo4j
 --
 -- Operation Semantics:
---   DELETE_PARTITION_KEY:  Remove Cassandra partition key before restructuring
---   DELETE_CLUSTERING_KEY: Remove Cassandra clustering key
+--   DELETE PARTITION KEY:  Remove Cassandra partition key before restructuring
+--   DELETE CLUSTERING KEY: Remove Cassandra clustering key
 --   ADD UNIQUE KEY:        Add staging UNIQUE constraint (kind="unique", is_primary_key=False).
 --                          Step 4 CAST CONSTRAINT TO NODE KEY elevates it to the Neo4j
 --                          NODE_KEY subtype — the real Graph identity. ADD UNIQUE KEY
@@ -19,10 +19,10 @@
 --                         Cardinality flows via the relationship trace.
 --   DELETE PROPERTY:      Remove FK-like attribute (replaced by graph edge);
 --                         its trace hook also captures the logical Reference.
---   ADD_ENTITY:            Add relationship type from source to target node (graph edge)
+--   ADD ENTITY:            Add relationship type from source to target node (graph edge)
 --   TRANSFORM:             Convert entity (wide-column table) to relationship (graph edge)
---   RENAME_ENTITY:         Rename relationship type after TRANSFORM
---   CAST_CONSTRAINT:       Cast partition key to graph node key
+--   RENAME ENTITY:         Rename relationship type after TRANSFORM
+--   CAST CONSTRAINT:       Cast partition key to graph node key
 
 MIGRATION northwind_cass_to_neo4j:1.0
 FROM COLUMNAR TO GRAPH
@@ -156,7 +156,7 @@ RENAME ENTITY order_details TO CONTAINS
 -- order_details table removed; CONTAINS relationship created:
 -- CONTAINS (orders -> products) with properties: { unit_price, quantity, discount }
 -- Note: TRANSFORM creates relationship with entity name "order_details",
---       then RENAME_ENTITY renames it to match Neo4j convention "CONTAINS".
+--       then RENAME ENTITY renames it to match Neo4j convention "CONTAINS".
 
 -- ============================================
 -- Step 4: CAST Partition Keys to Neo4j Node Keys

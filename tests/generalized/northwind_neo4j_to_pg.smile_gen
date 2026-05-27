@@ -8,11 +8,13 @@
 --
 -- Operation Semantics:
 --   TRANSFORM:       Convert relationship (graph edge) to entity (table)
---   RENAME_ENTITY:   Rename entity after TRANSFORM (relationship name -> table name)
---   ADD_PROPERTY:   Add FK attribute to entity (graph edge replaced by FK column)
---   ADD_FOREIGN_KEY:  Add FK constraint (re-establish relational references)
---   ADD_PRIMARY_KEY: Add composite PK to junction table
---   DELETE_ENTITY:   Remove relationship type (graph edge no longer needed)
+--   RENAME ENTITY:   Rename entity after TRANSFORM (relationship name -> table name)
+--   ADD PROPERTY:   Add FK attribute to entity (graph edge replaced by FK column)
+--   ADD FOREIGN KEY:  Add FK constraint (re-establish relational references)
+--   ADD KEY (= PRIMARY KEY): Add composite PK to junction table.
+--                            Generalized grammar's bare ADD KEY defaults to
+--                            PRIMARY KEY subtype when keyType is omitted.
+--   DELETE ENTITY:   Remove relationship type (graph edge no longer needed)
 -- Note: Neo4j source already uses lowercase entity names (categories, suppliers, etc.)
 
 MIGRATION northwind_neo4j_to_pg:1.0
@@ -156,8 +158,8 @@ CAST CONSTRAINT orders.order_id TO PRIMARY KEY
 
 -- ============================================
 -- Operation Summary (32 steps, 7 operation types):
---   RENAME_ENTITY:    1    ADD_PROPERTY:     8
---   ADD_FOREIGN_KEY:   8    DELETE_ENTITY:     6
---   ADD_PRIMARY_KEY:  1    TRANSFORM:         1
---   CAST_CONSTRAINT:  7
+--   RENAME ENTITY:    1    ADD PROPERTY:     8
+--   ADD FOREIGN KEY:   8    DELETE ENTITY:     6
+--   ADD KEY (= PRIMARY KEY): 1    TRANSFORM:         1
+--   CAST CONSTRAINT:  7
 -- ============================================

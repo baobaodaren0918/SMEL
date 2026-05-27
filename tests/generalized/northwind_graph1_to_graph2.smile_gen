@@ -5,9 +5,9 @@
 -- Structural changes:
 --   MERGE:         Combine categories into products node (denormalize graph)
 --   SPLIT:         Separate customers into customers + contact nodes
---   ADD_ENTITY:    Create sales_region, territories nodes (sales territory tracking)
---   ADD_ENTITY:    Create HAS_CONTACT, BELONGS_TO, ASSIGNED_TO edges
---   ADD_LABEL:     Multi-label node (suppliers + Vendor)
+--   ADD ENTITY:    Create sales_region, territories nodes (sales territory tracking)
+--   ADD ENTITY:    Create HAS_CONTACT, BELONGS_TO, ASSIGNED_TO edges
+--   ADD LABEL:     Multi-label node (suppliers + Vendor)
 
 EVOLUTION northwind_graph1_to_graph2:1.0
 FROM GRAPH TO GRAPH
@@ -105,7 +105,7 @@ RENAME PROPERTY freight TO shipping_cost IN orders
 ADD PROPERTY status TO orders WITH TYPE String
 
 -- ============================================
--- Phase 8: suppliers -- ADD_LABEL
+-- Phase 8: suppliers -- ADD LABEL
 -- ============================================
 ADD LABEL Vendor TO suppliers
 

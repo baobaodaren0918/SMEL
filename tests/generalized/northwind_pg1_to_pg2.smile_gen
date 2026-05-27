@@ -5,7 +5,7 @@
 -- Structural changes:
 --   MERGE:      Denormalize categories into products (eliminate JOIN)
 --   SPLIT:      Separate customer identity from contact info (CRM)
---   ADD_ENTITY: Create sales_region, territories, employee_territories (sales territory tracking)
+--   ADD ENTITY: Create sales_region, territories, employee_territories (sales territory tracking)
 
 EVOLUTION northwind_pg1_to_pg2:1.0
 FROM RELATIONAL TO RELATIONAL
@@ -102,7 +102,7 @@ ADD PROPERTY status TO orders WITH TYPE String
 -- Operation Summary (26 steps, 10 operation types):
 --   MERGE: 1              SPLIT: 1
 --   ADD ENTITY: 3         ADD PROPERTY: 4
---   ADD KEY: 5            ADD FOREIGN KEY: 4
---   DELETE FOREIGN KEY: 1  DELETE KEY: 1
+--   ADD KEY (= PRIMARY KEY): 5    ADD FOREIGN KEY: 4
+--   DELETE FOREIGN KEY: 1          DELETE PRIMARY KEY: 1
 --   DELETE PROPERTY: 4   RENAME PROPERTY: 2
 -- ============================================

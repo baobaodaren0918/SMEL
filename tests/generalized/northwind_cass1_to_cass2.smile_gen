@@ -6,7 +6,7 @@
 --   MERGE:               Denormalize categories into products table
 --   SPLIT:               Separate customer identity from contact info
 --   Repartition orders:  Change partition key from customer_id to order_date
---   ADD_ENTITY:          Create sales_region, territories, employee_territories (with composite partition key)
+--   ADD ENTITY:          Create sales_region, territories, employee_territories (with composite partition key)
 
 EVOLUTION northwind_cass1_to_cass2:1.0
 FROM COLUMNAR TO COLUMNAR

@@ -7,10 +7,10 @@
 --           -> Forward Engineering -> Target Cassandra
 --
 -- Operation Semantics:
---   DELETE_FOREIGN_KEY:    Remove FK references (Cassandra has no FKs)
---   DELETE_PRIMARY_KEY:   Remove relational PK before adding partition/clustering keys
---   ADD_PARTITION_KEY:    Define partition key for query-driven data distribution
---   ADD_CLUSTERING_KEY:   Define clustering key for sort order within partition
+--   DELETE FOREIGN KEY:    Remove FK references (Cassandra has no FKs)
+--   DELETE PRIMARY KEY:   Remove relational PK before adding partition/clustering keys
+--   ADD PARTITION KEY:    Define partition key for query-driven data distribution
+--   ADD CLUSTERING KEY:   Define clustering key for sort order within partition
 
 MIGRATION northwind_pg_to_cass:1.0
 FROM RELATIONAL TO COLUMNAR
@@ -134,7 +134,7 @@ CAST CONSTRAINT customers.customer_id TO PARTITION KEY
 
 -- ============================================
 -- Operation Summary (22 steps, 5 operation types):
---   DELETE_FOREIGN_KEY:    8    DELETE_PRIMARY_KEY: 3
---   ADD_PARTITION_KEY:    3    ADD_CLUSTERING_KEY: 3
---   CAST_CONSTRAINT:      5
+--   DELETE FOREIGN KEY:    8    DELETE PRIMARY KEY: 3
+--   ADD PARTITION KEY:    3    ADD CLUSTERING KEY: 3
+--   CAST CONSTRAINT:      5
 -- ============================================

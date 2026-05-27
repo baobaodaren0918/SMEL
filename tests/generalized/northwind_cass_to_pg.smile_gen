@@ -7,11 +7,13 @@
 --           -> Forward Engineering -> Target PostgreSQL
 --
 -- Operation Semantics:
---   DELETE_PARTITION_KEY:   Remove Cassandra partition key before adding relational PK
---   DELETE_CLUSTERING_KEY:  Remove Cassandra clustering key
---   ADD_PRIMARY_KEY:        Add relational primary key (simple or composite)
---   ADD_FOREIGN_KEY:         Add FK references (relational referential integrity)
---   CAST_CONSTRAINT:        Cast partition key to relational primary key
+--   DELETE PARTITION KEY:   Remove Cassandra partition key before adding relational PK
+--   DELETE CLUSTERING KEY:  Remove Cassandra clustering key
+--   ADD KEY (= PRIMARY KEY): Add relational primary key (simple or composite).
+--                            Generalized grammar's bare ADD KEY defaults to
+--                            PRIMARY KEY subtype when keyType is omitted.
+--   ADD FOREIGN KEY:         Add FK references (relational referential integrity)
+--   CAST CONSTRAINT:        Cast partition key to relational primary key
 
 MIGRATION northwind_cass_to_pg:1.0
 FROM COLUMNAR TO RELATIONAL
@@ -135,8 +137,8 @@ CAST CONSTRAINT customers.customer_id TO PRIMARY KEY
 
 -- ============================================
 -- Operation Summary (21 steps):
---   DELETE_PARTITION_KEY:  3    DELETE_CLUSTERING_KEY: 3
---   ADD_PRIMARY_KEY:       3    ADD_FOREIGN_KEY:        8
+--   DELETE PARTITION KEY:  3    DELETE CLUSTERING KEY: 3
+--   ADD KEY (= PRIMARY KEY): 3    ADD FOREIGN KEY:        8
 --   CAST CONSTRAINT:    5
 --   EntityKind auto-convert: WIDE_COLUMN_TABLE -> TABLE (all 8 tables)
 -- ============================================

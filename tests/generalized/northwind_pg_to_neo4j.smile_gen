@@ -7,11 +7,11 @@
 --           -> Forward Engineering -> Target Neo4j
 --
 -- Operation Semantics:
---   DELETE_FOREIGN_KEY: Remove FK constraint (prepare FK for graph edge conversion)
---   DELETE_PROPERTY:  Remove FK attribute (no longer needed as graph edge replaces it)
---   ADD_ENTITY:        Add relationship type from source to target node (graph edge)
---   CAST_CONSTRAINT:   Convert PK type (PRIMARY KEY -> NODE KEY for Neo4j)
---   DELETE_PRIMARY_KEY: Remove composite PK before structural TRANSFORM
+--   DELETE FOREIGN KEY: Remove FK constraint (prepare FK for graph edge conversion)
+--   DELETE PROPERTY:  Remove FK attribute (no longer needed as graph edge replaces it)
+--   ADD ENTITY:        Add relationship type from source to target node (graph edge)
+--   CAST CONSTRAINT:   Convert PK type (PRIMARY KEY -> NODE KEY for Neo4j)
+--   DELETE PRIMARY KEY: Remove composite PK before structural TRANSFORM
 --   TRANSFORM:         Convert entity (table) to relationship (graph edge)
 
 MIGRATION northwind_pg_to_neo4j:1.0
@@ -128,7 +128,7 @@ RENAME ENTITY order_details TO CONTAINS
 -- order_details table removed; CONTAINS relationship created:
 -- CONTAINS (orders -> products) with properties: { unit_price, quantity, discount }
 -- Note: TRANSFORM creates relationship with entity name "order_details",
---       then RENAME_ENTITY renames it to match Neo4j convention "CONTAINS".
+--       then RENAME ENTITY renames it to match Neo4j convention "CONTAINS".
 
 -- ============================================
 -- Step 8: CAST primary keys to Neo4j Node Keys
@@ -165,8 +165,8 @@ CAST CONSTRAINT orders.order_id TO NODE KEY
 
 -- ============================================
 -- Operation Summary (32 steps, 8 operation types):
---   DELETE_FOREIGN_KEY:  8    DELETE_PROPERTY:  8
---   ADD_ENTITY:         6    DELETE_PRIMARY_KEY: 1
---   TRANSFORM:          1    RENAME_ENTITY:     1
---   CAST_CONSTRAINT:    7
+--   DELETE FOREIGN KEY:  8    DELETE PROPERTY:  8
+--   ADD ENTITY:         6    DELETE PRIMARY KEY: 1
+--   TRANSFORM:          1    RENAME ENTITY:     1
+--   CAST CONSTRAINT:    7
 -- ============================================
