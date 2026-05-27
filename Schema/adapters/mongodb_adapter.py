@@ -194,16 +194,21 @@ class MongoDBAdapter(DatabaseAdapter):
                             prop_schema, owner_entity=entity)
                     if target_table:
                         is_self_ref = (target_table == entity.full_path)
-                        if is_self_ref:
-                            cardinality = Cardinality.ONE_TO_ONE \
-                                if is_required else Cardinality.ZERO_TO_ONE
-                        else:
-                            cardinality = Cardinality.ZERO_TO_MANY \
-                                if not is_required else Cardinality.ONE_TO_MANY
+                        # Source-side cardinality: per source document, how many
+                        # target documents are referenced by this scalar field.
+                        # A scalar reference is always 1..1 (NOT NULL) or 0..1.
+                        cardinality = Cardinality.ONE_TO_ONE \
+                            if is_required else Cardinality.ZERO_TO_ONE
+                        # Target-side cardinality: cross-collection references
+                        # default to ZERO_TO_MANY (many docs may carry the same
+                        # FK value); self-refs are typically 0..n as well (an
+                        # employee can have many direct reports).
+                        target_cardinality = Cardinality.ZERO_TO_MANY
                         entity.add_relationship(Reference(
                             ref_name=prop_name_lower,
                             refs_to=target_table,
                             cardinality=cardinality,
+                            target_cardinality=target_cardinality,
                             is_optional=not is_required,
                             is_enforced=False,
                             description=prop_schema.get('description') or None,

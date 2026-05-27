@@ -88,15 +88,18 @@ DELETE_ENTITY order_details
 -- Step 9: Promote PKs to MongoDB _id for both roots
 -- ============================================
 RENAME_PROPERTY order_id TO _id IN orders
-ADD_PRIMARY_KEY _id TO orders
+ADD_UNIQUE_KEY _id TO orders
 CAST_CONSTRAINT orders._id TO DOCUMENT_ID
 
 RENAME_PROPERTY customer_id TO _id IN customers
-ADD_PRIMARY_KEY _id TO customers
+-- customers' Cass PARTITION KEY (originally on customer_id, now on _id via the
+-- RENAME above) is already kind="unique" + is_primary_key=True at the metamodel
+-- layer; CAST_CONSTRAINT alone elevates it to the DOCUMENT_ID subtype. No
+-- intermediate ADD_*_KEY needed because there is no constraint to clear or add.
 CAST_CONSTRAINT customers._id TO DOCUMENT_ID
 
 -- Logical cross-collection reference orders.customer_id -> customers._id
-ADD_CONSTRAINT orders.customer_id AS REFERENCE LOGICAL TO customers(_id) WITH CARDINALITY ONE_TO_MANY
+ADD_CONSTRAINT orders.customer_id AS REFERENCE LOGICAL TO customers(_id) WITH CARDINALITY ONE_TO_ONE
 
 -- ============================================
 -- Final Result: 2 collections, see northwind_mongodb.json

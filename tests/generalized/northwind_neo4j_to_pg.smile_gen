@@ -61,8 +61,8 @@ TRANSFORM CONTAINS INTO ENTITY
 RENAME ENTITY CONTAINS TO order_details
 ADD PROPERTY order_id TO order_details WITH TYPE String
 ADD PROPERTY product_id TO order_details WITH TYPE String
-ADD FOREIGN KEY order_details.order_id REFERENCES orders(order_id) WITH CARDINALITY ONE_TO_MANY
-ADD FOREIGN KEY order_details.product_id REFERENCES products(product_id) WITH CARDINALITY ONE_TO_MANY
+ADD FOREIGN KEY order_details.order_id REFERENCES orders(order_id) WITH CARDINALITY ONE_TO_ONE
+ADD FOREIGN KEY order_details.product_id REFERENCES products(product_id) WITH CARDINALITY ONE_TO_ONE
 ADD KEY (order_id, product_id) TO order_details
 -- Result:
 -- order_details: { order_id [PK,FK], product_id [PK,FK], unit_price, quantity, discount }
@@ -73,7 +73,7 @@ ADD KEY (order_id, product_id) TO order_details
 -- PURCHASED (customers -> orders) becomes a customer_id FK column in orders.
 DELETE ENTITY PURCHASED
 ADD PROPERTY customer_id TO orders WITH TYPE String
-ADD FOREIGN KEY orders.customer_id REFERENCES customers(customer_id) WITH CARDINALITY ONE_TO_MANY
+ADD FOREIGN KEY orders.customer_id REFERENCES customers(customer_id) WITH CARDINALITY ONE_TO_ONE
 -- Result:
 -- orders: { order_id [PK], order_date, required_date, shipped_date, freight, ship_name, ship_address, ship_city, ship_region, ship_postal_code, ship_country, customer_id [FK] }
 
@@ -83,7 +83,7 @@ ADD FOREIGN KEY orders.customer_id REFERENCES customers(customer_id) WITH CARDIN
 -- SOLD (employees -> orders) becomes an employee_id FK column in orders.
 DELETE ENTITY SOLD
 ADD PROPERTY employee_id TO orders WITH TYPE String
-ADD FOREIGN KEY orders.employee_id REFERENCES employees(employee_id) WITH CARDINALITY ONE_TO_MANY
+ADD FOREIGN KEY orders.employee_id REFERENCES employees(employee_id) WITH CARDINALITY ONE_TO_ONE
 -- Result:
 -- orders: { ..., employee_id [FK] }
 
@@ -93,7 +93,7 @@ ADD FOREIGN KEY orders.employee_id REFERENCES employees(employee_id) WITH CARDIN
 -- SHIPPED_VIA (orders -> shippers) becomes a shipper_id FK column in orders.
 DELETE ENTITY SHIPPED_VIA
 ADD PROPERTY shipper_id TO orders WITH TYPE String
-ADD FOREIGN KEY orders.shipper_id REFERENCES shippers(shipper_id) WITH CARDINALITY ONE_TO_MANY
+ADD FOREIGN KEY orders.shipper_id REFERENCES shippers(shipper_id) WITH CARDINALITY ONE_TO_ONE
 -- Result:
 -- orders: { order_id [PK], order_date, required_date, shipped_date, freight, ship_name, ship_address, ship_city, ship_region, ship_postal_code, ship_country, customer_id [FK], employee_id [FK], shipper_id [FK] }
 
@@ -103,7 +103,7 @@ ADD FOREIGN KEY orders.shipper_id REFERENCES shippers(shipper_id) WITH CARDINALI
 -- SUPPLIES (suppliers -> products) becomes a supplier_id FK column in products.
 DELETE ENTITY SUPPLIES
 ADD PROPERTY supplier_id TO products WITH TYPE String
-ADD FOREIGN KEY products.supplier_id REFERENCES suppliers(supplier_id) WITH CARDINALITY ONE_TO_MANY
+ADD FOREIGN KEY products.supplier_id REFERENCES suppliers(supplier_id) WITH CARDINALITY ONE_TO_ONE
 -- Result:
 -- products: { product_id [PK], product_name, unit_price, units_in_stock, discontinued, quantity_per_unit, supplier_id [FK] }
 
@@ -113,7 +113,7 @@ ADD FOREIGN KEY products.supplier_id REFERENCES suppliers(supplier_id) WITH CARD
 -- PART_OF (products -> categories) becomes a category_id FK column in products.
 DELETE ENTITY PART_OF
 ADD PROPERTY category_id TO products WITH TYPE String
-ADD FOREIGN KEY products.category_id REFERENCES categories(category_id) WITH CARDINALITY ONE_TO_MANY
+ADD FOREIGN KEY products.category_id REFERENCES categories(category_id) WITH CARDINALITY ONE_TO_ONE
 -- Result:
 -- products: { ..., supplier_id [FK], category_id [FK] }
 
@@ -125,7 +125,7 @@ ADD FOREIGN KEY products.category_id REFERENCES categories(category_id) WITH CAR
 -- cardinality since not every employee has a manager).
 DELETE ENTITY REPORTS_TO
 ADD PROPERTY reports_to TO employees WITH TYPE String
-ADD FOREIGN KEY employees.reports_to REFERENCES employees(employee_id) WITH CARDINALITY ZERO_TO_MANY
+ADD FOREIGN KEY employees.reports_to REFERENCES employees(employee_id) WITH CARDINALITY ZERO_TO_ONE
 -- Result:
 -- employees: { employee_id [PK], last_name, first_name, title, birth_date, hire_date, phone, notes, street, city, region, postal_code, country, reports_to [FK->employees] }
 

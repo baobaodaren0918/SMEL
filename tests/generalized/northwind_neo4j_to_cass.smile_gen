@@ -11,7 +11,9 @@
 --   RENAME_ENTITY:      Rename entity after TRANSFORM (relationship name -> table name)
 --   ADD_PROPERTY:      Add FK-like attribute to entity (graph edge replaced by column)
 --   DELETE_ENTITY:      Remove relationship type (graph edge no longer needed)
---   DELETE_PRIMARY_KEY: Remove graph PK before adding partition/clustering keys
+--   CAST_CONSTRAINT:    Reuse the existing Neo4j NODE_KEY by demoting/elevating its
+--                       subtype to PARTITION/CLUSTERING, avoiding DELETE_PRIMARY_KEY in
+--                       a non-relational target context.
 --   ADD_PARTITION_KEY:  Define partition key for query-driven data distribution
 --   ADD_CLUSTERING_KEY: Define clustering key for sort order within partition
 -- Note: Neo4j source already uses lowercase entity names (categories, suppliers, etc.)
@@ -110,18 +112,21 @@ ADD PROPERTY shipper_id TO orders WITH TYPE String
 -- Step 3: Restructure keys for Cassandra (complex tables)
 -- ============================================
 
--- products: partition by category_id, cluster by product_id
-DELETE PRIMARY KEY product_id FROM products
+-- products: partition by (category_id, supplier_id), cluster by product_id.
+-- Reuse the existing NODE_KEY on product_id by CASTing it to CLUSTERING; the
+-- handler keeps it in the same is_primary_key=True constraint, only changing
+-- the subtype. Then ADD PARTITION KEY appends to the same constraint. Avoids
+-- the paradigm-misleading DELETE PRIMARY KEY in a Cassandra-target context.
+CAST CONSTRAINT products.product_id TO CLUSTERING KEY
 ADD PARTITION KEY (category_id, supplier_id) TO products
-ADD CLUSTERING KEY product_id TO products
 -- Result:
 -- products: { category_id [PARTITION], supplier_id [PARTITION], product_id [CLUSTERING], product_name, unit_price, units_in_stock, discontinued, quantity_per_unit }
 
--- orders: partition by customer_id, cluster by order_date + order_id
-DELETE PRIMARY KEY order_id FROM orders
+-- orders: partition by customer_id, cluster by (order_date, order_id).
+-- Same pattern as products: CAST existing NODE_KEY to CLUSTERING then append.
+CAST CONSTRAINT orders.order_id TO CLUSTERING KEY
 ADD PARTITION KEY customer_id TO orders
 ADD CLUSTERING KEY order_date TO orders
-ADD CLUSTERING KEY order_id TO orders
 -- Result:
 -- orders: { customer_id [PARTITION], order_date [CLUSTERING], order_id [CLUSTERING], required_date, shipped_date, freight, ship_name, ship_address, ship_city, ship_region, ship_postal_code, ship_country, employee_id, shipper_id }
 
@@ -155,8 +160,8 @@ CAST CONSTRAINT customers.customer_id TO PARTITION KEY
 
 -- ============================================
 -- Operation Summary (30 steps, 8 operation types):
---   RENAME_ENTITY:      1    TRANSFORM:          1
---   ADD_PROPERTY:      8    DELETE_ENTITY:       6
---   DELETE_PRIMARY_KEY: 2    ADD_PARTITION_KEY:   3
---   ADD_CLUSTERING_KEY: 3    CAST_CONSTRAINT:     5
+--   RENAME ENTITY:     1    TRANSFORM:          1
+--   ADD PROPERTY:      8    DELETE ENTITY:      6
+--   ADD PARTITION KEY: 3    ADD CLUSTERING KEY: 2
+--   CAST CONSTRAINT:   7    (2 of which DEMOTE NODE_KEY -> CLUSTERING)
 -- ============================================

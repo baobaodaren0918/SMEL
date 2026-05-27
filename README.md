@@ -384,7 +384,7 @@ The grammar exposes 38 named operations grouped as **9 structural + 6 property +
 | Operation | Description |
 |-----------|-------------|
 | `CAST_ENTITY` | Change entity kind (e.g., TABLE → DOCUMENT) |
-| `RECARD` | Change relationship cardinality |
+| `RECARD` | Change the **source-side** cardinality of a relationship (target_cardinality is preserved; SMILE has no TARGET_CARDINALITY grammar clause) |
 
 ### Embedded & Label Operations (4)
 

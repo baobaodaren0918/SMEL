@@ -7,7 +7,7 @@ from typing import List
 from Schema.unified_meta_schema import (
     EntityType, Property,
     ForeignKeyConstraint,
-    Reference, Embedded, Cardinality,
+    Reference, Embedded, Cardinality, TraceOrigin,
     PrimitiveDataType, PrimitiveType, ListDataType,
 )
 from parser.params import (
@@ -277,7 +277,7 @@ class StructuralHandlersMixin:
 
         new_entity = self._build_unnest_target_entity(
             target_name, params.carry_fields, parent_entity,
-            params.properties, embedded_entity
+            params.properties, embedded_entity, full_embedded_path
         )
 
         embedded_map = self._collect_embedded_map(embedded_entity)
@@ -285,6 +285,15 @@ class StructuralHandlersMixin:
             new_entity, nested_objects, embedded_map,
             old_prefix=full_embedded_path, new_prefix=target_name
         )
+
+        if embedded_rel is not None:
+            self._remember_relationship_trace(
+                holder=parent_path,
+                ref_name=embedded_rel.aggr_name,
+                target=target_name,
+                cardinality=embedded_rel.cardinality,
+                origin=TraceOrigin.UNNESTED_EMBEDDED,
+            )
 
         self.database.add_entity_type(new_entity)
         if embedded_rel:
@@ -308,7 +317,7 @@ class StructuralHandlersMixin:
         return self.database.get_entity_type(full_path), None, full_path
 
     def _build_unnest_target_entity(self, target_name, carry_fields, parent_entity,
-                                    properties, embedded_entity):
+                                    properties, embedded_entity, full_embedded_path=""):
         """Construct the new entity extracted by UNNEST."""
         new_entity = EntityType(object_name=[target_name])
 
@@ -330,6 +339,35 @@ class StructuralHandlersMixin:
                 new_entity.add_property(Property(
                     field_name, PrimitiveDataType(PrimitiveType.STRING), False, True
                 ))
+
+        # Forward the cardinality of References on the embedded entity into
+        # the relationship trace rather than re-attaching the References to
+        # the new entity — re-attaching would pollute paradigms (like
+        # Cassandra) that carry no References. Self-refs are remapped to the
+        # new entity name.
+        if embedded_entity:
+            properties_set = set(properties)
+            for rel in embedded_entity.relationships:
+                if not isinstance(rel, Reference):
+                    continue
+                if rel.ref_name not in properties_set:
+                    continue
+                new_refs_to = rel.refs_to
+                if full_embedded_path and (
+                    rel.refs_to == full_embedded_path
+                    or rel.refs_to.startswith(full_embedded_path + ".")
+                ):
+                    new_refs_to = target_name + rel.refs_to[len(full_embedded_path):]
+                self._remember_relationship_trace(
+                    holder=target_name,
+                    ref_name=rel.ref_name,
+                    target=new_refs_to,
+                    cardinality=rel.cardinality,
+                    target_cardinality=rel.target_cardinality,
+                    origin=(TraceOrigin.UNNESTED_SELF_REF
+                            if new_refs_to == target_name
+                            else TraceOrigin.UNNESTED_EMBEDDED_REF),
+                )
 
         return new_entity
 

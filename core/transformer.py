@@ -1,10 +1,11 @@
 """SMILE transformer base — operation registry + state holder + shared helpers."""
 import copy
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from Schema.unified_meta_schema import (
-    Database, EntityType, Property, PrimitiveDataType, PrimitiveType,
+    Cardinality, Database, EntityType, Property, PrimitiveDataType, PrimitiveType,
+    RelationshipTrace, TraceOrigin,
 )
 
 logger = logging.getLogger(__name__)
@@ -47,6 +48,13 @@ class SchemaTransformerBase:
         # it to skip deep-compare on entities the handler didn't touch. Empty
         # = fall back to full-DB diff (legacy behavior).
         self._touched: Optional[List[str]] = None
+        # Relationship trace: typed records of relationships destroyed mid-
+        # script (by DELETE_FOREIGN_KEY, DELETE_PROPERTY, or UNNEST) so a
+        # subsequent ADD_ENTITY / TRANSFORM can reconstruct an Edge with the
+        # original bidirectional cardinality preserved. The relationship trace
+        # is engine state, NOT part of the canonical schema, and is discarded
+        # once the migration script terminates.
+        self._relationship_trace: List[RelationshipTrace] = []
         self._init_source_keys()
         # Handler registry: OpType -> bound method (populated from
         # _HANDLER_REGISTRY, which @register_handler decorators below filled
@@ -63,6 +71,132 @@ class SchemaTransformerBase:
         for n in entity_names:
             if n and n not in self._touched:
                 self._touched.append(n)
+
+    def _remember_relationship_trace(
+        self, holder: str, ref_name: str, target: str,
+        cardinality: Cardinality,
+        target_cardinality: Optional[Cardinality] = None,
+        origin: TraceOrigin = TraceOrigin.DELETED_REFERENCE,
+    ) -> None:
+        """Append a relationship trace entry for a relationship destroyed by
+        an operation, so a later ADD_ENTITY / TRANSFORM can recover its
+        bidirectional cardinality."""
+        if not holder or not target:
+            return
+        self._relationship_trace.append(RelationshipTrace(
+            holder=holder, ref_name=ref_name or "", target=target,
+            cardinality=cardinality, target_cardinality=target_cardinality,
+            origin=origin,
+        ))
+
+    def _remember_deleted_fk(self, fk_holder: str, ref_name: str,
+                             fk_target: str, was_required: bool,
+                             target_cardinality: Optional[Cardinality] = None) -> None:
+        """Convenience helper for FK deletion: maps NOT NULL → 1..1, nullable
+        → 0..1, and forwards to _remember_relationship_trace."""
+        cardinality = Cardinality.ONE_TO_ONE if was_required else Cardinality.ZERO_TO_ONE
+        self._remember_relationship_trace(
+            holder=fk_holder, ref_name=ref_name, target=fk_target,
+            cardinality=cardinality, target_cardinality=target_cardinality,
+            origin=TraceOrigin.DELETED_REFERENCE,
+        )
+
+    def _consume_deleted_fk_for_edge(
+        self, edge_source: str, edge_target: str
+    ) -> Tuple[Optional[Cardinality], Optional[Cardinality]]:
+        """Return (source_card, target_card) recovered from the relationship
+        trace for the given Edge endpoints. Both sides of the trace entry's
+        bidirectional cardinality are mapped to the new Edge: when FK
+        direction matches Edge direction (same-dir), entry.cardinality is
+        the Edge's source side and entry.target_cardinality is the Edge's
+        target side; when the FK direction is reversed (opp-dir), the two
+        sides swap.
+
+        Lookup ignores ref_name because ADD_ENTITY does not carry the
+        original FK column name. If multiple relationship trace entries
+        match the same endpoint pair, the lookup logs a warning and refuses
+        to guess; the caller falls back to the default cardinality.
+        """
+        same_dir = [t for t in self._relationship_trace
+                    if t.holder == edge_source and t.target == edge_target]
+        opp_dir = [t for t in self._relationship_trace
+                   if t.holder == edge_target and t.target == edge_source]
+
+        is_self_ref = edge_source == edge_target
+
+        # Self-referential edge: same_dir and opp_dir collapse to the same
+        # entries. Treat them as same-direction (the typical convention for
+        # self-refs like REPORTS_TO).
+        if is_self_ref:
+            if not same_dir:
+                return None, None
+            if len(same_dir) > 1:
+                logger.warning(
+                    "Ambiguous relationship trace for self-ref Edge (%s, %s): "
+                    "%d candidates; refusing to guess cardinality",
+                    edge_source, edge_target, len(same_dir),
+                )
+                return None, None
+            t = same_dir[0]
+            self._relationship_trace.remove(t)
+            return t.cardinality, t.target_cardinality
+
+        # Non-self-ref: both directions matching is genuinely ambiguous.
+        if same_dir and opp_dir:
+            logger.warning(
+                "Conflicting relationship traces for Edge (%s -> %s): both "
+                "directions have matches; refusing to guess cardinality",
+                edge_source, edge_target,
+            )
+            return None, None
+
+        if same_dir:
+            if len(same_dir) > 1:
+                logger.warning(
+                    "Ambiguous relationship trace for Edge (%s -> %s): "
+                    "%d same-direction candidates; refusing to guess",
+                    edge_source, edge_target, len(same_dir),
+                )
+                return None, None
+            t = same_dir[0]
+            self._relationship_trace.remove(t)
+            return t.cardinality, t.target_cardinality
+
+        if opp_dir:
+            if len(opp_dir) > 1:
+                logger.warning(
+                    "Ambiguous relationship trace for Edge (%s -> %s): "
+                    "%d opposite-direction candidates; refusing to guess",
+                    edge_source, edge_target, len(opp_dir),
+                )
+                return None, None
+            t = opp_dir[0]
+            self._relationship_trace.remove(t)
+            # FK direction reversed: trace.cardinality is now the Edge's
+            # target side, trace.target_cardinality is the Edge's source side.
+            return t.target_cardinality, t.cardinality
+
+        return None, None
+
+    @staticmethod
+    def _default_target_cardinality(value: Optional[Cardinality]) -> Cardinality:
+        """When the handler cannot recover a target-side cardinality from the
+        relationship trace, substitute the unconstrained default ZERO_TO_MANY
+        so the new Edge carries an explicit value instead of None. The default
+        reflects the typical reverse-side multiplicity of a relational FK
+        (any PK admits 0..n references); it is not a universal semantic
+        equivalence.
+        """
+        return value if value is not None else Cardinality.ZERO_TO_MANY
+
+    @staticmethod
+    def _fk_was_required(rel_cardinality: Cardinality, fk_attr: Optional[Property]) -> bool:
+        """A FK / Reference is required iff its declared source-side cardinality
+        has a non-zero lower bound (``is_required()``) OR the underlying property
+        has NOT NULL (is_optional=False)."""
+        return rel_cardinality.is_required() or (
+            fk_attr is not None and not fk_attr.is_optional
+        )
 
     def _init_source_keys(self) -> None:
         """Populate source_key_snapshot from the source schema's primary keys."""

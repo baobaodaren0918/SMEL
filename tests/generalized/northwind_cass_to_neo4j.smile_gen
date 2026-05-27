@@ -9,8 +9,16 @@
 -- Operation Semantics:
 --   DELETE_PARTITION_KEY:  Remove Cassandra partition key before restructuring
 --   DELETE_CLUSTERING_KEY: Remove Cassandra clustering key
---   ADD_PRIMARY_KEY:       Add primary key to entity (graph node PK)
---   DELETE_PROPERTY:      Remove FK-like attribute (replaced by graph edge)
+--   ADD UNIQUE KEY:        Add staging UNIQUE constraint (kind="unique", is_primary_key=False).
+--                          Step 4 CAST CONSTRAINT TO NODE KEY elevates it to the Neo4j
+--                          NODE_KEY subtype — the real Graph identity. ADD UNIQUE KEY
+--                          alone does NOT create graph identity.
+--   ADD CONSTRAINT ... AS REFERENCE LOGICAL: Declare a paradigm-neutral logical
+--                         reference (Cassandra has no FK; this is *not*
+--                         ADD FOREIGN KEY which would assert enforcement).
+--                         Cardinality flows via the relationship trace.
+--   DELETE PROPERTY:      Remove FK-like attribute (replaced by graph edge);
+--                         its trace hook also captures the logical Reference.
 --   ADD_ENTITY:            Add relationship type from source to target node (graph edge)
 --   TRANSFORM:             Convert entity (wide-column table) to relationship (graph edge)
 --   RENAME_ENTITY:         Rename relationship type after TRANSFORM
@@ -61,7 +69,7 @@ USING adapted_northwind_schema VERSION 1
 -- Graph: product_id [PK]
 DELETE PARTITION KEY (category_id, supplier_id) FROM products
 DELETE CLUSTERING KEY product_id FROM products
-ADD KEY product_id TO products
+ADD UNIQUE KEY product_id TO products
 -- Result:
 -- products: { product_id [PK], product_name, unit_price, units_in_stock, discontinued, quantity_per_unit, supplier_id, category_id }
 
@@ -71,7 +79,7 @@ ADD KEY product_id TO products
 DELETE PARTITION KEY customer_id FROM orders
 DELETE CLUSTERING KEY order_date FROM orders
 DELETE CLUSTERING KEY order_id FROM orders
-ADD KEY order_id TO orders
+ADD UNIQUE KEY order_id TO orders
 -- Result:
 -- orders: { order_id [PK], order_date, required_date, shipped_date, freight, ship_name, ship_address, ship_city, ship_region, ship_postal_code, ship_country, customer_id, employee_id, shipper_id }
 
@@ -86,6 +94,10 @@ DELETE PARTITION KEY (order_id, product_id) FROM order_details
 -- ============================================
 
 -- employees self-reference: reports_to column -> REPORTS_TO relationship
+-- Use ADD CONSTRAINT REFERENCE LOGICAL (not ADD FOREIGN KEY) because
+-- Cassandra has no FK paradigm; this declares the logical reference whose
+-- cardinality flows via the relationship trace into the new graph Edge.
+ADD CONSTRAINT employees.reports_to AS REFERENCE LOGICAL TO employees(employee_id) WITH CARDINALITY ZERO_TO_ONE
 DELETE PROPERTY employees.reports_to
 ADD ENTITY REPORTS_TO FROM employees TO employees
 -- Result:
@@ -93,6 +105,7 @@ ADD ENTITY REPORTS_TO FROM employees TO employees
 -- + REPORTS_TO relationship (employees -> employees)
 
 -- products -> supplier: supplier_id column -> SUPPLIES relationship
+ADD CONSTRAINT products.supplier_id AS REFERENCE LOGICAL TO suppliers(supplier_id) WITH CARDINALITY ONE_TO_ONE
 DELETE PROPERTY products.supplier_id
 ADD ENTITY SUPPLIES FROM suppliers TO products
 -- Result:
@@ -100,12 +113,14 @@ ADD ENTITY SUPPLIES FROM suppliers TO products
 -- + SUPPLIES relationship (suppliers -> products)
 
 -- products -> category: category_id column -> PART_OF relationship
+ADD CONSTRAINT products.category_id AS REFERENCE LOGICAL TO categories(category_id) WITH CARDINALITY ONE_TO_ONE
 DELETE PROPERTY products.category_id
 ADD ENTITY PART_OF FROM products TO categories
 -- Result:
 -- products: { product_id [PK], product_name, unit_price, units_in_stock, discontinued, quantity_per_unit }
 
 -- orders -> customer: customer_id column -> PURCHASED relationship
+ADD CONSTRAINT orders.customer_id AS REFERENCE LOGICAL TO customers(customer_id) WITH CARDINALITY ONE_TO_ONE
 DELETE PROPERTY orders.customer_id
 ADD ENTITY PURCHASED FROM customers TO orders
 -- Result:
@@ -113,6 +128,7 @@ ADD ENTITY PURCHASED FROM customers TO orders
 -- + PURCHASED relationship (customers -> orders)
 
 -- orders -> employee: employee_id column -> SOLD relationship
+ADD CONSTRAINT orders.employee_id AS REFERENCE LOGICAL TO employees(employee_id) WITH CARDINALITY ONE_TO_ONE
 DELETE PROPERTY orders.employee_id
 ADD ENTITY SOLD FROM employees TO orders
 -- Result:
@@ -120,6 +136,7 @@ ADD ENTITY SOLD FROM employees TO orders
 -- + SOLD relationship (employees -> orders)
 
 -- orders -> shipper: shipper_id column -> SHIPPED_VIA relationship
+ADD CONSTRAINT orders.shipper_id AS REFERENCE LOGICAL TO shippers(shipper_id) WITH CARDINALITY ONE_TO_ONE
 DELETE PROPERTY orders.shipper_id
 ADD ENTITY SHIPPED_VIA FROM orders TO shippers
 -- Result:
@@ -150,7 +167,7 @@ CAST CONSTRAINT suppliers.supplier_id TO NODE KEY
 CAST CONSTRAINT shippers.shipper_id TO NODE KEY
 CAST CONSTRAINT employees.employee_id TO NODE KEY
 CAST CONSTRAINT customers.customer_id TO NODE KEY
--- Complex tables: PRIMARY KEY (from ADD KEY) -> NODE KEY
+-- Complex tables: staging UNIQUE constraint (from ADD UNIQUE KEY) -> NODE KEY
 CAST CONSTRAINT products.product_id TO NODE KEY
 CAST CONSTRAINT orders.order_id TO NODE KEY
 
@@ -175,10 +192,11 @@ CAST CONSTRAINT orders.order_id TO NODE KEY
 -- ============================================
 
 -- ============================================
--- Operation Summary (30 steps, 8 operation types):
---   DELETE_PARTITION_KEY:  3    DELETE_CLUSTERING_KEY: 3
---   ADD_PRIMARY_KEY:       2    DELETE_PROPERTY:      8
---   ADD_ENTITY:            6    TRANSFORM:             1
---   RENAME_ENTITY:         1    CAST CONSTRAINT:    5
+-- Operation Summary (30 steps, 9 operation types):
+--   DELETE PARTITION KEY:  3    DELETE CLUSTERING KEY: 3
+--   ADD UNIQUE KEY:        2    ADD CONSTRAINT(REF):   6
+--   DELETE PROPERTY:       8    ADD ENTITY(edge):      6
+--   TRANSFORM:             1    RENAME ENTITY:         1
+--   CAST CONSTRAINT:       5
 --   EntityKind auto-convert: WIDE_COLUMN_TABLE -> VERTEX (all 8 entities)
 -- ============================================

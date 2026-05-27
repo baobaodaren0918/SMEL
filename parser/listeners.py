@@ -611,31 +611,37 @@ class SMILESpecificListener(SMILE_SpecificListener, BaseSMILEListener):
         ), original_keyword="ADD_PRIMARY_KEY"))
 
     def enterAdd_unique_key(self, ctx):
+        data_type = ctx.dataType().getText() if ctx.dataType() else None
         key_columns, entity_from_path = self._parse_key_columns(ctx.keyColumns())
         entity_name = self._resolve_add_key_entity(ctx, entity_from_path)
         self.operations.append(Operation(OpType.ADD_KEY, AddKeyParams(
             key_type=KeyType.UNIQUE,
             key_columns=key_columns,
+            data_type=data_type,
             entity=entity_name,
             clauses=self._parse_key_clauses(ctx.keyClause()),
         ), original_keyword="ADD_UNIQUE_KEY"))
 
     def enterAdd_partition_key(self, ctx):
+        data_type = ctx.dataType().getText() if ctx.dataType() else None
         key_columns, entity_from_path = self._parse_key_columns(ctx.keyColumns())
         entity_name = self._resolve_add_key_entity(ctx, entity_from_path)
         self.operations.append(Operation(OpType.ADD_KEY, AddKeyParams(
             key_type=KeyType.PARTITION,
             key_columns=key_columns,
+            data_type=data_type,
             entity=entity_name,
             clauses=self._parse_key_clauses(ctx.keyClause()),
         ), original_keyword="ADD_PARTITION_KEY"))
 
     def enterAdd_clustering_key(self, ctx):
+        data_type = ctx.dataType().getText() if ctx.dataType() else None
         key_columns, entity_from_path = self._parse_key_columns(ctx.keyColumns())
         entity_name = self._resolve_add_key_entity(ctx, entity_from_path)
         self.operations.append(Operation(OpType.ADD_KEY, AddKeyParams(
             key_type=KeyType.CLUSTERING,
             key_columns=key_columns,
+            data_type=data_type,
             entity=entity_name,
             clauses=self._parse_key_clauses(ctx.keyClause()),
         ), original_keyword="ADD_CLUSTERING_KEY"))

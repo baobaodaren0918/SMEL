@@ -114,7 +114,7 @@ RENAME_PROPERTY customer_id TO _id IN customers
 CAST_CONSTRAINT customers._id TO DOCUMENT_ID
 
 -- Logical cross-collection reference orders.customer_id -> customers._id
-ADD_CONSTRAINT orders.customer_id AS REFERENCE LOGICAL TO customers(_id) WITH CARDINALITY ONE_TO_MANY
+ADD_CONSTRAINT orders.customer_id AS REFERENCE LOGICAL TO customers(_id) WITH CARDINALITY ONE_TO_ONE
 
 -- ============================================
 -- Final Result: 2 collections, see northwind_mongodb.json

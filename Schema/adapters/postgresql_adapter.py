@@ -738,6 +738,37 @@ class PostgreSQLAdapter(DatabaseAdapter):
             scale=scale
         )
 
+    @staticmethod
+    def _derive_fk_cardinalities(is_optional: bool, is_unique: bool):
+        """Return (source_cardinality, target_cardinality) for a FK column under
+        the source-side cardinality convention:
+
+            source = per FK row, how many target rows
+                   = 1..1 (NOT NULL) | 0..1 (nullable)
+            target = per target PK row, how many source FK rows
+                   = 0..1 (FK has UNIQUE) | 0..n (otherwise)
+        """
+        source = Cardinality.ZERO_TO_ONE if is_optional else Cardinality.ONE_TO_ONE
+        target = Cardinality.ZERO_TO_ONE if is_unique else Cardinality.ZERO_TO_MANY
+        return source, target
+
+    @staticmethod
+    def _is_fk_column_unique(entity, attr) -> bool:
+        """A FK column counts as ``unique`` if it has a single-column UNIQUE
+        constraint of its own, or if it is the sole column of the entity's PK."""
+        if not attr:
+            return False
+        for c in entity.constraints:
+            if (c.kind == "unique" and not c.is_primary_key
+                    and len(c.unique_properties) == 1
+                    and c.unique_properties[0].property_id == attr.meta_id):
+                return True
+        pk = entity.get_primary_key()
+        if (pk and len(pk.unique_properties) == 1
+                and pk.unique_properties[0].property_id == attr.meta_id):
+            return True
+        return False
+
     def _resolve_references(self):
         """Resolve foreign key references after all entities are created."""
         for entity_name, ref_name, target_name in self._pending_references:
@@ -748,38 +779,15 @@ class PostgreSQLAdapter(DatabaseAdapter):
                 # Get FK column's is_optional from property
                 attr = entity.get_property(ref_name)
                 is_optional = attr.is_optional if attr else True
-
-                # Determine cardinality from SQL structure:
-                #   FK + NOT NULL + no UNIQUE -> 1..n (ONE_TO_MANY)
-                #   FK + nullable + no UNIQUE -> 0..n (ZERO_TO_MANY)
-                #   FK + NOT NULL + UNIQUE    -> 1..1 (ONE_TO_ONE)
-                #   FK + nullable + UNIQUE    -> 0..1 (ZERO_TO_ONE)
-                is_unique = False
-                if attr:
-                    # Check if FK column has a standalone UNIQUE constraint
-                    for c in entity.constraints:
-                        if (c.kind == "unique" and not c.is_primary_key
-                                and len(c.unique_properties) == 1
-                                and c.unique_properties[0].property_id == attr.meta_id):
-                            is_unique = True
-                            break
-                    # Check if FK column is the sole PK (single-column PK = unique)
-                    if not is_unique:
-                        pk = entity.get_primary_key()
-                        if (pk and len(pk.unique_properties) == 1
-                                and pk.unique_properties[0].property_id == attr.meta_id):
-                            is_unique = True
-
-                if is_unique:
-                    cardinality = Cardinality.ONE_TO_ONE if not is_optional else Cardinality.ZERO_TO_ONE
-                else:
-                    cardinality = Cardinality.ONE_TO_MANY if not is_optional else Cardinality.ZERO_TO_MANY
+                is_unique = self._is_fk_column_unique(entity, attr)
+                source_card, target_card = self._derive_fk_cardinalities(is_optional, is_unique)
 
                 reference = Reference(
                     ref_name=ref_name,
                     refs_to=target_name,
-                    cardinality=cardinality,
-                    is_optional=is_optional
+                    cardinality=source_card,
+                    target_cardinality=target_card,
+                    is_optional=is_optional,
                 )
                 entity.add_relationship(reference)
 
@@ -827,28 +835,14 @@ class PostgreSQLAdapter(DatabaseAdapter):
                     # behaviour as malformed inline REFERENCES on a missing column.
                     continue
                 src_optional = src_attr.is_optional
-                # Cardinality heuristic — column has its own UNIQUE? Composite-FK
-                # member columns are rarely marked UNIQUE individually, so the
-                # default falls into ZERO/ONE_TO_MANY which matches typical
-                # junction-table semantics (e.g. order_details.order_id).
-                is_unique = False
-                for c in entity.constraints:
-                    if (c.kind == "unique" and not c.is_primary_key
-                            and len(c.unique_properties) == 1
-                            and c.unique_properties[0].property_id == src_attr.meta_id):
-                        is_unique = True
-                        break
-                if is_unique:
-                    cardinality = (Cardinality.ONE_TO_ONE if not src_optional
-                                   else Cardinality.ZERO_TO_ONE)
-                else:
-                    cardinality = (Cardinality.ONE_TO_MANY if not src_optional
-                                   else Cardinality.ZERO_TO_MANY)
+                is_unique = self._is_fk_column_unique(entity, src_attr)
+                source_card, target_card = self._derive_fk_cardinalities(src_optional, is_unique)
 
                 entity.add_relationship(Reference(
                     ref_name=src_col,
                     refs_to=target_name,
-                    cardinality=cardinality,
+                    cardinality=source_card,
+                    target_cardinality=target_card,
                     is_optional=src_optional,
                 ))
 

@@ -3,6 +3,14 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 
+# Validation tolerance (not a global semantic rule): for comparison purposes
+# only, a missing target_cardinality is treated as equivalent to the
+# unconstrained reverse default 0..n. At the meta-model level, None and 0..n
+# remain semantically distinct (None = unspecified, 0..n = explicitly many).
+def _norm_target_card(v):
+    return v if v else "0..n"
+
+
 # Sub-records used inside EntityDiff / RelationshipTypeDiff
 
 @dataclass
@@ -24,6 +32,7 @@ class CardinalityChange:
     name: str
     left: str
     right: str
+    field: str = "cardinality"  # or "target_cardinality"
 
 
 @dataclass
@@ -273,6 +282,13 @@ def _diff_entity(
                                   left=a.get("cardinality", ""),
                                   right=b.get("cardinality", ""))
             )
+        if _norm_target_card(a.get("target_cardinality")) != _norm_target_card(b.get("target_cardinality")):
+            diff.edge_cardinality_changes.append(
+                CardinalityChange(name=n,
+                                  left=a.get("target_cardinality") or "",
+                                  right=b.get("target_cardinality") or "",
+                                  field="target_cardinality")
+            )
 
     # ---- Constraints ----
     diff.constraint_diff = _diff_constraints(
@@ -296,11 +312,26 @@ def _diff_constraints(left: List[Dict], right: List[Dict]) -> ConstraintDiff:
     cd.missing_pk = [r_pk_set[k] for k in sorted(set(r_pk_set) - set(l_pk_set))]
     cd.extra_pk   = [l_pk_set[k] for k in sorted(set(l_pk_set) - set(r_pk_set))]
     for k in sorted(set(l_pk_set) & set(r_pk_set)):
-        l_types = l_pk_set[k].get("primary_key_types")
-        r_types = r_pk_set[k].get("primary_key_types")
+        # Re-align primary_key_types to the alphabetically-sorted column order
+        # used in ``pk_key``. The constraint's ``columns`` / ``primary_key_types``
+        # lists are parallel arrays in the *original* (insertion) order; comparing
+        # them directly produced false-positive notices whenever the two sides
+        # built the PK in different orders (e.g. Neo4j → Cass via CAST then
+        # ADD_PARTITION_KEY produces a different column order than fixture).
+        sorted_cols = list(k[1])
+        l_by_col = dict(zip(
+            l_pk_set[k].get("columns", []),
+            l_pk_set[k].get("primary_key_types") or [],
+        ))
+        r_by_col = dict(zip(
+            r_pk_set[k].get("columns", []),
+            r_pk_set[k].get("primary_key_types") or [],
+        ))
+        l_types = [l_by_col.get(c) for c in sorted_cols] if l_by_col else None
+        r_types = [r_by_col.get(c) for c in sorted_cols] if r_by_col else None
         if l_types != r_types:
             cd.pk_type_changes.append({
-                "columns": list(k[1]),
+                "columns": sorted_cols,
                 "left": l_types, "right": r_types,
             })
 
@@ -332,6 +363,13 @@ def _diff_relationship_types(left: Dict, right: Dict) -> Tuple[List[str], List[s
                 name=n,
                 left=a.get("cardinality", ""),
                 right=b.get("cardinality", ""),
+            ))
+        if _norm_target_card(a.get("target_cardinality")) != _norm_target_card(b.get("target_cardinality")):
+            rd.cardinality_changes.append(CardinalityChange(
+                name=n,
+                left=a.get("target_cardinality") or "",
+                right=b.get("target_cardinality") or "",
+                field="target_cardinality",
             ))
         a_attrs = {x["name"]: x.get("type", "") for x in a.get("properties", [])}
         b_attrs = {x["name"]: x.get("type", "") for x in b.get("properties", [])}

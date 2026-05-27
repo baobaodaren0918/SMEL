@@ -73,4 +73,4 @@ RENAME PROPERTY customer_id TO _id IN customers
 CAST CONSTRAINT customers._id TO DOCUMENT_ID
 
 -- Logical cross-collection reference orders.customer_id -> customers._id
-ADD CONSTRAINT orders.customer_id AS REFERENCE LOGICAL TO customers(_id) WITH CARDINALITY ONE_TO_MANY
+ADD CONSTRAINT orders.customer_id AS REFERENCE LOGICAL TO customers(_id) WITH CARDINALITY ONE_TO_ONE

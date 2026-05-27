@@ -43,10 +43,27 @@ MERGE categories, products INTO products
 -- Graph equivalent of CRM separation: create contact node with relationship
 -- ============================================
 SPLIT customers INTO customers:customer_id, company_name, street, city, region, postal_code, country; contact:customer_id, contact_name, contact_title, phone, fax
-ADD KEY customer_id TO customers
+-- customers retained customer_id and its NODE KEY from before SPLIT; CAST
+-- alone re-affirms the subtype, no intermediate ADD needed.
 CAST CONSTRAINT customers.customer_id TO NODE KEY
-ADD KEY contact.contact_id AS String
+-- contact also inherited customer_id and its NODE KEY from SPLIT. To clear
+-- that inherited identity in paradigm-correct vocabulary, first DEMOTE the
+-- NODE_KEY to a plain UNIQUE constraint, then DELETE UNIQUE KEY removes it.
+-- Finally add contact_id as the entity's own identity via ADD UNIQUE KEY +
+-- CAST CONSTRAINT TO NODE KEY (the standard staging pattern). This avoids
+-- DELETE PRIMARY KEY entirely in a pure-Neo4j context.
+CAST CONSTRAINT contact.customer_id TO UNIQUE KEY
+DELETE UNIQUE KEY customer_id FROM contact
+ADD UNIQUE KEY contact.contact_id AS String
 CAST CONSTRAINT contact.contact_id TO NODE KEY
+-- Declare contact.customer_id as a logical 1..1 reference back to customers,
+-- then DELETE CONSTRAINT removes the Reference (caching its cardinality via
+-- the trace) while leaving the customer_id column itself intact — matching
+-- V2's dual representation (graph edge + back-ref column).
+-- ADD CONSTRAINT REFERENCE LOGICAL is used here (not ADD FOREIGN KEY)
+-- because Neo4j has no FK paradigm — this is a paradigm-neutral logical ref.
+ADD CONSTRAINT contact.customer_id AS REFERENCE LOGICAL TO customers(customer_id) WITH CARDINALITY ONE_TO_ONE
+DELETE CONSTRAINT contact.customer_id
 ADD ENTITY HAS_CONTACT FROM customers TO contact
 
 -- ============================================
@@ -55,7 +72,7 @@ ADD ENTITY HAS_CONTACT FROM customers TO contact
 -- (Named sales_region to disambiguate from address.region property.)
 -- ============================================
 ADD ENTITY sales_region WITH PROPERTIES (region_id String, region_description String)
-ADD KEY region_id TO sales_region
+ADD UNIQUE KEY region_id TO sales_region
 CAST CONSTRAINT sales_region.region_id TO NODE KEY
 
 -- ============================================
@@ -63,9 +80,9 @@ CAST CONSTRAINT sales_region.region_id TO NODE KEY
 -- Business: Sales territories within sales_region
 -- ============================================
 ADD ENTITY territories WITH PROPERTIES (territory_id String, territory_description String)
-ADD KEY territory_id TO territories
+ADD UNIQUE KEY territory_id TO territories
 CAST CONSTRAINT territories.territory_id TO NODE KEY
-ADD ENTITY BELONGS_TO FROM territories TO sales_region
+ADD ENTITY BELONGS_TO FROM territories TO sales_region WITH CARDINALITY ONE_TO_ONE
 
 -- ============================================
 -- Phase 5: ADD ASSIGNED_TO edge (employees -> territories, M:N)
@@ -110,11 +127,12 @@ ADD LABEL Vendor TO suppliers
 -- ============================================
 
 -- ============================================
--- Operation Summary (24 steps, 11 operation types):
+-- Operation Summary (27 steps, 13 operation types):
 --   MERGE: 1              SPLIT: 1
 --   ADD ENTITY: 2         ADD PROPERTY: 2
---   ADD KEY: 4            CAST CONSTRAINT: 4
+--   ADD UNIQUE KEY: 3     CAST CONSTRAINT: 5
 --   ADD ENTITY(edge): 3   DELETE ENTITY: 1
---   DELETE PROPERTY: 3   RENAME PROPERTY: 2
---   ADD LABEL: 1
+--   DELETE PROPERTY: 3    RENAME PROPERTY: 2
+--   DELETE UNIQUE KEY: 1  ADD CONSTRAINT: 1
+--   DELETE CONSTRAINT: 1  ADD LABEL: 1
 -- ============================================

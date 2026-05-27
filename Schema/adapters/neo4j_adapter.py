@@ -137,8 +137,10 @@ class Neo4jAdapter(DatabaseAdapter):
         rel_name = rel_def.get("type", "RELATED_TO")
         source_label = rel_def.get("source", "")
         target_label = rel_def.get("target", "")
-        cardinality_str = rel_def.get("cardinality", "0..n")
+        cardinality_str = rel_def.get("cardinality", Cardinality.ZERO_TO_MANY.value)
         cardinality = self.CARDINALITY_MAP.get(cardinality_str, Cardinality.ZERO_TO_MANY)
+        target_cardinality_str = rel_def.get("target_cardinality")
+        target_cardinality = self.CARDINALITY_MAP.get(target_cardinality_str) if target_cardinality_str else None
 
         # Parse relationship properties -> Property objects
         edge_properties = []
@@ -162,6 +164,7 @@ class Neo4jAdapter(DatabaseAdapter):
             source_entity=source_label,
             target_entity=target_label,
             edge_cardinality=cardinality,
+            edge_target_cardinality=target_cardinality,
             properties=edge_properties
         )
         self.database.add_entity_type(edge_entity)
@@ -186,6 +189,7 @@ class Neo4jAdapter(DatabaseAdapter):
                 source_entity=source_label,
                 target_entity=target_label,
                 cardinality=cardinality,
+                target_cardinality=target_cardinality,
                 is_optional=is_edge_optional
             )
             source_entity.add_relationship(edge)
@@ -305,9 +309,12 @@ class Neo4jAdapter(DatabaseAdapter):
                 source_label = rel_match.group(2)
                 target_label = rel_match.group(3)
                 rel_properties = []
-                cardinality_str = "0..n"
+                cardinality_str = Cardinality.ZERO_TO_MANY.value
+                target_cardinality_str = None
 
-                # Look ahead for Properties and Cardinality
+                # Cardinality and Target-Cardinality may appear on consecutive
+                # lines, so consume both and stop only at an empty line or a
+                # new Node/Relationship block.
                 j = i + 1
                 while j < len(lines):
                     next_line = lines[j].strip()
@@ -324,7 +331,13 @@ class Neo4jAdapter(DatabaseAdapter):
                     if card_match:
                         cardinality_str = card_match.group(1).strip()
                         j += 1
-                        break  # Cardinality ends the relationship block
+                        continue
+
+                    target_card_match = re.match(r'^// Target-Cardinality:\s+(.+)', next_line)
+                    if target_card_match:
+                        target_cardinality_str = target_card_match.group(1).strip()
+                        j += 1
+                        continue
 
                     # Empty line or next block -> end
                     if next_line == '' or next_line.startswith('// Node:') or next_line.startswith('// Relationship:'):
@@ -337,7 +350,8 @@ class Neo4jAdapter(DatabaseAdapter):
                     "source": source_label,
                     "target": target_label,
                     "properties": rel_properties,
-                    "cardinality": cardinality_str
+                    "cardinality": cardinality_str,
+                    "target_cardinality": target_cardinality_str,
                 }
                 self._parse_relationship(rel_def)
                 i = j
@@ -467,6 +481,9 @@ class Neo4jAdapter(DatabaseAdapter):
         # Cardinality comment
         cardinality = edge_entity.edge_cardinality or Cardinality.ZERO_TO_MANY
         lines.append(f"// Cardinality: {cardinality.value}")
+
+        if edge_entity.edge_target_cardinality is not None:
+            lines.append(f"// Target-Cardinality: {edge_entity.edge_target_cardinality.value}")
 
         return lines
 

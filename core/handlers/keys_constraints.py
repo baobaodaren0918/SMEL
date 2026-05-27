@@ -34,6 +34,19 @@ class KeysConstraintsHandlersMixin:
         entity_name, ref_name = self._split_path(params.reference)
         entity = self._get_entity(entity_name) if entity_name else None
         if entity:
+            # Append a relationship trace entry before removing the Reference
+            # so a subsequent ADD_ENTITY (EDGE) in a cross-paradigm script can
+            # recover the bidirectional cardinality the FK encoded.
+            fk_attr_for_trace = entity.get_property(ref_name)
+            for rel in entity.relationships:
+                if isinstance(rel, Reference) and rel.ref_name == ref_name:
+                    self._remember_deleted_fk(
+                        entity_name, ref_name, rel.refs_to,
+                        self._fk_was_required(rel.cardinality, fk_attr_for_trace),
+                        target_cardinality=rel.target_cardinality,
+                    )
+                    break
+
             # Remove the Reference relationship
             entity.remove_relationship(ref_name)
             # Also remove the matching ForeignKeyConstraint from entity.constraints
@@ -75,23 +88,19 @@ class KeysConstraintsHandlersMixin:
 
         fk_props: List[ForeignKeyProperty] = []
         for src_col, tgt_col in zip(field_names, target_columns):
-            # Resolve the FK property's data type from the target column when
-            # available; default to INTEGER otherwise (matches the original
-            # behaviour for unknown targets).
-            fk_type = PrimitiveDataType(PrimitiveType.INTEGER)
-            if target_entity:
-                tgt_attr = target_entity.get_property(tgt_col)
-                if tgt_attr is not None:
-                    fk_type = tgt_attr.data_type
-                else:
-                    target_pk = target_entity.get_primary_key()
-                    if target_pk and target_pk.unique_properties:
-                        pk_attr = target_entity.get_property_by_id(target_pk.unique_properties[0].property_id)
-                        if pk_attr:
-                            fk_type = pk_attr.data_type
+            fk_type = self._resolve_fk_type(target_entity, tgt_col)
 
             if not entity.get_property(src_col):
                 entity.add_property(Property(src_col, fk_type, False, True))
+
+            # Target-side cardinality: 0..1 if FK column is unique / sole PK,
+            # otherwise 0..n (relational-algebra default).
+            src_attr_for_uniq = entity.get_property(src_col)
+            target_card = (
+                Cardinality.ZERO_TO_ONE
+                if self._is_fk_column_unique(entity, src_attr_for_uniq)
+                else Cardinality.ZERO_TO_MANY
+            )
 
             existing_ref = next(
                 (r for r in entity.relationships
@@ -101,6 +110,7 @@ class KeysConstraintsHandlersMixin:
             if existing_ref:
                 existing_ref.refs_to = target_table
                 existing_ref.cardinality = cardinality
+                existing_ref.target_cardinality = target_card
                 # ADD_FOREIGN_KEY always produces an *enforced* reference. If
                 # the existing Reference came from a previous logical-only
                 # declaration (e.g. parsed from a Mongo cross-collection
@@ -114,7 +124,9 @@ class KeysConstraintsHandlersMixin:
             else:
                 entity.add_relationship(Reference(
                     ref_name=src_col, refs_to=target_table,
-                    cardinality=cardinality, is_optional=not cardinality.is_required(),
+                    cardinality=cardinality,
+                    target_cardinality=target_card,
+                    is_optional=not cardinality.is_required(),
                 ))
 
             fk_attr = entity.get_property(src_col)
@@ -196,18 +208,7 @@ class KeysConstraintsHandlersMixin:
         # Resolve the source-property data type. Carry the target property's
         # type if available so the meta model is consistent with the
         # equivalent ADD_FOREIGN_KEY behaviour.
-        fk_type = PrimitiveDataType(PrimitiveType.INTEGER)
-        if target_entity:
-            tgt_attr = target_entity.get_property(target_columns[0])
-            if tgt_attr is not None:
-                fk_type = tgt_attr.data_type
-            else:
-                target_pk = target_entity.get_primary_key()
-                if target_pk and target_pk.unique_properties:
-                    pk_attr = target_entity.get_property_by_id(
-                        target_pk.unique_properties[0].property_id)
-                    if pk_attr:
-                        fk_type = pk_attr.data_type
+        fk_type = self._resolve_fk_type(target_entity, target_columns[0])
 
         cardinality = Cardinality.ONE_TO_ONE
         if params.ref_cardinality:
@@ -228,6 +229,15 @@ class KeysConstraintsHandlersMixin:
         if src_attr is not None:
             src_attr.is_optional = not cardinality.is_required()
 
+        # Target-side cardinality: default ZERO_TO_MANY (logical Reference
+        # bears no uniqueness signal). Override to ZERO_TO_ONE only if the
+        # source column happens to be unique / sole PK.
+        target_card = (
+            Cardinality.ZERO_TO_ONE
+            if self._is_fk_column_unique(entity, src_attr)
+            else Cardinality.ZERO_TO_MANY
+        )
+
         # Upsert the Reference. If one already exists for this column,
         # update its target / cardinality and force ``is_enforced=False``
         # so this op cleanly downgrades a previously-enforced reference.
@@ -239,12 +249,14 @@ class KeysConstraintsHandlersMixin:
         if existing_ref:
             existing_ref.refs_to = target_table
             existing_ref.cardinality = cardinality
+            existing_ref.target_cardinality = target_card
             existing_ref.is_enforced = False
         else:
             entity.add_relationship(Reference(
                 ref_name=field_name,
                 refs_to=target_table,
                 cardinality=cardinality,
+                target_cardinality=target_card,
                 is_optional=not cardinality.is_required(),
                 is_enforced=False,
             ))
@@ -323,15 +335,40 @@ class KeysConstraintsHandlersMixin:
         removed_kinds = []
 
         # 1. Logical references (Reference.is_enforced == False).
+        # Mirrors DELETE_FOREIGN_KEY's trace hook: append a relationship trace
+        # entry before removing the Reference, so a later ADD_ENTITY (EDGE) /
+        # TRANSFORM can recover its bidirectional cardinality.
         new_relationships = []
+        removed_logical_ref = False
         for rel in entity.relationships:
             if (isinstance(rel, Reference)
                     and rel.ref_name == field_name
                     and rel.is_enforced is False):
+                self._remember_relationship_trace(
+                    holder=entity.full_path,
+                    ref_name=field_name,
+                    target=rel.refs_to,
+                    cardinality=rel.cardinality,
+                    target_cardinality=rel.target_cardinality,
+                )
                 removed_kinds.append("REFERENCE_LOGICAL")
+                removed_logical_ref = True
                 continue
             new_relationships.append(rel)
         entity.relationships = new_relationships
+
+        # Restore is_optional=True on the anchor property when the deleted
+        # logical Reference had imposed a required cardinality. Symmetric with
+        # the EXISTENCE branch below — the property's nullability constraint
+        # was an artefact of the now-removed Reference, so the default
+        # (optional) state is reasserted. Without this restoration, scripts
+        # that briefly declare a logical FK only to capture cardinality for
+        # the relationship trace would leave the column NOT NULL even after
+        # the FK is dropped.
+        if removed_logical_ref:
+            attr = entity.get_property(field_name)
+            if attr is not None:
+                attr.is_optional = True
 
         # 2. CheckConstraint and ExistenceConstraint anchored to this property.
         attr = entity.get_property(field_name)
@@ -544,6 +581,42 @@ class KeysConstraintsHandlersMixin:
             if not (c.kind == "unique" and c.is_primary_key)
         ]
 
+    @staticmethod
+    def _is_fk_column_unique(entity, attr) -> bool:
+        """A FK column counts as ``unique`` if it has a single-column UNIQUE
+        constraint of its own, or if it is the sole column of the entity's PK.
+        Used to derive Reference.target_cardinality: unique → 0..1, else 0..n."""
+        if not attr:
+            return False
+        for c in entity.constraints:
+            if (c.kind == "unique" and not c.is_primary_key
+                    and len(c.unique_properties) == 1
+                    and c.unique_properties[0].property_id == attr.meta_id):
+                return True
+        pk = entity.get_primary_key()
+        if (pk and len(pk.unique_properties) == 1
+                and pk.unique_properties[0].property_id == attr.meta_id):
+            return True
+        return False
+
+    @staticmethod
+    def _resolve_fk_type(target_entity, target_col: str) -> PrimitiveDataType:
+        """Resolve an FK column's data type from the target's column or, failing
+        that, from the target's primary key. Defaults to INTEGER when nothing
+        is resolvable."""
+        fallback = PrimitiveDataType(PrimitiveType.INTEGER)
+        if not target_entity:
+            return fallback
+        tgt_attr = target_entity.get_property(target_col)
+        if tgt_attr is not None:
+            return tgt_attr.data_type
+        target_pk = target_entity.get_primary_key()
+        if target_pk and target_pk.unique_properties:
+            pk_attr = target_entity.get_property_by_id(target_pk.unique_properties[0].property_id)
+            if pk_attr:
+                return pk_attr.data_type
+        return fallback
+
     def _get_target_unique_property_id(self, target_entity_name: str, target_attr_name: str) -> str:
         """Get the UniqueProperty meta_id for a target entity's property (for FK references)."""
         if not target_entity_name:
@@ -717,7 +790,13 @@ class KeysConstraintsHandlersMixin:
 
     @register_handler(OpType.RECARD)
     def _handle_recard(self, params: RecardParams) -> OperationResult:
-        """RECARD: Change the multiplicity/cardinality of a reference."""
+        """RECARD: Change the source-side cardinality of a Reference or Edge.
+
+        ``target_cardinality`` is intentionally preserved across this operation;
+        SMILE currently has no TARGET_CARDINALITY grammar clause, so the reverse
+        side is only mutated by re-derivation from the trace at the next Edge
+        construction (or by explicit ADD_FOREIGN_KEY re-declaration).
+        """
         target = params.target
         new_cardinality_str = params.cardinality
 
@@ -775,15 +854,24 @@ class KeysConstraintsHandlersMixin:
                 return OperationResult.skipped("transform: precondition not met")
 
             # Resolve cardinality (default: ZERO_TO_MANY)
+            script_set_cardinality = bool(params.cardinality)
             cardinality = Cardinality.ZERO_TO_MANY
-            if params.cardinality:
+            if script_set_cardinality:
                 cardinality = CARDINALITY_MAP.get(params.cardinality, Cardinality.ZERO_TO_MANY)
+
+            recovered_source, recovered_target = self._consume_deleted_fk_for_edge(
+                source_entity_name, target_entity_name
+            )
+            if recovered_source is not None and not script_set_cardinality:
+                cardinality = recovered_source
+            recovered_target = self._default_target_cardinality(recovered_target)
 
             # Convert VERTEX -> EDGE
             entity.entity_kind = EntityKind.EDGE
             entity.source_entity = source_entity_name
             entity.target_entity = target_entity_name
             entity.edge_cardinality = cardinality
+            entity.edge_target_cardinality = recovered_target
 
             # Add Edge to source entity's relationships (avoid duplicates)
             source_ent = self.database.get_entity_type(source_entity_name)
@@ -797,7 +885,8 @@ class KeysConstraintsHandlersMixin:
                         rel_type_name=name,
                         source_entity=source_entity_name,
                         target_entity=target_entity_name,
-                        cardinality=cardinality
+                        cardinality=cardinality,
+                        target_cardinality=recovered_target,
                     )
                     source_ent.add_relationship(edge)
 

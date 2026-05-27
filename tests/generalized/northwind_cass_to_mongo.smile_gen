@@ -54,12 +54,17 @@ DELETE ENTITY order_details
 
 -- Step 9: Promote PKs to MongoDB _id for both roots
 RENAME PROPERTY order_id TO _id IN orders
-ADD KEY _id TO orders
+-- orders had its Cass partition+clustering cleared in Step 1; declare _id
+-- via ADD UNIQUE KEY (paradigm-neutral for Document target) then CAST to
+-- DOCUMENT_ID for Mongo's implicit document identity.
+ADD UNIQUE KEY _id TO orders
 CAST CONSTRAINT orders._id TO DOCUMENT_ID
 
 RENAME PROPERTY customer_id TO _id IN customers
-ADD KEY _id TO customers
+-- customers' Cass PARTITION KEY (now on _id via the RENAME) is already a
+-- primary-key constraint at metamodel layer; CAST CONSTRAINT alone elevates
+-- it to DOCUMENT_ID subtype. No intermediate ADD needed.
 CAST CONSTRAINT customers._id TO DOCUMENT_ID
 
 -- Logical cross-collection reference orders.customer_id -> customers._id
-ADD CONSTRAINT orders.customer_id AS REFERENCE LOGICAL TO customers(_id) WITH CARDINALITY ONE_TO_MANY
+ADD CONSTRAINT orders.customer_id AS REFERENCE LOGICAL TO customers(_id) WITH CARDINALITY ONE_TO_ONE

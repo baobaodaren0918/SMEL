@@ -99,7 +99,7 @@ CAST_CONSTRAINT customers._id TO DOCUMENT_ID
 RENAME_PROPERTY order_id TO _id IN orders
 CAST_CONSTRAINT orders._id TO DOCUMENT_ID
 DELETE_FOREIGN_KEY orders.customer_id
-ADD_CONSTRAINT orders.customer_id AS REFERENCE LOGICAL TO customers(_id) WITH CARDINALITY ONE_TO_MANY
+ADD_CONSTRAINT orders.customer_id AS REFERENCE LOGICAL TO customers(_id) WITH CARDINALITY ONE_TO_ONE
 
 -- ============================================
 -- Final Result (2 collections, max L3):

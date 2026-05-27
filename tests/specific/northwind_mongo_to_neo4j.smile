@@ -42,7 +42,7 @@ UNNEST orders.details:unit_price, quantity, discount, product{product_name, unit
 -- ============================================
 UNNEST orders.employee:last_name, first_name, title, birth_date, hire_date, phone, notes, reports_to, address{street, city, region, postal_code, country} AS employees WITH orders.order_id TO employees.order_id
 DELETE_PROPERTY employees.order_id
-ADD_PRIMARY_KEY employees.employee_id AS String
+ADD_UNIQUE_KEY employees.employee_id AS String
 FLATTEN employees.address
 RENAME_PROPERTY address_street TO street IN employees
 RENAME_PROPERTY address_city TO city IN employees
@@ -55,28 +55,28 @@ RENAME_PROPERTY address_country TO country IN employees
 -- ============================================
 UNNEST orders.shipper:company_name, phone AS shippers WITH orders.order_id TO shippers.order_id
 DELETE_PROPERTY shippers.order_id
-ADD_PRIMARY_KEY shippers.shipper_id AS String
+ADD_UNIQUE_KEY shippers.shipper_id AS String
 
 -- ============================================
 -- Step 6: UNNEST product -> products (supplier carried as flat-address sub-object)
 -- ============================================
 UNNEST order_details.product:product_name, unit_price, units_in_stock, discontinued, quantity_per_unit, category{category_name, description}, supplier{company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country} AS products WITH order_details.order_id TO products.order_id
 DELETE_PROPERTY products.order_id
-ADD_PRIMARY_KEY products.product_id AS String
+ADD_UNIQUE_KEY products.product_id AS String
 
 -- ============================================
 -- Step 7: UNNEST supplier -> suppliers (no FLATTEN — supplier already has flat address)
 -- ============================================
 UNNEST products.supplier:company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country AS suppliers WITH products.product_id TO suppliers.product_id
 DELETE_PROPERTY suppliers.product_id
-ADD_PRIMARY_KEY suppliers.supplier_id AS String
+ADD_UNIQUE_KEY suppliers.supplier_id AS String
 
 -- ============================================
 -- Step 8: UNNEST category -> categories
 -- ============================================
 UNNEST products.category:category_name, description AS categories WITH products.product_id TO categories.product_id
 DELETE_PROPERTY categories.product_id
-ADD_PRIMARY_KEY categories.category_id AS String
+ADD_UNIQUE_KEY categories.category_id AS String
 
 -- ============================================
 -- Step 9: FLATTEN orders.ship_destination
@@ -89,9 +89,11 @@ RENAME_PROPERTY ship_destination_ship_postal_code TO ship_postal_code IN orders
 RENAME_PROPERTY ship_destination_ship_country TO ship_country IN orders
 
 -- ============================================
--- Step 10: Add primary key for orders
+-- Step 10: orders.order_id (renamed from Mongo _id at Step 1) already carries
+-- the metamodel-level identity constraint inherited from the source DOCUMENT_ID.
+-- Step 15 CAST_CONSTRAINT orders.order_id TO NODE KEY elevates that existing
+-- constraint to the graph NODE KEY subtype — no intermediate ADD needed.
 -- ============================================
-ADD_PRIMARY_KEY orders.order_id AS String
 
 -- ============================================
 -- Step 11: products -> graph relationships

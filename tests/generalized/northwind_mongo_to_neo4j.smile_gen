@@ -26,7 +26,7 @@ UNNEST orders.details:unit_price, quantity, discount, product{product_name, unit
 -- Step 4: UNNEST employee -> employees + FLATTEN address
 UNNEST orders.employee:last_name, first_name, title, birth_date, hire_date, phone, notes, reports_to, address{street, city, region, postal_code, country} AS employees WITH orders.order_id TO employees.order_id
 DELETE PROPERTY employees.order_id
-ADD KEY employees.employee_id AS String
+ADD UNIQUE KEY employees.employee_id AS String
 FLATTEN employees.address
 RENAME PROPERTY address_street TO street IN employees
 RENAME PROPERTY address_city TO city IN employees
@@ -37,22 +37,22 @@ RENAME PROPERTY address_country TO country IN employees
 -- Step 5: UNNEST shipper -> shippers
 UNNEST orders.shipper:company_name, phone AS shippers WITH orders.order_id TO shippers.order_id
 DELETE PROPERTY shippers.order_id
-ADD KEY shippers.shipper_id AS String
+ADD UNIQUE KEY shippers.shipper_id AS String
 
 -- Step 6: UNNEST product -> products (supplier carries flat address fields)
 UNNEST order_details.product:product_name, unit_price, units_in_stock, discontinued, quantity_per_unit, category{category_name, description}, supplier{company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country} AS products WITH order_details.order_id TO products.order_id
 DELETE PROPERTY products.order_id
-ADD KEY products.product_id AS String
+ADD UNIQUE KEY products.product_id AS String
 
 -- Step 7: UNNEST supplier -> suppliers (no FLATTEN — supplier already has flat address)
 UNNEST products.supplier:company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country AS suppliers WITH products.product_id TO suppliers.product_id
 DELETE PROPERTY suppliers.product_id
-ADD KEY suppliers.supplier_id AS String
+ADD UNIQUE KEY suppliers.supplier_id AS String
 
 -- Step 8: UNNEST category -> categories
 UNNEST products.category:category_name, description AS categories WITH products.product_id TO categories.product_id
 DELETE PROPERTY categories.product_id
-ADD KEY categories.category_id AS String
+ADD UNIQUE KEY categories.category_id AS String
 
 -- Step 9: FLATTEN orders.ship_destination
 FLATTEN orders.ship_destination
@@ -62,8 +62,9 @@ RENAME PROPERTY ship_destination_ship_region TO ship_region IN orders
 RENAME PROPERTY ship_destination_ship_postal_code TO ship_postal_code IN orders
 RENAME PROPERTY ship_destination_ship_country TO ship_country IN orders
 
--- Step 10: orders PK
-ADD KEY orders.order_id AS String
+-- Step 10: orders.order_id (renamed from Mongo _id) already carries the
+-- metamodel-level identity constraint inherited from the source DOCUMENT_ID;
+-- Step 15 CAST elevates it to NODE KEY subtype — no intermediate ADD needed.
 
 -- Step 11: products -> SUPPLIES + PART_OF
 -- (supplier_id / category_id never materialised, so no column cleanup)

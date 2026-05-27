@@ -106,10 +106,23 @@ class CRUDHandlersMixin:
             new_entity.target_entity = target_entity
 
             # Resolve cardinality (default: ZERO_TO_MANY)
+            script_set_cardinality = bool(params.cardinality)
             cardinality = Cardinality.ZERO_TO_MANY
-            if params.cardinality:
+            if script_set_cardinality:
                 cardinality = CARDINALITY_MAP.get(params.cardinality, Cardinality.ZERO_TO_MANY)
+
+            # Recover side-aware cardinality from a recently-deleted FK; only
+            # override the script's value when it was left at the default
+            # (never silently contradict an explicit cardinality clause).
+            recovered_source, recovered_target = self._consume_deleted_fk_for_edge(
+                source_entity, target_entity
+            )
+            if recovered_source is not None and not script_set_cardinality:
+                cardinality = recovered_source
+            recovered_target = self._default_target_cardinality(recovered_target)
+
             new_entity.edge_cardinality = cardinality
+            new_entity.edge_target_cardinality = recovered_target
 
             # Validate source and target exist
             source_ent = self.database.get_entity_type(source_entity)
@@ -126,7 +139,8 @@ class CRUDHandlersMixin:
                 rel_type_name=name,
                 source_entity=source_entity,
                 target_entity=target_entity,
-                cardinality=cardinality
+                cardinality=cardinality,
+                target_cardinality=recovered_target,
             )
             source_ent.add_relationship(edge)
 
@@ -172,6 +186,21 @@ class CRUDHandlersMixin:
         attr_meta_id = attr.meta_id
 
         self._touch(entity.name)
+
+        # If the property has an associated Reference, append a relationship
+        # trace entry before removal so a later ADD_ENTITY (EDGE) can recover
+        # the bidirectional cardinality. Mongo / Cass scripts use
+        # DELETE_PROPERTY instead of DELETE_FOREIGN_KEY because their source
+        # paradigms lack SQL FK constraints.
+        for rel in entity.relationships:
+            if isinstance(rel, Reference) and rel.ref_name == attr_name:
+                self._remember_deleted_fk(
+                    entity.name, attr_name, rel.refs_to,
+                    self._fk_was_required(rel.cardinality, attr),
+                    target_cardinality=rel.target_cardinality,
+                )
+                entity.remove_relationship(attr_name)
+                break
 
         entity.remove_property(attr_name)
 
@@ -414,14 +443,17 @@ class CRUDHandlersMixin:
             new_entity.source_entity = source_entity_name
             new_entity.target_entity = target_entity_name
             new_entity.entity_kind = EntityKind.EDGE
-            # Add Edge relationship to source VERTEX
+            copied_target_card = getattr(src_entity, 'edge_target_cardinality', None)
+            if copied_target_card is not None:
+                new_entity.edge_target_cardinality = copied_target_card
             source_ent = self.database.get_entity_type(source_entity_name)
             if source_ent:
                 source_ent.add_relationship(Edge(
                     rel_type_name=target_name,
                     source_entity=source_entity_name,
                     target_entity=target_entity_name,
-                    cardinality=src_entity.edge_cardinality if hasattr(src_entity, 'edge_cardinality') and src_entity.edge_cardinality else Cardinality.ZERO_TO_MANY
+                    cardinality=src_entity.edge_cardinality if hasattr(src_entity, 'edge_cardinality') and src_entity.edge_cardinality else Cardinality.ZERO_TO_MANY,
+                    target_cardinality=copied_target_card,
                 ))
 
         self.database.add_entity_type(new_entity)

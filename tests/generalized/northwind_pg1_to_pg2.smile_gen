@@ -40,7 +40,7 @@ MERGE categories, products INTO products
 SPLIT customers INTO customers:customer_id, company_name, street, city, region, postal_code, country; customer_contacts:customer_id, contact_name, contact_title, phone, fax
 ADD KEY customer_id TO customers
 ADD KEY customer_contacts.contact_id AS String
-ADD FOREIGN KEY customer_contacts.customer_id REFERENCES customers(customer_id) WITH CARDINALITY ONE_TO_MANY
+ADD FOREIGN KEY customer_contacts.customer_id REFERENCES customers(customer_id) WITH CARDINALITY ONE_TO_ONE
 
 -- ============================================
 -- Phase 3: ADD sales_region (new entity)
@@ -56,7 +56,7 @@ ADD KEY region_id TO sales_region
 -- ============================================
 ADD ENTITY territories WITH PROPERTIES (territory_id String, territory_description String, region_id String)
 ADD KEY territory_id TO territories
-ADD FOREIGN KEY territories.region_id REFERENCES sales_region(region_id) WITH CARDINALITY ONE_TO_MANY
+ADD FOREIGN KEY territories.region_id REFERENCES sales_region(region_id) WITH CARDINALITY ONE_TO_ONE
 
 -- ============================================
 -- Phase 5: ADD employee_territories (M:N junction table)
@@ -66,8 +66,8 @@ ADD ENTITY employee_territories
 ADD PROPERTY employee_id TO employee_territories WITH TYPE String
 ADD PROPERTY territory_id TO employee_territories WITH TYPE String
 ADD KEY (employee_id, territory_id) TO employee_territories
-ADD FOREIGN KEY employee_territories.employee_id REFERENCES employees(employee_id) WITH CARDINALITY ONE_TO_MANY
-ADD FOREIGN KEY employee_territories.territory_id REFERENCES territories(territory_id) WITH CARDINALITY ONE_TO_MANY
+ADD FOREIGN KEY employee_territories.employee_id REFERENCES employees(employee_id) WITH CARDINALITY ONE_TO_ONE
+ADD FOREIGN KEY employee_territories.territory_id REFERENCES territories(territory_id) WITH CARDINALITY ONE_TO_ONE
 
 -- ============================================
 -- Phase 6: employees -- simplify

@@ -56,8 +56,8 @@ ADD_PRIMARY_KEY product_id TO products
 -- Step 2: Add FK constraints to products
 -- ============================================
 -- Restore referential integrity: supplier_id -> suppliers, category_id -> categories
-ADD_FOREIGN_KEY products.supplier_id REFERENCES suppliers(supplier_id) WITH CARDINALITY ONE_TO_MANY
-ADD_FOREIGN_KEY products.category_id REFERENCES categories(category_id) WITH CARDINALITY ONE_TO_MANY
+ADD_FOREIGN_KEY products.supplier_id REFERENCES suppliers(supplier_id) WITH CARDINALITY ONE_TO_ONE
+ADD_FOREIGN_KEY products.category_id REFERENCES categories(category_id) WITH CARDINALITY ONE_TO_ONE
 -- Result:
 -- products (product_id [PK], ..., supplier_id [FK->suppliers], category_id [FK->categories])
 
@@ -77,9 +77,9 @@ ADD_PRIMARY_KEY order_id TO orders
 -- Step 4: Add FK constraints to orders
 -- ============================================
 -- Restore referential integrity: customer_id, employee_id, shipper_id
-ADD_FOREIGN_KEY orders.customer_id REFERENCES customers(customer_id) WITH CARDINALITY ONE_TO_MANY
-ADD_FOREIGN_KEY orders.employee_id REFERENCES employees(employee_id) WITH CARDINALITY ONE_TO_MANY
-ADD_FOREIGN_KEY orders.shipper_id REFERENCES shippers(shipper_id) WITH CARDINALITY ONE_TO_MANY
+ADD_FOREIGN_KEY orders.customer_id REFERENCES customers(customer_id) WITH CARDINALITY ONE_TO_ONE
+ADD_FOREIGN_KEY orders.employee_id REFERENCES employees(employee_id) WITH CARDINALITY ONE_TO_ONE
+ADD_FOREIGN_KEY orders.shipper_id REFERENCES shippers(shipper_id) WITH CARDINALITY ONE_TO_ONE
 -- Result:
 -- orders (order_id [PK], ..., customer_id [FK->customers], employee_id [FK->employees], shipper_id [FK->shippers])
 
@@ -97,8 +97,8 @@ ADD_PRIMARY_KEY (order_id, product_id) TO order_details
 -- Step 6: Add FK constraints to order_details
 -- ============================================
 -- Restore referential integrity: order_id -> orders, product_id -> products
-ADD_FOREIGN_KEY order_details.order_id REFERENCES orders(order_id) WITH CARDINALITY ONE_TO_MANY
-ADD_FOREIGN_KEY order_details.product_id REFERENCES products(product_id) WITH CARDINALITY ONE_TO_MANY
+ADD_FOREIGN_KEY order_details.order_id REFERENCES orders(order_id) WITH CARDINALITY ONE_TO_ONE
+ADD_FOREIGN_KEY order_details.product_id REFERENCES products(product_id) WITH CARDINALITY ONE_TO_ONE
 -- Result:
 -- order_details (order_id [PK, FK->orders], product_id [PK, FK->products], unit_price, quantity, discount)
 
@@ -107,7 +107,7 @@ ADD_FOREIGN_KEY order_details.product_id REFERENCES products(product_id) WITH CA
 -- ============================================
 -- employees.reports_to references employees(employee_id)
 -- ZERO_TO_MANY: an employee may or may not have a manager
-ADD_FOREIGN_KEY employees.reports_to REFERENCES employees(employee_id) WITH CARDINALITY ZERO_TO_MANY
+ADD_FOREIGN_KEY employees.reports_to REFERENCES employees(employee_id) WITH CARDINALITY ZERO_TO_ONE
 -- Result:
 -- employees (employee_id [PK], ..., reports_to [FK->employees])
 

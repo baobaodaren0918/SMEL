@@ -36,7 +36,7 @@ UNNEST orders.details:unit_price, quantity, discount, product{product_name, unit
 -- ============================================
 UNNEST orders.employee:last_name, first_name, title, birth_date, hire_date, phone, notes, reports_to, address{street, city, region, postal_code, country} AS employees WITH orders.order_id TO employees.order_id
 DELETE_PROPERTY employees.order_id
-ADD_PRIMARY_KEY employees.employee_id AS String
+ADD_PARTITION_KEY employees.employee_id AS String
 ADD_PROPERTY employee_id TO orders WITH TYPE String
 
 -- ============================================
@@ -44,7 +44,7 @@ ADD_PROPERTY employee_id TO orders WITH TYPE String
 -- ============================================
 UNNEST orders.shipper:company_name, phone AS shippers WITH orders.order_id TO shippers.order_id
 DELETE_PROPERTY shippers.order_id
-ADD_PRIMARY_KEY shippers.shipper_id AS String
+ADD_PARTITION_KEY shippers.shipper_id AS String
 ADD_PROPERTY shipper_id TO orders WITH TYPE String
 
 -- ============================================
@@ -52,7 +52,10 @@ ADD_PROPERTY shipper_id TO orders WITH TYPE String
 -- ============================================
 UNNEST order_details.product:product_name, unit_price, units_in_stock, discontinued, quantity_per_unit, category{category_name, description}, supplier{company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country} AS products WITH order_details.order_id TO products.order_id
 DELETE_PROPERTY products.order_id
-ADD_PRIMARY_KEY products.product_id AS String
+-- Declare product_id as a plain property here (no intermediate PK). Step 10
+-- below adds Cassandra's composite partition (category_id, supplier_id) and
+-- clustering (product_id), which is the final paradigm-native keying.
+ADD_PROPERTY product_id TO products WITH TYPE String
 ADD_PROPERTY product_id TO order_details WITH TYPE String
 
 -- ============================================
@@ -60,7 +63,7 @@ ADD_PROPERTY product_id TO order_details WITH TYPE String
 -- ============================================
 UNNEST products.supplier:company_name, contact_name, contact_title, phone, fax, street, city, region, postal_code, country AS suppliers WITH products.product_id TO suppliers.product_id
 DELETE_PROPERTY suppliers.product_id
-ADD_PRIMARY_KEY suppliers.supplier_id AS String
+ADD_PARTITION_KEY suppliers.supplier_id AS String
 ADD_PROPERTY supplier_id TO products WITH TYPE String
 
 -- ============================================
@@ -68,7 +71,7 @@ ADD_PROPERTY supplier_id TO products WITH TYPE String
 -- ============================================
 UNNEST products.category:category_name, description AS categories WITH products.product_id TO categories.product_id
 DELETE_PROPERTY categories.product_id
-ADD_PRIMARY_KEY categories.category_id AS String
+ADD_PARTITION_KEY categories.category_id AS String
 ADD_PROPERTY category_id TO products WITH TYPE String
 
 -- ============================================
@@ -96,25 +99,30 @@ RENAME_PROPERTY ship_destination_ship_postal_code TO ship_postal_code IN orders
 RENAME_PROPERTY ship_destination_ship_country TO ship_country IN orders
 
 -- ============================================
--- Step 9: CAST simple PKs to PARTITION KEY (Cass-specific keying for tables with no clustering)
+-- Step 9: CAST simple PKs to PARTITION KEY (only customers needs CAST —
+-- the four UNNEST-extracted simple tables already use ADD_PARTITION_KEY directly.
+-- customers still carries the Mongo DOCUMENT_ID subtype from RENAME above.)
 -- ============================================
-CAST_CONSTRAINT categories.category_id TO PARTITION KEY
-CAST_CONSTRAINT suppliers.supplier_id TO PARTITION KEY
-CAST_CONSTRAINT shippers.shipper_id TO PARTITION KEY
-CAST_CONSTRAINT employees.employee_id TO PARTITION KEY
 CAST_CONSTRAINT customers.customer_id TO PARTITION KEY
 
 -- ============================================
 -- Step 10: Restructure complex-table keys
 -- ============================================
--- products: composite partition (category_id, supplier_id) + clustering product_id
-DELETE_PRIMARY_KEY product_id FROM products
+-- products: composite partition (category_id, supplier_id) + clustering product_id.
+-- No DELETE_PRIMARY_KEY needed because product_id was declared as a plain
+-- property at Step 5 (not as a PK), avoiding the relational-flavoured operator
+-- in a Cassandra-target context.
 ADD_PARTITION_KEY (category_id, supplier_id) TO products
 ADD_CLUSTERING_KEY product_id TO products
 
--- orders: partition by customer_id, cluster by (order_date, order_id)
--- The source order_id arrived as Mongo _id (DOCUMENT_ID); drop that and rebuild as composite.
-DELETE_PRIMARY_KEY order_id FROM orders
+-- orders: partition by customer_id, cluster by (order_date, order_id).
+-- order_id arrived as Mongo _id (DOCUMENT_ID subtype). To clear the inherited
+-- identity in paradigm-correct vocabulary, DEMOTE the DOCUMENT_ID first to a
+-- plain UNIQUE (CAST_CONSTRAINT TO UNIQUE KEY flips is_primary_key=False),
+-- then DELETE_UNIQUE_KEY removes it. Avoids DELETE_PRIMARY_KEY entirely in
+-- the Cassandra-target context.
+CAST_CONSTRAINT orders.order_id TO UNIQUE KEY
+DELETE_UNIQUE_KEY order_id FROM orders
 ADD_PARTITION_KEY customer_id TO orders
 ADD_CLUSTERING_KEY order_date TO orders
 ADD_CLUSTERING_KEY order_id TO orders

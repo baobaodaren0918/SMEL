@@ -189,7 +189,7 @@ def _serialize_relationship_types(db: Database) -> Dict[str, Any]:
     for name, e in db.entity_types.items():
         if e.entity_kind != EntityKind.EDGE:
             continue
-        result[name] = {
+        d = {
             "rel_name": e.name,
             "source_entity": e.source_entity or "",
             "target_entity": e.target_entity or "",
@@ -199,6 +199,9 @@ def _serialize_relationship_types(db: Database) -> Dict[str, Any]:
             ],
             "cardinality": (e.edge_cardinality or Cardinality.ZERO_TO_MANY).value
         }
+        if e.edge_target_cardinality is not None:
+            d["target_cardinality"] = e.edge_target_cardinality.value
+        result[name] = d
     return result
 
 
