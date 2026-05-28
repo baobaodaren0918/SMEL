@@ -258,6 +258,21 @@ def run_test(direction: str, verbose: bool = False) -> dict:
 
     v_meta = r.get("validation_meta", {})
     v_export = r.get("validation_export", {})
+    v_integrity = r.get("validation_integrity", {})
+
+    # Layer Preparation II (integrity) must run AND pass for every config.
+    # Tightening to ``is True`` (vs ``is not False``) catches two regression
+    # classes: (a) real metamodel violations (dangling UUID / duplicate UP
+    # meta_id from un-relinked FK or copy.deepcopy clones), and (b) the
+    # integrity check silently failing to wire up (e.g. ``__result_db``
+    # missing in the result dict → ``passed=None``). Both should be hard
+    # test failures, not silent passes.
+    assert v_integrity.get("passed") is True, (
+        f"{direction}: integrity check did not pass — "
+        f"passed={v_integrity.get('passed')} "
+        f"summary={v_integrity.get('summary')} "
+        f"violations={v_integrity.get('violations')}"
+    )
 
     # Use validation results if available (not N/A)
     if v_meta.get("passed") is not None:

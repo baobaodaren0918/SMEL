@@ -716,7 +716,7 @@
             // Comments (-- ...)
             result = result.replace(/(--[^\n]*)/g, '<span class="smile-comment">$1</span>');
 
-            // Keywords and data types from backend (SMILE_SYNTAX in core.py)
+            // Keywords and data types from backend (SMILE_SYNTAX in core/pipeline.py)
             const keywords = (smileSyntax && smileSyntax.keywords) || [];
             keywords.forEach(kw => {
                 result = result.replace(new RegExp('\\b' + kw + '\\b', 'g'), '<span class="smile-keyword">' + kw + '</span>');
@@ -2929,7 +2929,7 @@
         //   1. If text-before-cursor (within current line/operation) starts with a known
         //      operation keyword, suggest the clauses defined for that op + enum values
         //      based on the most recent clause keyword.
-        //   2. Otherwise (line-start context), suggest all 36 operation keywords as
+        //   2. Otherwise (line-start context), suggest all 38 operation keywords as
         //      snippets that expand the whole skeleton.
         // === Completer A: operation keywords (space-inclusive prefix) ===
         // Handles multi-word generalized keywords like "ADD FOREIGN KEY".

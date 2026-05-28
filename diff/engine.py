@@ -61,12 +61,19 @@ class ConstraintDiff:
     missing_pk: List[Dict] = field(default_factory=list)   # only in right
     extra_pk: List[Dict] = field(default_factory=list)     # only in left
     pk_type_changes: List[Dict] = field(default_factory=list)  # PARTITION/CLUSTERING differs
-    fk_missing: List[Tuple[str, str]] = field(default_factory=list)  # only in right
-    fk_extra: List[Tuple[str, str]] = field(default_factory=list)    # only in left
+    fk_missing: List[Tuple[str, str, str]] = field(default_factory=list)  # only in right
+    fk_extra: List[Tuple[str, str, str]] = field(default_factory=list)    # only in left
+    # CHECK constraints are anchored to a property; identity = (target, expression).
+    # EXISTENCE constraints are intentionally NOT diffed here — their semantic
+    # (NOT NULL) is canonically expressed via Property.is_optional, which the
+    # property diff already covers. Adding EXISTENCE here would double-count.
+    check_missing: List[Dict] = field(default_factory=list)  # only in right
+    check_extra: List[Dict] = field(default_factory=list)    # only in left
 
     def is_empty(self) -> bool:
         return not (self.missing_pk or self.extra_pk or self.pk_type_changes
-                    or self.fk_missing or self.fk_extra)
+                    or self.fk_missing or self.fk_extra
+                    or self.check_missing or self.check_extra)
 
 
 # Per-entity diff
@@ -335,11 +342,27 @@ def _diff_constraints(left: List[Dict], right: List[Dict]) -> ConstraintDiff:
                 "left": l_types, "right": r_types,
             })
 
-    fk_key = lambda c: (c.get("column", ""), c.get("references_entity", ""))
+    # FK identity = (source column, target entity, target column). Without the
+    # target column in the key, two FKs that point at the same target entity
+    # but at different target columns would compare as equal — silently passing
+    # Layer 1/2 validation for a wrongly-targeted FK column.
+    fk_key = lambda c: (c.get("column", ""), c.get("references_entity", ""),
+                        c.get("references_property", ""))
     l_fk_set = {fk_key(c) for c in l_fk}
     r_fk_set = {fk_key(c) for c in r_fk}
     cd.fk_missing = sorted(r_fk_set - l_fk_set)
     cd.fk_extra   = sorted(l_fk_set - r_fk_set)
+
+    # CHECK constraints. Identity = (target property, expression dict frozen
+    # via repr). Two CHECKs on the same property with the same expression are
+    # considered equal; differing expressions are reported as missing+extra.
+    l_check = [c for c in left  if c.get("type") == "CHECK"]
+    r_check = [c for c in right if c.get("type") == "CHECK"]
+    check_key = lambda c: (c.get("target", ""), repr(c.get("expression")))
+    l_check_set = {check_key(c): c for c in l_check}
+    r_check_set = {check_key(c): c for c in r_check}
+    cd.check_missing = [r_check_set[k] for k in sorted(set(r_check_set) - set(l_check_set))]
+    cd.check_extra   = [l_check_set[k] for k in sorted(set(l_check_set) - set(r_check_set))]
     return cd
 
 

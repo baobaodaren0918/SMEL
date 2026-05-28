@@ -1,7 +1,7 @@
 """Handlers for constraint-aware ops — keys, FKs, labels, cardinality, vertex/edge transforms."""
 
 import logging
-from typing import List
+from typing import Dict, List
 
 from Schema.unified_meta_schema import (
     EntityType, EntityKind, Property,
@@ -444,16 +444,21 @@ class KeysConstraintsHandlersMixin:
         # For PK constraints, Cassandra PARTITION/CLUSTERING may append to an
         # existing PK (and short-circuit this handler), while a regular PK
         # replaces any existing one. FK / UNIQUE just get added at the end.
+        cleared_up_map: Dict[str, str] = {}
         if constraint.kind == "unique" and constraint.is_primary_key:
             if self._append_to_existing_pk(entity, constraint, pk_type_enum):
                 self._touch(entity_name)
                 self.changes.append(f"ADD_KEY:{entity_name}.({', '.join(key_columns)})")
                 return OperationResult.ok()
             if pk_type_enum == PKTypeEnum.SIMPLE:
-                self._clear_existing_pk(entity, key_columns)
+                cleared_up_map = self._clear_existing_pk(entity, key_columns)
 
         entity.add_constraint(constraint)
-        self._touch(entity_name)
+        relinked_entities = (
+            self._relink_fks_after_pk_replacement(entity, cleared_up_map, constraint)
+            if cleared_up_map else []
+        )
+        self._touch(entity_name, *relinked_entities)
         self.changes.append(f"ADD_KEY:{entity_name}.({', '.join(key_columns)})")
         return OperationResult.ok()
 
@@ -569,17 +574,55 @@ class KeysConstraintsHandlersMixin:
         return OperationResult.ok()
 
     def _clear_existing_pk(self, entity, incoming_key_columns):
-        """Drop any existing primary-key constraint and strip `is_key` from"""
+        """Drop existing PK constraint; return {cleared_up_meta_id: prop_name}
+        so the caller can relink dangling FK pointers."""
+        cleared_up_map: Dict[str, str] = {}
         for old_c in entity.constraints:
             if old_c.kind == "unique" and old_c.is_primary_key:
                 for up in old_c.unique_properties:
                     old_attr = entity.get_property_by_id(up.property_id)
-                    if old_attr and old_attr.name not in incoming_key_columns:
-                        old_attr.is_key = False
+                    if old_attr:
+                        cleared_up_map[up.meta_id] = old_attr.name
+                        if old_attr.name not in incoming_key_columns:
+                            old_attr.is_key = False
         entity.constraints = [
             c for c in entity.constraints
             if not (c.kind == "unique" and c.is_primary_key)
         ]
+        return cleared_up_map
+
+    def _relink_fks_after_pk_replacement(
+        self, target_entity, cleared_up_map: Dict[str, str], new_constraint
+    ) -> List[str]:
+        """Rewrite FK pointers from cleared UniqueProperty meta_ids to the
+        new constraint's, matched by property name. Returns the list of
+        entity names whose FKs were modified, so the caller can _touch() them."""
+        if not cleared_up_map:
+            return []
+        new_name_to_up_id: Dict[str, str] = {}
+        for up in new_constraint.unique_properties:
+            attr = target_entity.get_property_by_id(up.property_id)
+            if attr:
+                new_name_to_up_id[attr.name] = up.meta_id
+        if not new_name_to_up_id:
+            return []
+        modified: List[str] = []
+        for entity in self.database.entity_types.values():
+            entity_was_modified = False
+            for c in entity.constraints:
+                if c.kind != "foreign_key":
+                    continue
+                for fkp in c.foreign_key_properties:
+                    old_up_id = fkp.points_to_unique_property_id
+                    if old_up_id in cleared_up_map:
+                        new_up_id = new_name_to_up_id.get(
+                            cleared_up_map[old_up_id])
+                        if new_up_id:
+                            fkp.points_to_unique_property_id = new_up_id
+                            entity_was_modified = True
+            if entity_was_modified:
+                modified.append(entity.full_path)
+        return modified
 
     @staticmethod
     def _is_fk_column_unique(entity, attr) -> bool:
@@ -644,7 +687,7 @@ class KeysConstraintsHandlersMixin:
 
         entity = self.database.get_entity_type(entity_name) if entity_name else None
         if not entity or not key_columns:
-            return OperationResult.skipped("add_key: precondition not met")
+            return OperationResult.skipped("delete_key: precondition not met")
 
         key_columns_set = set(key_columns)
 
@@ -712,7 +755,7 @@ class KeysConstraintsHandlersMixin:
                         entity.constraints.remove(constraint)
                     self._touch(entity_name)
                     return OperationResult.ok()
-        return OperationResult.skipped("add_key: precondition not met")
+        return OperationResult.skipped("delete_key: precondition not met")
 
     @register_handler(OpType.DELETE_LABEL)
     def _handle_delete_label(self, params: DeleteLabelParams) -> OperationResult:

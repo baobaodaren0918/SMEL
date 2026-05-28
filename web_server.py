@@ -191,12 +191,16 @@ class SMILEHandler(SimpleHTTPRequestHandler):
                         skipped = {"passed": None,
                                    "summary": "Other reasons (parse failed)",
                                    "details": {}}
+                        skipped_integrity = {"passed": None,
+                                             "summary": "Other reasons (parse failed)",
+                                             "violations": []}
                         result = {
                             "ok": False, "errors": err.errors, "stage": "parse",
                             "validation_layer0": skipped,
                             "validation_meta": skipped,
                             "validation_export": skipped,
                             "validation_text_diff": skipped,
+                            "validation_integrity": skipped_integrity,
                             "validation_blame": "unverifiable",
                             "validation_summary": "SMILE parse failed",
                         }
@@ -265,6 +269,10 @@ class SMILEHandler(SimpleHTTPRequestHandler):
                                 "error": error_ct,
                             },
                             "operations_detail": ops_detail,
+                            # Live Database for Layer-0.5 integrity scan;
+                            # validate_pipeline consumes and the entry is dropped
+                            # before serialization. Matches the run_migration path.
+                            "__result_db": result_db,
                         }
                         try:
                             from validation.pipeline import validate_pipeline
@@ -274,16 +282,21 @@ class SMILEHandler(SimpleHTTPRequestHandler):
                             validation_meta = v["layer1"]
                             validation_export = v["layer2"]
                             validation_text_diff = v["layer3"]
+                            validation_integrity = v["integrity"]
                             validation_blame = v["blame"]
                             validation_summary = v["summary"]
                         except Exception as ex:
                             err_block = {"passed": None,
                                          "summary": f"Error: {ex}",
                                          "details": {}}
+                            err_block_integrity = {"passed": None,
+                                                   "summary": f"Error: {ex}",
+                                                   "violations": []}
                             validation_layer0 = err_block
                             validation_meta = err_block
                             validation_export = err_block
                             validation_text_diff = err_block
+                            validation_integrity = err_block_integrity
                             validation_blame = "unverifiable"
                             validation_summary = f"validation crashed: {ex}"
 
@@ -302,6 +315,7 @@ class SMILEHandler(SimpleHTTPRequestHandler):
                             "validation_meta": validation_meta,
                             "validation_export": validation_export,
                             "validation_text_diff": validation_text_diff,
+                            "validation_integrity": validation_integrity,
                             "validation_blame": validation_blame,
                             "validation_summary": validation_summary,
                         }

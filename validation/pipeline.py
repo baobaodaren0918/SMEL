@@ -1,13 +1,27 @@
-"""Unified pipeline validation with explicit blame attribution."""
+"""Unified pipeline validation with explicit blame attribution.
+
+The pipeline applies two preparation steps and three authoritative layers:
+  - Layer Preparation I  (``derive_layer0``):  did the SMILE script run cleanly?
+  - Layer Preparation II (``validate_integrity``): is the resulting metamodel
+    internally consistent (no dangling UUIDs, no UP.meta_id duplicates)?
+  - Layer 1 (``validate_meta``): does Meta V2 match the expected target?
+  - Layer 2 (``validate_export``): does export -> re-parse round-trip match?
+  - Layer 3 (``validate_text_diff``): does the exported native text match
+    the ground-truth target under set-based normalization?
+
+Layer 1/2/3 are the thesis-documented correctness layers; the two
+Preparation steps are pre-validation gates that surface different
+failure classes (script crash vs. internal model inconsistency)."""
 from typing import Any, Dict, List
 
 from validation.meta import validate_meta
 from validation.export import validate_export
+from validation.integrity import validate_integrity
 from validation.text_diff import validate_text_diff
 
 
 def derive_layer0(result_dict: Dict[str, Any]) -> Dict[str, Any]:
-    """Layer 0: did the SMILE script run cleanly?"""
+    """Layer Preparation I: did the SMILE script run cleanly?"""
     stats = result_dict.get("execution_stats", {})
     total = stats.get("total", 0)
     success = stats.get("success", 0)
@@ -86,9 +100,11 @@ def derive_layer0(result_dict: Dict[str, Any]) -> Dict[str, Any]:
 def derive_blame(layer0: Dict[str, Any], layer1: Dict[str, Any],
                  layer2: Dict[str, Any],
                  layer3: Dict[str, Any]) -> tuple:
-    """Pick a verdict from the four layers. L0 dominates, then L1/L2;
-    L3 contributes the ``text_diff`` verdict only when L1 and L2 both pass."""
-    # Script Execution check dominates: if the script didn't run cleanly,
+    """Pick a verdict from Layer Preparation I + Layer 1/2/3. Preparation I
+    dominates, then L1/L2; L3 contributes the ``text_diff`` verdict only
+    when L1 and L2 both pass. Layer Preparation II (integrity) is a
+    non-blocking diagnostic and is not consumed here."""
+    # Layer Preparation I dominates: if the script didn't run cleanly,
     # Layer 1/2/3 outcomes on the partial / wrong Meta V2 don't add
     # information.
     if not layer0.get("passed"):
@@ -134,14 +150,22 @@ def derive_blame(layer0: Dict[str, Any], layer1: Dict[str, Any],
 
 def validate_pipeline(result_dict: Dict[str, Any], target_type: str,
                       config_key: str = "") -> Dict[str, Any]:
-    """Run Layer 0/1/2/3 and derive a unified verdict. The returned dict
-    always carries the four ``layerN`` reports plus ``blame`` and
-    ``summary``; the blame may be ``text_diff`` when L1/L2 pass and L3
-    fails."""
+    """Run Layer Preparation I + II and Layer 1/2/3, and derive a unified
+    verdict. Layer Preparation II (integrity) is a non-blocking diagnostic —
+    it surfaces dangling UUID references in the post-script metamodel (see
+    ``validation/integrity.py``) but does not influence ``blame`` because
+    L1/L2 are the authoritative correctness gates."""
     layer0 = derive_layer0(result_dict)
     layer1 = validate_meta(result_dict, target_type, config_key)
     layer2 = validate_export(result_dict, target_type, config_key)
     layer3 = validate_text_diff(result_dict, target_type, config_key)
+
+    # Integrity check runs on the Database object stashed by run_migration
+    # at result_dict["__result_db"]. Skipped silently if absent.
+    integrity = (validate_integrity(result_dict["__result_db"])
+                 if result_dict.get("__result_db") is not None
+                 else {"passed": None, "summary": "Other reasons (no result_db)",
+                       "violations": []})
 
     blame, summary = derive_blame(layer0, layer1, layer2, layer3)
 
@@ -150,6 +174,7 @@ def validate_pipeline(result_dict: Dict[str, Any], target_type: str,
         "layer1": layer1,
         "layer2": layer2,
         "layer3": layer3,
+        "integrity": integrity,
         "blame": blame,
         "summary": summary,
     }

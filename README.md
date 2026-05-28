@@ -1,6 +1,6 @@
 # SMILE - Schema Transformation and Evolution Language
 
-A formally defined DSL for schema migration and evolution between heterogeneous database systems, supporting 4 data models with a full 4×4 migration matrix and three-layer automated validation.
+A formally defined DSL for schema migration and evolution between heterogeneous database systems, supporting 4 data models with a full 4×4 migration matrix, three-layer automated validation, and a metamodel integrity check.
 
 ## Supported Database Models
 
@@ -63,6 +63,8 @@ result = run_migration('northwind_g2c_specific')    # Graph -> Columnar
 result = run_migration('northwind_r2r_specific')    # Relational V1 -> V2
 
 print(result['exported_target'])       # Generated target schema
+print(result['validation_layer0'])     # Layer Preparation I: script execution
+print(result['validation_integrity'])  # Layer Preparation II: metamodel integrity check
 print(result['validation_meta'])       # Layer 1 validation result
 print(result['validation_export'])     # Layer 2 validation result
 print(result['validation_text_diff'])  # Layer 3 validation result
@@ -162,11 +164,12 @@ SMILE/
 │   ├── factory.py                     #   parse_smile_auto (grammar auto-detect by extension)
 │   ├── listeners.py                   #   ANTLR listeners (Specific + Generalized)
 │   └── params.py                      #   Per-op param dataclasses (NestParams, ...)
-├── validation/                        # Three-layer + blame-attribution validators
+├── validation/                        # Preparation I/II + three-layer + blame-attribution validators
+│   ├── integrity.py                   #   Layer Preparation II: metamodel integrity (dangling UUIDs, UP uniqueness)
 │   ├── meta.py                        #   Layer 1: Meta V2 vs expected schema (PIM)
 │   ├── export.py                      #   Layer 2: Export → re-parse round-trip (PSM round-trip)
 │   ├── text_diff.py                   #   Layer 3: Exported text vs target file (set-based)
-│   └── pipeline.py                    #   Wraps L0/L1/L2/L3; assigns blame
+│   └── pipeline.py                    #   Wraps Preparation I/II + L1/L2/L3; assigns blame
 │                                      #     (ok | smile_script | adapter | text_diff | both | script_failed | unverifiable)
 ├── diff/                              # Unified diff engine + two formatter shapes
 │   ├── engine.py                      #   compute_diff (single source of truth)
@@ -216,19 +219,24 @@ SMILE/
 | 2. SMILE Parsing | `parser.factory.parse_smile_auto()` | `.smile` / `.smile_gen` → `Operation` list |
 | 3. Transformation | `SchemaTransformer` (32 handlers, called via `core.run_apply`) | Meta V1 + Operations → Meta V2 |
 | 4. Forward Engineering | `ADAPTER_REGISTRY[target_type]` (driven by `core.run_export`) | Meta V2 → Target DDL |
-| 5. Validation | `validation.meta` + `validation.export` + `validation.text_diff` (composed by `validation.pipeline`) | Three-layer correctness check + blame attribution |
+| 5. Validation | `validation.integrity` + `validation.meta` + `validation.export` + `validation.text_diff` (composed by `validation.pipeline`) | Layer Preparation II (integrity) + three-layer correctness check + blame attribution |
 
 `core.run_migration()` is a thin orchestrator on top of the three pipeline helpers (`run_load`, `run_apply`, `run_export`) so each phase can also be invoked independently from the web UI's User Transformation flow.
 
-### Three-Layer Validation
+### Validation Pipeline (Preparation I/II + Layer 1/2/3)
+
+Two preparation steps run before the three thesis-documented correctness layers. Preparation I gates script execution; Preparation II asserts metamodel internal consistency. Layer 1/2/3 are the authoritative correctness gates and are the layers referenced in the thesis.
 
 | Layer | File | What it proves | How |
 |-------|------|---------------|-----|
-| **Layer 0** | `validation/pipeline.py` (`derive_layer0`) | SMILE script executed cleanly | No `error` or `skipped` ops, ≥1 entity in result |
+| **Preparation I** | `validation/pipeline.py` (`derive_layer0`) | SMILE script executed cleanly | No `error` or `skipped` ops, ≥1 entity in result |
+| **Preparation II** | `validation/integrity.py` | Metamodel is internally consistent (no dangling UUID pointers, UP.meta_id unique across DB) | Scan FK/UP/CHECK/EXISTENCE pointers + UP meta_id uniqueness |
 | **Layer 1** | `validation/meta.py` | SMILE script correctness (PIM equivalence) | Meta V2 vs parsed expected target |
 | **Layer 2** | `validation/export.py` | Adapter forward-engineering correctness (PSM round-trip, Foster PUT-GET law) | `parse(export(Meta V2))` vs parsed expected target |
 | **Layer 3** | `validation/text_diff.py` | Adapter output alignment with hand-written native (PSM style) | Exported text vs target file text under set-based normalization |
 | **Blame**   | `validation/pipeline.py` | Which side failed | `ok` / `smile_script` (L1) / `adapter` (L2) / `text_diff` (L3) / `both` / `script_failed` / `unverifiable` |
+
+Preparation II is a non-blocking diagnostic: integrity violations are surfaced but do not influence the `blame` verdict, because Layer 1/2 are the authoritative correctness gates. If integrity ever fails while L1/L2 pass, the metamodel is "right by chance" and the test suite asserts `passed is True` to catch this regression class.
 
 #### Dual-Role Validation Diagram
 

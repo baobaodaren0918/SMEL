@@ -31,47 +31,78 @@ from core.normalization import (
 logger = logging.getLogger(__name__)
 
 
-# SMILE syntax highlighting data (single source of truth for web_server.py frontend)
-# Generated from grammar token definitions — update here when grammar changes
-SMILE_SYNTAX = {
-    "keywords": [
+# SMILE syntax highlighting data for web_server.py frontend.
+# Derived at import time from grammar/smile_operations.json (the canonical
+# operations catalogue used by autocomplete) plus a small static set of
+# header / structural / clause keywords that do not have operation entries.
+# This eliminates the previous drift risk where a hand-maintained list here
+# could diverge from operations.json (CAST_ENTITY was previously missing).
+def _build_smile_syntax():
+    """Compose SMILE_SYNTAX["keywords"] from operations.json + static keywords."""
+    import json
+    from pathlib import Path
+
+    # Header / structural / clause keywords not represented as ops in the JSON
+    static_keywords = {
         # Header keywords
-        'MIGRATION', 'FROM', 'TO', 'USING', 'AS', 'INTO', 'WITH', 'WHERE', 'IN', 'KEY', 'AND', 'ON',
-        # Database model types
-        'RELATIONAL', 'DOCUMENT', 'GRAPH', 'COLUMNAR',
-        # Structure operations (shared by both grammars)
-        'NEST', 'UNNEST', 'FLATTEN', 'UNFLATTEN', 'UNWIND', 'WIND',
-        # CRUD verbs (Generalized grammar uses these directly)
-        'ADD', 'DELETE', 'REMOVE', 'RENAME', 'COPY', 'MOVE', 'MERGE', 'SPLIT', 'CAST', 'RECARD', 'TRANSFORM',
-        # Type parameters
-        'PROPERTY', 'ATTRIBUTE', 'ATTRIBUTES', 'CONSTRAINT', 'EMBEDDED', 'ENTITY', 'LABEL', 'RELATIONSHIP',
-        # Key types
+        'MIGRATION', 'EVOLUTION', 'FROM', 'TO', 'USING', 'VERSION',
+        'AS', 'INTO', 'WITH', 'WHERE', 'IN', 'KEY', 'AND', 'ON',
+        # Type parameters that appear standalone in clauses
+        'PROPERTY', 'ATTRIBUTE', 'ATTRIBUTES', 'CONSTRAINT', 'EMBEDDED',
+        'ENTITY', 'LABEL', 'RELATIONSHIP',
+        # Key kind modifiers (used in CAST_CONSTRAINT, key clauses)
         'PRIMARY', 'UNIQUE', 'FOREIGN', 'PARTITION', 'CLUSTERING',
         'REFERENCE', 'REFERENCES', 'COLUMNS', 'STRUCTURE',
-        # Cardinality
-        'CARDINALITY', 'ONE_TO_ONE', 'ONE_TO_MANY', 'ZERO_TO_ONE', 'ZERO_TO_MANY',
-        # Specific grammar compound keywords
-        'ADD_PROPERTY', 'ADD_EMBEDDED', 'ADD_ENTITY', 'ADD_LABEL',
-        'ADD_PRIMARY_KEY', 'ADD_FOREIGN_KEY', 'ADD_UNIQUE_KEY',
-        'ADD_PARTITION_KEY', 'ADD_CLUSTERING_KEY',
-        'ADD_CONSTRAINT',
-        'DELETE_PROPERTY', 'DELETE_EMBEDDED', 'DELETE_ENTITY', 'DELETE_LABEL',
-        'DELETE_PRIMARY_KEY', 'DELETE_UNIQUE_KEY', 'DELETE_FOREIGN_KEY',
-        'DELETE_PARTITION_KEY', 'DELETE_CLUSTERING_KEY',
-        'DELETE_CONSTRAINT',
-        'RENAME_PROPERTY', 'RENAME_ENTITY',
-        'COPY_PROPERTY', 'COPY_ENTITY', 'MOVE_PROPERTY',
-        'CAST_PROPERTY', 'CAST_CONSTRAINT',
         'NODE', 'DOCUMENT_ID',
+        # CARDINALITY clause + values
+        'CARDINALITY', 'ONE_TO_ONE', 'ONE_TO_MANY',
+        'ZERO_TO_ONE', 'ZERO_TO_MANY',
+        # CRUD/structural verb tokens (generalized grammar uses these
+        # standalone; the compound forms come from operations.json below)
+        'ADD', 'DELETE', 'REMOVE', 'RENAME', 'COPY', 'MOVE',
+        'MERGE', 'SPLIT', 'CAST', 'RECARD', 'TRANSFORM',
+        'NEST', 'UNNEST', 'FLATTEN', 'UNFLATTEN', 'UNWIND', 'WIND',
         # ADD_CONSTRAINT body keywords (REFERENCE/CHECK/EXISTENCE branches)
         'LOGICAL', 'EXISTENCE', 'CHECK', 'MATCHES', 'RAW',
         'NOT', 'OR', 'IS',
-    ],
-    "types": [
-        'String', 'Text', 'Int', 'Integer', 'Long', 'Double', 'Float',
-        'Decimal', 'Boolean', 'Date', 'DateTime', 'Timestamp', 'UUID', 'Binary',
-    ],
-}
+    }
+
+    keywords = set(static_keywords)
+    types: list = []
+
+    json_path = Path(__file__).resolve().parent.parent / "grammar" / "smile_operations.json"
+    try:
+        with json_path.open(encoding="utf-8") as f:
+            spec = json.load(f)
+    except (OSError, json.JSONDecodeError) as e:
+        logger.warning(
+            "Failed to load %s for SMILE_SYNTAX derivation: %s. "
+            "Falling back to static keyword set only.", json_path, e)
+        return {"keywords": sorted(keywords), "types": []}
+
+    # Every operation's specific keyword (e.g. ADD_PROPERTY) and the tokens of
+    # its generalized form (e.g. ADD PROPERTY → ADD, PROPERTY) join the set.
+    for op_meta in spec.get("operations", {}).values():
+        spec_kw = op_meta.get("specific")
+        if spec_kw:
+            keywords.add(spec_kw)
+        gen_kw = op_meta.get("generalized")
+        if gen_kw:
+            for tok in gen_kw.split():
+                keywords.add(tok)
+
+    # Enums: databaseType + cardinalityType go into keywords;
+    # dataType becomes the types list.
+    for v in spec.get("enums", {}).get("databaseType", []):
+        keywords.add(v)
+    for v in spec.get("enums", {}).get("cardinalityType", []):
+        keywords.add(v)
+    types = list(spec.get("enums", {}).get("dataType", []))
+
+    return {"keywords": sorted(keywords), "types": types}
+
+
+SMILE_SYNTAX = _build_smile_syntax()
 
 
 # Module-level constant: maps SOURCE_TYPE string -> DatabaseType enum.
@@ -306,13 +337,18 @@ def run_migration(direction: str) -> Dict[str, Any]:
             "error": error_count,
         },
         "smile_syntax": SMILE_SYNTAX,
+        # Live Database object for integrity check (Layer-0.5). Not serialised
+        # into JSON responses by db_to_dict — consumed only by validate_pipeline.
+        "__result_db": result_db,
     }
 
-    # Unified three-layer pipeline validation + blame attribution.
+    # Unified validation: Layer Preparation I (script execution) + Layer
+    # Preparation II (metamodel integrity) + Layer 1/2/3 (meta-compare,
+    # round-trip, text-fidelity) + blame attribution.
     # Top-level keys validation_layer0 / validation_meta / validation_export
-    # are surfaced for the CLI / web UI / tests; ``validation_meta`` and
-    # ``validation_export`` keep their pre-Layer-0 names for backwards
-    # compatibility with existing front-end code that reads them directly.
+    # are kept for backwards compatibility with existing front-end code that
+    # reads them by their pre-rename names; the conceptual mapping is
+    # documented in validation/pipeline.py.
     try:
         from validation.pipeline import validate_pipeline
         v = validate_pipeline(result_dict, target_type, direction)
@@ -320,15 +356,23 @@ def run_migration(direction: str) -> Dict[str, Any]:
         result_dict["validation_meta"] = v["layer1"]
         result_dict["validation_export"] = v["layer2"]
         result_dict["validation_text_diff"] = v["layer3"]
+        result_dict["validation_integrity"] = v["integrity"]
         result_dict["validation_blame"] = v["blame"]
         result_dict["validation_summary"] = v["summary"]
     except Exception as e:
         err = {"passed": None, "summary": f"Error: {e}", "details": {}}
+        # Integrity uses ``violations`` rather than ``details`` so the field
+        # shape matches the success path; consumers can rely on .violations.
+        err_integrity = {"passed": None, "summary": f"Error: {e}", "violations": []}
         result_dict["validation_layer0"] = err
         result_dict["validation_meta"] = err
         result_dict["validation_export"] = err
         result_dict["validation_text_diff"] = err
+        result_dict["validation_integrity"] = err_integrity
         result_dict["validation_blame"] = "unverifiable"
         result_dict["validation_summary"] = f"validation crashed: {e}"
+    finally:
+        # Don't leak the live Database object to JSON responses.
+        result_dict.pop("__result_db", None)
 
     return result_dict

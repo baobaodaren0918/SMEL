@@ -2,6 +2,7 @@
 
 import copy
 import logging
+from typing import List
 
 from Schema.unified_meta_schema import (
     EntityType, EntityKind, Property,
@@ -247,15 +248,18 @@ class CRUDHandlersMixin:
                     deleted_up_ids.add(up.meta_id)
 
         self.database.remove_entity_type(name)
-        # Clean up cross-references in other entities (Reference, Embedded, and Edge)
+        # Clean up cross-references in other entities (Reference, Embedded, and Edge);
+        # collect names of touched entities so the per-op diff hint reflects them.
+        modified_others: List[str] = []
         for other_entity in self.database.entity_types.values():
+            before_rels = len(other_entity.relationships)
             other_entity.relationships = [
                 rel for rel in other_entity.relationships
                 if not (hasattr(rel, 'refs_to') and rel.refs_to == name)
                 and not (hasattr(rel, 'aggregates') and rel.aggregates == name)
                 and not (isinstance(rel, Edge) and (rel.source_entity == name or rel.target_entity == name))
             ]
-            # Clean up ForeignKeyConstraints pointing to the deleted entity
+            before_cons = len(other_entity.constraints)
             if deleted_up_ids:
                 other_entity.constraints = [
                     c for c in other_entity.constraints
@@ -263,6 +267,9 @@ class CRUDHandlersMixin:
                             any(fkp.points_to_unique_property_id in deleted_up_ids
                                 for fkp in c.foreign_key_properties))
                 ]
+            if (len(other_entity.relationships) != before_rels
+                    or len(other_entity.constraints) != before_cons):
+                modified_others.append(other_entity.full_path)
         # Clean up EDGE entities that reference the deleted entity
         edges_to_remove = [
             e_name for e_name, e in self.database.entity_types.items()
@@ -270,7 +277,7 @@ class CRUDHandlersMixin:
         ]
         for e_name in edges_to_remove:
             self.database.remove_entity_type(e_name)
-        self._touch(name, *edges_to_remove)
+        self._touch(name, *edges_to_remove, *modified_others)
         self.changes.append(f"DELETE_ENTITY:{name}")
         return OperationResult.ok()
 
@@ -424,6 +431,11 @@ class CRUDHandlersMixin:
 
         new_entity = copy.deepcopy(src_entity)
         new_entity.object_name = [target_name]
+        # Refresh internal meta_ids on the clone so it doesn't collide with
+        # the source entity's Property / UniqueProperty UUIDs. Import here
+        # to avoid a circular dependency at module load.
+        from core.handlers.reshape import _refresh_entity_ids
+        _refresh_entity_ids(new_entity)
         # Update relationship paths that reference the old entity name
         for rel in new_entity.relationships:
             if isinstance(rel, Embedded):

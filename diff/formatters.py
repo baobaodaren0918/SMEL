@@ -129,10 +129,15 @@ def _format_entity_validation(ed: EntityDiff) -> Dict[str, Any]:
     # Constraints
     cd = ed.constraint_diff
     if cd is not None and not cd.is_empty():
-        c_issue = len(cd.missing_pk) + len(cd.extra_pk)
+        # Missing/extra CHECK is a hard issue (script forgot to add or wrongly
+        # added a CHECK predicate); it does not belong with PK/FK warnings.
+        c_issue = (len(cd.missing_pk) + len(cd.extra_pk)
+                   + len(cd.check_missing) + len(cd.check_extra))
         c_block: Dict[str, Any] = {"issue_count": c_issue}
         if cd.missing_pk:        c_block["missing_pk"] = cd.missing_pk
         if cd.extra_pk:          c_block["extra_pk"]   = cd.extra_pk
+        if cd.check_missing:     c_block["missing_check"] = cd.check_missing
+        if cd.check_extra:       c_block["extra_check"]   = cd.check_extra
         if cd.pk_type_changes:
             c_block["pk_type_warnings"] = [
                 {"columns": w["columns"], "actual": w["left"], "expected": w["right"]}

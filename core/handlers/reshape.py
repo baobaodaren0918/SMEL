@@ -2,6 +2,8 @@
 
 import copy
 import logging
+import uuid
+from typing import Dict
 
 from Schema.unified_meta_schema import (
     EntityType, EntityKind, Property,
@@ -18,6 +20,41 @@ from parser.listeners import OpType
 from core.transformer import register_handler
 
 logger = logging.getLogger(__name__)
+
+
+def _refresh_entity_ids(entity):
+    """Generate fresh meta_ids for every Property and UniqueProperty inside
+    ``entity`` and remap internal pointers (UP.property_id, FKP.property_id,
+    self-ref FKP.points_to_unique_property_id) accordingly. Cross-entity FK
+    targets (FKP.points_to_unique_property_id pointing at OTHER entities'
+    UPs) are intentionally left unchanged. Used after ``copy.deepcopy`` in
+    SPLIT / COPY_ENTITY to prevent UniqueProperty.meta_id collisions across
+    the original entity and its clone."""
+    prop_remap = {}
+    for prop in entity.properties:
+        new_id = str(uuid.uuid4())
+        prop_remap[prop.meta_id] = new_id
+        prop.meta_id = new_id
+    up_remap = {}
+    for c in entity.constraints:
+        if c.kind == "unique":
+            for up in c.unique_properties:
+                new_up_id = str(uuid.uuid4())
+                up_remap[up.meta_id] = new_up_id
+                up.meta_id = new_up_id
+                if up.property_id in prop_remap:
+                    up.property_id = prop_remap[up.property_id]
+        elif c.kind == "foreign_key":
+            for fkp in c.foreign_key_properties:
+                if fkp.property_id in prop_remap:
+                    fkp.property_id = prop_remap[fkp.property_id]
+                if fkp.points_to_unique_property_id in up_remap:
+                    fkp.points_to_unique_property_id = up_remap[
+                        fkp.points_to_unique_property_id]
+        elif c.kind == "check" and getattr(c, "target_property_id", None) in prop_remap:
+            c.target_property_id = prop_remap[c.target_property_id]
+        elif c.kind == "existence" and getattr(c, "target_property_id", None) in prop_remap:
+            c.target_property_id = prop_remap[c.target_property_id]
 
 
 
@@ -43,6 +80,21 @@ class ReshapeHandlersMixin:
         if source2.entity_kind == EntityKind.EDGE:
             logger.error(f"MERGE failed: entity '{source2_name}' is an EDGE entity, MERGE does not support EDGE")
             return OperationResult.skipped("merge: precondition not met")
+
+        # Snapshot the UniqueProperty meta_ids of both sources before any
+        # mutation, paired with their property names. After we build the
+        # merged entity and refresh its IDs (below), we walk every FK in the
+        # database and relink ``points_to_unique_property_id`` from these old
+        # source UPs to the new UPs (matched by property name). Without this,
+        # any incoming FK that pointed at a removed source's PK would orphan.
+        merged_up_map: Dict[str, str] = {}
+        for src in (source1, source2):
+            for c in src.constraints:
+                if c.kind == "unique":
+                    for up in c.unique_properties:
+                        attr = src.get_property_by_id(up.property_id)
+                        if attr:
+                            merged_up_map[up.meta_id] = attr.name
 
         # Create new entity with combined properties
         new_entity = EntityType(object_name=[target_name])
@@ -114,6 +166,20 @@ class ReshapeHandlersMixin:
 
         self.database.add_entity_type(new_entity)
 
+        # Refresh all internal meta_ids on the merged entity. Without this, the
+        # deep-copied constraints (above) silently preserve UPs whose meta_ids
+        # collide with source1/source2 UPs — an invariant violation the
+        # integrity check would flag. After refreshing, build a name->new_id
+        # map so the FK relink loop below can rewrite incoming pointers.
+        _refresh_entity_ids(new_entity)
+        new_up_by_name: Dict[str, str] = {}
+        for c in new_entity.constraints:
+            if c.kind == "unique":
+                for up in c.unique_properties:
+                    attr = new_entity.get_property_by_id(up.property_id)
+                    if attr and attr.name not in new_up_by_name:
+                        new_up_by_name[attr.name] = up.meta_id
+
         # Remove source entities if different from target
         removed_sources = []
         if source1_name != target_name:
@@ -122,6 +188,21 @@ class ReshapeHandlersMixin:
         if source2_name != target_name:
             self.database.remove_entity_type(source2_name)
             removed_sources.append(source2_name)
+
+        # Walk all FKs and relink ``points_to_unique_property_id`` from old
+        # source UPs to the merged entity's new UPs (matched by property name).
+        if removed_sources:
+            for entity in self.database.entity_types.values():
+                for c in entity.constraints:
+                    if c.kind != "foreign_key":
+                        continue
+                    for fkp in c.foreign_key_properties:
+                        old_up = fkp.points_to_unique_property_id
+                        if old_up in merged_up_map:
+                            prop_name = merged_up_map[old_up]
+                            new_up = new_up_by_name.get(prop_name)
+                            if new_up:
+                                fkp.points_to_unique_property_id = new_up
 
         # Update cross-references in other entities pointing to removed sources
         for old_name in removed_sources:
@@ -219,6 +300,10 @@ class ReshapeHandlersMixin:
                     new_pk = copy.deepcopy(pk)
                     for up in new_pk.unique_properties:
                         up.property_id = meta_id_map[up.property_id]
+                        # Fresh UniqueProperty.meta_id to avoid UUID collision
+                        # with the source's preserved PK (when source survives
+                        # this SPLIT via in-place modification below).
+                        up.meta_id = str(uuid.uuid4())
                     new_entity.add_constraint(new_pk)
 
             self.database.add_entity_type(new_entity)
