@@ -997,13 +997,14 @@ class RelationshipTrace:
 class Relationship(ABC):
     """Base for Reference / Embedded / Edge.
 
-    Cardinality is bidirectional and follows the UML "located-at" convention:
-    ``target_end_cardinality`` is the multiplicity at the target end of the
-    association — i.e., for each source entity, how many target entities it
-    references. ``source_end_cardinality`` is the multiplicity at the source
-    end — i.e., for each target entity, how many source entities reference it.
-    ``None`` on the source end means "not declared" — distinct from the
-    explicit unconstrained default ``ZERO_TO_MANY``.
+    Cardinality is bidirectional. Each field is named after the end of the
+    relationship whose multiplicity it stores: ``target_end_cardinality`` is
+    the multiplicity at the target end of the association — i.e., for each
+    source entity, how many target entities it references.
+    ``source_end_cardinality`` is the multiplicity at the source end — i.e.,
+    for each target entity, how many source entities reference it. ``None``
+    on the source end means "not declared" — distinct from the explicit
+    unconstrained default ``ZERO_TO_MANY``.
     """
     target_end_cardinality: Cardinality = Cardinality.ONE_TO_ONE
     source_end_cardinality: Optional[Cardinality] = None

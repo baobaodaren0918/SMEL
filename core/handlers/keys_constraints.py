@@ -952,6 +952,7 @@ class KeysConstraintsHandlersMixin:
             edge_entity.source_entity = None
             edge_entity.target_entity = None
             edge_entity.edge_target_end_cardinality = None
+            edge_entity.edge_source_end_cardinality = None
 
             self.changes.append(f"TRANSFORM:{name}->ENTITY")
             return OperationResult.ok()

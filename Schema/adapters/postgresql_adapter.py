@@ -741,7 +741,8 @@ class PostgreSQLAdapter(DatabaseAdapter):
     @staticmethod
     def _derive_fk_cardinalities(is_optional: bool, is_unique: bool):
         """Return ``(target_end_cardinality, source_end_cardinality)`` for a FK
-        column under the UML "located-at" convention:
+        column. Each field stores the multiplicity at the end of the
+        relationship named by the field:
 
             target_end = multiplicity at the target end (per FK row, how many
                          target rows)
