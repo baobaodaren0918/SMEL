@@ -123,10 +123,16 @@ ADD PARTITION KEY (category_id, supplier_id) TO products
 -- products: { category_id [PARTITION], supplier_id [PARTITION], product_id [CLUSTERING], product_name, unit_price, units_in_stock, discontinued, quantity_per_unit }
 
 -- orders: partition by customer_id, cluster by (order_date, order_id).
--- Same pattern as products: CAST existing NODE_KEY to CLUSTERING then append.
-CAST CONSTRAINT orders.order_id TO CLUSTERING KEY
+-- order_id arrives as the inherited single-column NODE_KEY, so it sits first
+-- in the key's property list. Reusing it via CAST (the products pattern) would
+-- anchor order_id as the FIRST clustering column and yield cluster
+-- (order_id, order_date) -- the wrong order. Since orders needs TWO clustering
+-- columns in a specific order, drop the inherited key and rebuild the Cassandra
+-- key explicitly: partition customer_id, then clustering order_date, then order_id.
+DELETE PRIMARY KEY order_id FROM orders
 ADD PARTITION KEY customer_id TO orders
 ADD CLUSTERING KEY order_date TO orders
+ADD CLUSTERING KEY order_id TO orders
 -- Result:
 -- orders: { customer_id [PARTITION], order_date [CLUSTERING], order_id [CLUSTERING], required_date, shipped_date, freight, ship_name, ship_address, ship_city, ship_region, ship_postal_code, ship_country, employee_id, shipper_id }
 

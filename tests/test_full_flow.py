@@ -254,10 +254,12 @@ def run_test(direction: str, verbose: bool = False) -> dict:
     # ── Layer 1 & 2: Two-layer validation (all tests with target files) ──
     layer1 = None
     layer2 = None
+    layer3 = None
     total_warnings = 0
 
     v_meta = r.get("validation_meta", {})
     v_export = r.get("validation_export", {})
+    v_text_diff = r.get("validation_text_diff", {})
     v_integrity = r.get("validation_integrity", {})
 
     # Layer Preparation II (integrity) must run AND pass for every config.
@@ -279,12 +281,16 @@ def run_test(direction: str, verbose: bool = False) -> dict:
         layer1 = v_meta.get("passed")
     if v_export.get("passed") is not None:
         layer2 = v_export.get("passed")
+    if v_text_diff.get("passed") is not None:
+        layer3 = v_text_diff.get("passed")
 
     overall_passed = layer0
     if layer1 is not None:
         overall_passed = overall_passed and layer1
     if layer2 is not None:
         overall_passed = overall_passed and layer2
+    if layer3 is not None:
+        overall_passed = overall_passed and layer3
 
     # ── Print results ──
     status = "PASS" if overall_passed else "FAIL"
@@ -301,12 +307,17 @@ def run_test(direction: str, verbose: bool = False) -> dict:
           f"(actual={l1_counts.get('actual', '?')}, expected={l1_counts.get('expected', '?')})")
     print(f"         Layer 2: {l2_summary} "
           f"(actual={l2_counts.get('actual', '?')}, expected={l2_counts.get('expected', '?')})")
+    l3_summary = v_text_diff.get("summary", "N/A")
+    print(f"         Layer 3: {l3_summary}")
 
     # Print errors if any layer failed
     if layer1 is False:
         _print_validation_errors(v_meta)
     if layer2 is False:
         _print_validation_errors(v_export)
+    if layer3 is False:
+        for ln in (v_text_diff.get("details") or {}).get("diff_preview", []) or []:
+            print(f"         {ln}")
 
     # Print warnings (always, even on PASS)
     if layer1 is not None:
@@ -323,6 +334,7 @@ def run_test(direction: str, verbose: bool = False) -> dict:
         "layer0": layer0,
         "layer1": layer1,
         "layer2": layer2,
+        "layer3": layer3,
         "warnings": total_warnings,
         "stats": stats,
     }

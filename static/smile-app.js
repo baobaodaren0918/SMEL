@@ -265,21 +265,22 @@
 
         // Renders the Verdict-layer banner shown above the per-layer rows.
         // Maps the code-level blame string (smile_script / adapter / ...) to
-        // the paper-facing label (target_PIM / target_schema / ...) so that
-        // the UI matches the four-category Verdict description in
-        // paper smile.tex Figure 6. Colour follows pass/fail intent: green
-        // for ok, deep red for both/script_failed, plain red for single-layer
+        // the paper-facing verdict label so that the UI matches the Verdict
+        // synthesis in chapter 5 (Table tab:verdict-synthesis): target_meta
+        // (Layer 1), round-trip_meta (Layer 2), target_schema (Layer 3),
+        // none (unverifiable). Colour follows pass/fail intent: green for ok,
+        // deep red for both/script_failed, plain red for single-layer
         // failures, gray for unverifiable.
         function renderVerdictBanner(blame, summary) {
             if (blame == null) return '';
             var paperLabel = {
                 'ok': 'OK',
-                'smile_script': 'TARGET_PIM',
-                'adapter': 'TARGET_SCHEMA',
+                'smile_script': 'TARGET_META',
+                'adapter': 'ROUND-TRIP_META',
                 'both': 'BOTH',
                 'script_failed': 'SCRIPT_FAILED',
-                'text_diff': 'TARGET_TEXT',
-                'unverifiable': 'OTHER'
+                'text_diff': 'TARGET_SCHEMA',
+                'unverifiable': 'NONE'
             }[blame] || blame.toUpperCase();
             var colour = {
                 'ok': '#1B873F',
@@ -342,12 +343,13 @@
             var html = '<div class="validation-section">';
             html += '<div class="validation-section-title">Validation</div>';
 
-            // Verdict banner — directly surfaces the four/five Verdict-layer
-            // categories from paper smile.tex Figure 6 (ok / target_PIM /
-            // target_schema / both / script_failed) instead of leaving the
+            // Verdict banner — directly surfaces the Verdict-synthesis
+            // categories from chapter 5 (Table tab:verdict-synthesis: ok /
+            // target_meta / round-trip_meta / target_schema / none, plus the
+            // implementation-only both / script_failed) instead of leaving the
             // user to infer them from per-layer PASS/FAIL badges. The verdict
             // string itself comes from validation/pipeline.derive_blame; the
-            // rendered label uses paper terminology so the UI matches the
+            // rendered label uses the thesis terminology so the UI matches the
             // thesis description verbatim.
             html += renderVerdictBanner(data.validation_blame, vSummary);
 

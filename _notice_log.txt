@@ -9,6 +9,7 @@ NORTHWIND SAME-MODEL EVOLUTION (8 tests)
          Layer 0: PASS (34 ops, 34 success, 0 skipped, 0 error, 11 entities)
          Layer 1: PASS (actual=11, expected=11)
          Layer 2: PASS (actual=11, expected=11)
+         Layer 3: PASS (text matches under set-based normalization)
 
          --- Source Schema ---
          categories: ['category_id [PK]', 'category_name', 'description']
@@ -36,6 +37,7 @@ NORTHWIND SAME-MODEL EVOLUTION (8 tests)
          Layer 0: PASS (34 ops, 34 success, 0 skipped, 0 error, 11 entities)
          Layer 1: PASS (actual=11, expected=11)
          Layer 2: PASS (actual=11, expected=11)
+         Layer 3: PASS (text matches under set-based normalization)
 
          --- Source Schema ---
          categories: ['category_id [PK]', 'category_name', 'description']
@@ -63,6 +65,7 @@ NORTHWIND SAME-MODEL EVOLUTION (8 tests)
          Layer 0: PASS (17 ops, 17 success, 0 skipped, 0 error, 13 entities)
          Layer 1: PASS (actual=13, expected=13)
          Layer 2: PASS (actual=13, expected=13)
+         Layer 3: PASS (text matches under set-based normalization)
 
          --- Source Schema ---
          orders.ship_destination: ['ship_address', 'ship_city', 'ship_region', 'ship_postal_code', 'ship_country']
@@ -95,6 +98,7 @@ NORTHWIND SAME-MODEL EVOLUTION (8 tests)
          Layer 0: PASS (17 ops, 17 success, 0 skipped, 0 error, 13 entities)
          Layer 1: PASS (actual=13, expected=13)
          Layer 2: PASS (actual=13, expected=13)
+         Layer 3: PASS (text matches under set-based normalization)
 
          --- Source Schema ---
          orders.ship_destination: ['ship_address', 'ship_city', 'ship_region', 'ship_postal_code', 'ship_country']
@@ -124,11 +128,10 @@ NORTHWIND SAME-MODEL EVOLUTION (8 tests)
          orders.employee.territories: ['territory_id', 'territory_description'] embedded=['sales_region']
          orders.employee.territories.sales_region: ['region_id', 'region_description']
   [PASS] northwind_g2g_generalized
-         Layer 0: PASS (24 ops, 24 success, 0 skipped, 0 error, 9 entities)
+         Layer 0: PASS (27 ops, 27 success, 0 skipped, 0 error, 9 entities)
          Layer 1: PASS (actual=9, expected=9)
          Layer 2: PASS (actual=9, expected=9)
-      [NOTICE] contact.customer_id.is_optional: actual=False expected=True
-                Reason: Nullability difference across DB types (e.g. MongoDB optional vs Cassandra NOT NULL)
+         Layer 3: PASS (text matches under set-based normalization)
 
          --- Source Schema ---
          categories: ['category_id [PK]', 'category_name', 'description']
@@ -150,11 +153,10 @@ NORTHWIND SAME-MODEL EVOLUTION (8 tests)
          sales_region: ['region_id [PK]', 'region_description']
          territories: ['territory_id [PK]', 'territory_description']
   [PASS] northwind_g2g_specific
-         Layer 0: PASS (24 ops, 24 success, 0 skipped, 0 error, 9 entities)
+         Layer 0: PASS (27 ops, 27 success, 0 skipped, 0 error, 9 entities)
          Layer 1: PASS (actual=9, expected=9)
          Layer 2: PASS (actual=9, expected=9)
-      [NOTICE] contact.customer_id.is_optional: actual=False expected=True
-                Reason: Nullability difference across DB types (e.g. MongoDB optional vs Cassandra NOT NULL)
+         Layer 3: PASS (text matches under set-based normalization)
 
          --- Source Schema ---
          categories: ['category_id [PK]', 'category_name', 'description']
@@ -179,6 +181,7 @@ NORTHWIND SAME-MODEL EVOLUTION (8 tests)
          Layer 0: PASS (26 ops, 26 success, 0 skipped, 0 error, 11 entities)
          Layer 1: PASS (actual=11, expected=11)
          Layer 2: PASS (actual=11, expected=11)
+         Layer 3: PASS (text matches under set-based normalization)
 
          --- Source Schema ---
          categories: ['category_id [PK]', 'category_name', 'description']
@@ -206,6 +209,7 @@ NORTHWIND SAME-MODEL EVOLUTION (8 tests)
          Layer 0: PASS (26 ops, 26 success, 0 skipped, 0 error, 11 entities)
          Layer 1: PASS (actual=11, expected=11)
          Layer 2: PASS (actual=11, expected=11)
+         Layer 3: PASS (text matches under set-based normalization)
 
          --- Source Schema ---
          categories: ['category_id [PK]', 'category_name', 'description']
@@ -234,9 +238,10 @@ NORTHWIND SAME-MODEL EVOLUTION (8 tests)
 NORTHWIND CROSS-MODEL MIGRATION (24 tests)
 ======================================================================
   [PASS] northwind_c2d_generalized
-         Layer 0: PASS (31 ops, 31 success, 0 skipped, 0 error, 11 entities)
+         Layer 0: PASS (30 ops, 30 success, 0 skipped, 0 error, 11 entities)
          Layer 1: PASS (actual=11, expected=11)
          Layer 2: PASS (actual=11, expected=11)
+         Layer 3: PASS (text matches under set-based normalization)
 
          --- Source Schema ---
          categories: ['category_id [PK]', 'category_name', 'description']
@@ -261,9 +266,10 @@ NORTHWIND CROSS-MODEL MIGRATION (24 tests)
          orders.details.product.category: ['category_name', 'description']
          orders.details.product.supplier: ['company_name', 'contact_name', 'contact_title', 'phone', 'fax', 'street', 'city', 'region', 'postal_code', 'country']
   [PASS] northwind_c2d_specific
-         Layer 0: PASS (31 ops, 31 success, 0 skipped, 0 error, 11 entities)
+         Layer 0: PASS (30 ops, 30 success, 0 skipped, 0 error, 11 entities)
          Layer 1: PASS (actual=11, expected=11)
          Layer 2: PASS (actual=11, expected=11)
+         Layer 3: PASS (text matches under set-based normalization)
 
          --- Source Schema ---
          categories: ['category_id [PK]', 'category_name', 'description']
@@ -288,9 +294,10 @@ NORTHWIND CROSS-MODEL MIGRATION (24 tests)
          orders.details.product.category: ['category_name', 'description']
          orders.details.product.supplier: ['company_name', 'contact_name', 'contact_title', 'phone', 'fax', 'street', 'city', 'region', 'postal_code', 'country']
   [PASS] northwind_c2g_generalized
-         Layer 0: PASS (31 ops, 31 success, 0 skipped, 0 error, 7 entities)
+         Layer 0: PASS (37 ops, 37 success, 0 skipped, 0 error, 7 entities)
          Layer 1: PASS (actual=7, expected=7)
          Layer 2: PASS (actual=7, expected=7)
+         Layer 3: PASS (text matches under set-based normalization)
 
          --- Source Schema ---
          categories: ['category_id [PK]', 'category_name', 'description']
@@ -311,9 +318,10 @@ NORTHWIND CROSS-MODEL MIGRATION (24 tests)
          products: ['product_id [PK]', 'product_name', 'unit_price', 'units_in_stock', 'discontinued', 'quantity_per_unit']
          orders: ['order_date', 'order_id [PK]', 'required_date', 'shipped_date', 'freight', 'ship_name', 'ship_address', 'ship_city', 'ship_region', 'ship_postal_code', 'ship_country']
   [PASS] northwind_c2g_specific
-         Layer 0: PASS (31 ops, 31 success, 0 skipped, 0 error, 7 entities)
+         Layer 0: PASS (37 ops, 37 success, 0 skipped, 0 error, 7 entities)
          Layer 1: PASS (actual=7, expected=7)
          Layer 2: PASS (actual=7, expected=7)
+         Layer 3: PASS (text matches under set-based normalization)
 
          --- Source Schema ---
          categories: ['category_id [PK]', 'category_name', 'description']
@@ -337,6 +345,7 @@ NORTHWIND CROSS-MODEL MIGRATION (24 tests)
          Layer 0: PASS (22 ops, 22 success, 0 skipped, 0 error, 8 entities)
          Layer 1: PASS (actual=8, expected=8)
          Layer 2: PASS (actual=8, expected=8)
+         Layer 3: PASS (text matches under set-based normalization)
 
          --- Source Schema ---
          categories: ['category_id [PK]', 'category_name', 'description']
@@ -361,6 +370,7 @@ NORTHWIND CROSS-MODEL MIGRATION (24 tests)
          Layer 0: PASS (22 ops, 22 success, 0 skipped, 0 error, 8 entities)
          Layer 1: PASS (actual=8, expected=8)
          Layer 2: PASS (actual=8, expected=8)
+         Layer 3: PASS (text matches under set-based normalization)
 
          --- Source Schema ---
          categories: ['category_id [PK]', 'category_name', 'description']
@@ -382,9 +392,10 @@ NORTHWIND CROSS-MODEL MIGRATION (24 tests)
          orders: ['customer_id', 'order_date', 'order_id [PK]', 'required_date', 'shipped_date', 'freight', 'ship_name', 'ship_address', 'ship_city', 'ship_region', 'ship_postal_code', 'ship_country', 'employee_id', 'shipper_id'] refs=['customer_id->customers', 'employee_id->employees', 'shipper_id->shippers']
          order_details: ['order_id [PK]', 'product_id [PK]', 'unit_price', 'quantity', 'discount'] refs=['order_id->orders', 'product_id->products']
   [PASS] northwind_d2c_generalized
-         Layer 0: PASS (55 ops, 55 success, 0 skipped, 0 error, 8 entities)
+         Layer 0: PASS (51 ops, 51 success, 0 skipped, 0 error, 8 entities)
          Layer 1: PASS (actual=8, expected=8)
          Layer 2: PASS (actual=8, expected=8)
+         Layer 3: PASS (text matches under set-based normalization)
 
          --- Source Schema ---
          orders.ship_destination: ['ship_address', 'ship_city', 'ship_region', 'ship_postal_code', 'ship_country']
@@ -409,9 +420,10 @@ NORTHWIND CROSS-MODEL MIGRATION (24 tests)
          suppliers: ['company_name', 'contact_name', 'contact_title', 'phone', 'fax', 'street', 'city', 'region', 'postal_code', 'country', 'supplier_id [PK]']
          categories: ['category_name', 'description', 'category_id [PK]']
   [PASS] northwind_d2c_specific
-         Layer 0: PASS (55 ops, 55 success, 0 skipped, 0 error, 8 entities)
+         Layer 0: PASS (51 ops, 51 success, 0 skipped, 0 error, 8 entities)
          Layer 1: PASS (actual=8, expected=8)
          Layer 2: PASS (actual=8, expected=8)
+         Layer 3: PASS (text matches under set-based normalization)
 
          --- Source Schema ---
          orders.ship_destination: ['ship_address', 'ship_city', 'ship_region', 'ship_postal_code', 'ship_country']
@@ -436,9 +448,10 @@ NORTHWIND CROSS-MODEL MIGRATION (24 tests)
          suppliers: ['company_name', 'contact_name', 'contact_title', 'phone', 'fax', 'street', 'city', 'region', 'postal_code', 'country', 'supplier_id [PK]']
          categories: ['category_name', 'description', 'category_id [PK]']
   [PASS] northwind_d2g_generalized
-         Layer 0: PASS (55 ops, 55 success, 0 skipped, 0 error, 7 entities)
+         Layer 0: PASS (54 ops, 54 success, 0 skipped, 0 error, 7 entities)
          Layer 1: PASS (actual=7, expected=7)
          Layer 2: PASS (actual=7, expected=7)
+         Layer 3: PASS (text matches under set-based normalization)
 
          --- Source Schema ---
          orders.ship_destination: ['ship_address', 'ship_city', 'ship_region', 'ship_postal_code', 'ship_country']
@@ -462,9 +475,10 @@ NORTHWIND CROSS-MODEL MIGRATION (24 tests)
          suppliers: ['company_name', 'contact_name', 'contact_title', 'phone', 'fax', 'street', 'city', 'region', 'postal_code', 'country', 'supplier_id [PK]']
          categories: ['category_name', 'description', 'category_id [PK]']
   [PASS] northwind_d2g_specific
-         Layer 0: PASS (55 ops, 55 success, 0 skipped, 0 error, 7 entities)
+         Layer 0: PASS (54 ops, 54 success, 0 skipped, 0 error, 7 entities)
          Layer 1: PASS (actual=7, expected=7)
          Layer 2: PASS (actual=7, expected=7)
+         Layer 3: PASS (text matches under set-based normalization)
 
          --- Source Schema ---
          orders.ship_destination: ['ship_address', 'ship_city', 'ship_region', 'ship_postal_code', 'ship_country']
@@ -491,6 +505,7 @@ NORTHWIND CROSS-MODEL MIGRATION (24 tests)
          Layer 0: PASS (52 ops, 52 success, 0 skipped, 0 error, 8 entities)
          Layer 1: PASS (actual=8, expected=8)
          Layer 2: PASS (actual=8, expected=8)
+         Layer 3: PASS (text matches under set-based normalization)
 
          --- Source Schema ---
          orders.ship_destination: ['ship_address', 'ship_city', 'ship_region', 'ship_postal_code', 'ship_country']
@@ -518,6 +533,7 @@ NORTHWIND CROSS-MODEL MIGRATION (24 tests)
          Layer 0: PASS (52 ops, 52 success, 0 skipped, 0 error, 8 entities)
          Layer 1: PASS (actual=8, expected=8)
          Layer 2: PASS (actual=8, expected=8)
+         Layer 3: PASS (text matches under set-based normalization)
 
          --- Source Schema ---
          orders.ship_destination: ['ship_address', 'ship_city', 'ship_region', 'ship_postal_code', 'ship_country']
@@ -542,9 +558,10 @@ NORTHWIND CROSS-MODEL MIGRATION (24 tests)
          suppliers: ['company_name', 'contact_name', 'contact_title', 'phone', 'fax', 'street', 'city', 'region', 'postal_code', 'country', 'supplier_id [PK]']
          categories: ['category_name', 'description', 'category_id [PK]']
   [PASS] northwind_g2c_generalized
-         Layer 0: PASS (29 ops, 29 success, 0 skipped, 0 error, 8 entities)
+         Layer 0: PASS (28 ops, 28 success, 0 skipped, 0 error, 8 entities)
          Layer 1: PASS (actual=8, expected=8)
          Layer 2: PASS (actual=8, expected=8)
+         Layer 3: PASS (text matches under set-based normalization)
 
          --- Source Schema ---
          categories: ['category_id [PK]', 'category_name', 'description']
@@ -565,9 +582,10 @@ NORTHWIND CROSS-MODEL MIGRATION (24 tests)
          orders: ['order_id [PK]', 'order_date [PK]', 'required_date', 'shipped_date', 'freight', 'ship_name', 'ship_address', 'ship_city', 'ship_region', 'ship_postal_code', 'ship_country', 'customer_id [PK]', 'employee_id', 'shipper_id']
          order_details: ['unit_price', 'quantity', 'discount', 'order_id [PK]', 'product_id [PK]']
   [PASS] northwind_g2c_specific
-         Layer 0: PASS (29 ops, 29 success, 0 skipped, 0 error, 8 entities)
+         Layer 0: PASS (28 ops, 28 success, 0 skipped, 0 error, 8 entities)
          Layer 1: PASS (actual=8, expected=8)
          Layer 2: PASS (actual=8, expected=8)
+         Layer 3: PASS (text matches under set-based normalization)
 
          --- Source Schema ---
          categories: ['category_id [PK]', 'category_name', 'description']
@@ -591,6 +609,7 @@ NORTHWIND CROSS-MODEL MIGRATION (24 tests)
          Layer 0: PASS (40 ops, 40 success, 0 skipped, 0 error, 11 entities)
          Layer 1: PASS (actual=11, expected=11)
          Layer 2: PASS (actual=11, expected=11)
+         Layer 3: PASS (text matches under set-based normalization)
 
          --- Source Schema ---
          categories: ['category_id [PK]', 'category_name', 'description']
@@ -617,6 +636,7 @@ NORTHWIND CROSS-MODEL MIGRATION (24 tests)
          Layer 0: PASS (40 ops, 40 success, 0 skipped, 0 error, 11 entities)
          Layer 1: PASS (actual=11, expected=11)
          Layer 2: PASS (actual=11, expected=11)
+         Layer 3: PASS (text matches under set-based normalization)
 
          --- Source Schema ---
          categories: ['category_id [PK]', 'category_name', 'description']
@@ -643,6 +663,7 @@ NORTHWIND CROSS-MODEL MIGRATION (24 tests)
          Layer 0: PASS (32 ops, 32 success, 0 skipped, 0 error, 8 entities)
          Layer 1: PASS (actual=8, expected=8)
          Layer 2: PASS (actual=8, expected=8)
+         Layer 3: PASS (text matches under set-based normalization)
 
          --- Source Schema ---
          categories: ['category_id [PK]', 'category_name', 'description']
@@ -666,6 +687,7 @@ NORTHWIND CROSS-MODEL MIGRATION (24 tests)
          Layer 0: PASS (32 ops, 32 success, 0 skipped, 0 error, 8 entities)
          Layer 1: PASS (actual=8, expected=8)
          Layer 2: PASS (actual=8, expected=8)
+         Layer 3: PASS (text matches under set-based normalization)
 
          --- Source Schema ---
          categories: ['category_id [PK]', 'category_name', 'description']
@@ -689,6 +711,7 @@ NORTHWIND CROSS-MODEL MIGRATION (24 tests)
          Layer 0: PASS (22 ops, 22 success, 0 skipped, 0 error, 8 entities)
          Layer 1: PASS (actual=8, expected=8)
          Layer 2: PASS (actual=8, expected=8)
+         Layer 3: PASS (text matches under set-based normalization)
       [NOTICE] orders.employee_id.is_optional: actual=False expected=True
                 Reason: Nullability difference across DB types (e.g. MongoDB optional vs Cassandra NOT NULL)
       [NOTICE] orders.shipper_id.is_optional: actual=False expected=True
@@ -717,6 +740,7 @@ NORTHWIND CROSS-MODEL MIGRATION (24 tests)
          Layer 0: PASS (22 ops, 22 success, 0 skipped, 0 error, 8 entities)
          Layer 1: PASS (actual=8, expected=8)
          Layer 2: PASS (actual=8, expected=8)
+         Layer 3: PASS (text matches under set-based normalization)
       [NOTICE] orders.employee_id.is_optional: actual=False expected=True
                 Reason: Nullability difference across DB types (e.g. MongoDB optional vs Cassandra NOT NULL)
       [NOTICE] orders.shipper_id.is_optional: actual=False expected=True
@@ -745,6 +769,7 @@ NORTHWIND CROSS-MODEL MIGRATION (24 tests)
          Layer 0: PASS (24 ops, 24 success, 0 skipped, 0 error, 11 entities)
          Layer 1: PASS (actual=11, expected=11)
          Layer 2: PASS (actual=11, expected=11)
+         Layer 3: PASS (text matches under set-based normalization)
 
          --- Source Schema ---
          categories: ['category_id [PK]', 'category_name', 'description']
@@ -772,6 +797,7 @@ NORTHWIND CROSS-MODEL MIGRATION (24 tests)
          Layer 0: PASS (24 ops, 24 success, 0 skipped, 0 error, 11 entities)
          Layer 1: PASS (actual=11, expected=11)
          Layer 2: PASS (actual=11, expected=11)
+         Layer 3: PASS (text matches under set-based normalization)
 
          --- Source Schema ---
          categories: ['category_id [PK]', 'category_name', 'description']
@@ -799,6 +825,7 @@ NORTHWIND CROSS-MODEL MIGRATION (24 tests)
          Layer 0: PASS (32 ops, 32 success, 0 skipped, 0 error, 7 entities)
          Layer 1: PASS (actual=7, expected=7)
          Layer 2: PASS (actual=7, expected=7)
+         Layer 3: PASS (text matches under set-based normalization)
 
          --- Source Schema ---
          categories: ['category_id [PK]', 'category_name', 'description']
@@ -822,6 +849,7 @@ NORTHWIND CROSS-MODEL MIGRATION (24 tests)
          Layer 0: PASS (32 ops, 32 success, 0 skipped, 0 error, 7 entities)
          Layer 1: PASS (actual=7, expected=7)
          Layer 2: PASS (actual=7, expected=7)
+         Layer 3: PASS (text matches under set-based normalization)
 
          --- Source Schema ---
          categories: ['category_id [PK]', 'category_name', 'description']
@@ -849,7 +877,7 @@ SUMMARY
   Northwind Cross     : 24/24 passed  [PASS]
 ----------------------------------------------------------------------
   TOTAL               : 32/32 passed
-  Notices             : 6 (see details above)
+  Notices             : 4 (see details above)
 ======================================================================
 OVERALL: ALL PASSED (32/32)
 ======================================================================
