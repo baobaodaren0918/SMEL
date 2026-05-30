@@ -60,9 +60,9 @@ CAST CONSTRAINT contact.contact_id TO NODE KEY
 -- then DELETE CONSTRAINT removes the Reference (caching its cardinality via
 -- the trace) while leaving the customer_id column itself intact — matching
 -- V2's dual representation (graph edge + back-ref column).
--- ADD CONSTRAINT REFERENCE LOGICAL is used here (not ADD FOREIGN KEY)
+-- ADD CONSTRAINT REFERENCE is used here (not ADD FOREIGN KEY)
 -- because Neo4j has no FK paradigm — this is a paradigm-neutral logical ref.
-ADD CONSTRAINT contact.customer_id AS REFERENCE LOGICAL TO customers(customer_id) WITH CARDINALITY ONE_TO_ONE
+ADD CONSTRAINT contact.customer_id AS REFERENCE TO customers(customer_id) WITH CARDINALITY ONE_TO_ONE
 DELETE CONSTRAINT contact.customer_id
 ADD ENTITY HAS_CONTACT FROM customers TO contact
 

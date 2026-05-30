@@ -95,7 +95,7 @@ NEST employees:last_name, first_name, title, birth_date, hire_date, phone, notes
 -- Self-reference: reports_to points at another employee in the same nested
 -- collection. Re-declare the logical self-ref so the Meta V2 matches the
 -- Mongo source's `_smile_self_ref` marker.
-ADD_CONSTRAINT orders.employee.reports_to AS REFERENCE LOGICAL TO orders.employee(employee_id) WITH CARDINALITY ZERO_TO_ONE
+ADD_CONSTRAINT orders.employee.reports_to AS REFERENCE TO orders.employee(employee_id) WITH CARDINALITY ZERO_TO_ONE
 DELETE_ENTITY employees
 
 -- ============================================
@@ -114,7 +114,7 @@ RENAME_PROPERTY customer_id TO _id IN customers
 CAST_CONSTRAINT customers._id TO DOCUMENT_ID
 
 -- Logical cross-collection reference orders.customer_id -> customers._id
-ADD_CONSTRAINT orders.customer_id AS REFERENCE LOGICAL TO customers(_id) WITH CARDINALITY ONE_TO_ONE
+ADD_CONSTRAINT orders.customer_id AS REFERENCE TO customers(_id) WITH CARDINALITY ONE_TO_ONE
 
 -- ============================================
 -- Final Result: 2 collections, see northwind_mongodb.json

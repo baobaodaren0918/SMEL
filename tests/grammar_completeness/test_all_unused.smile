@@ -48,9 +48,9 @@ WIND customers.full_name
 UNWIND customers.full_name
 
 -- [13 → ADD_CONSTRAINT (EXISTENCE branch)] tighten orders.amount to NOT NULL
--- post-hoc — exercises the AS EXISTENCE body. The REFERENCE LOGICAL and
+-- post-hoc — exercises the AS EXISTENCE body. The REFERENCE and
 -- CHECK branches are already exercised by the to-Mongo Northwind scripts
--- (REFERENCE LOGICAL) and CHECK is intentionally not part of the Northwind
+-- (REFERENCE) and CHECK is intentionally not part of the Northwind
 -- benchmark (it is a supplementary feature).
 ADD_CONSTRAINT orders.amount AS EXISTENCE
 

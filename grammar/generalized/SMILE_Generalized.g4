@@ -123,18 +123,18 @@ labelAdd: LABEL identifier TO qualifiedName;
 
 // Add constraint: covers constraint kinds NOT addressed by the narrow operators
 // (PRIMARY KEY / UNIQUE KEY / FOREIGN KEY / PARTITION KEY / CLUSTERING KEY / LABEL).
-//   ADD CONSTRAINT orders.customer_id AS REFERENCE LOGICAL TO customers(_id) WITH CARDINALITY ONE_TO_MANY
+//   ADD CONSTRAINT orders.customer_id AS REFERENCE TO customers(_id) WITH CARDINALITY ONE_TO_MANY
 //   ADD CONSTRAINT products.price AS CHECK price > 0
 //   ADD CONSTRAINT orders.shipped_date AS CHECK RAW "shipped_date IS NULL OR shipped_date >= order_date"
 //   ADD CONSTRAINT customers.contact_name AS EXISTENCE
 constraintAdd: CONSTRAINT qualifiedName AS constraintBody;
 
 constraintBody
-    : REFERENCE LOGICAL TO qualifiedName LPAREN identifierList RPAREN (WITH CARDINALITY cardinalityType)?  # ConstraintBodyReference
-    | CHECK checkExpr                                                                                       # ConstraintBodyCheck
-    | EXISTENCE                                                                                             # ConstraintBodyExistence
+    : REFERENCE TO qualifiedName LPAREN identifierList RPAREN (WITH CARDINALITY cardinalityType)?  # ConstraintBodyReference
+    | CHECK checkExpr                                                                                # ConstraintBodyCheck
+    | EXISTENCE                                                                                      # ConstraintBodyExistence
     ;
-// ADD CONSTRAINT REFERENCE only supports LOGICAL — see specific-grammar
+// ADD CONSTRAINT REFERENCE is always non-enforced — see specific-grammar
 // counterpart for the rationale (enforced FKs go through ADD FOREIGN KEY).
 
 // CHECK expression mini-grammar — operator precedence (low -> high): OR < AND < NOT < atom.
@@ -459,7 +459,6 @@ MATCHES: 'MATCHES';
 RAW: 'RAW';
 
 // ADD CONSTRAINT body keywords
-LOGICAL: 'LOGICAL';
 EXISTENCE: 'EXISTENCE';
 CHECK: 'CHECK';
 

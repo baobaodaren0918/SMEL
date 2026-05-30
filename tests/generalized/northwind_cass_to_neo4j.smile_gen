@@ -13,7 +13,7 @@
 --                          Step 4 CAST CONSTRAINT TO NODE KEY elevates it to the Neo4j
 --                          NODE_KEY subtype — the real Graph identity. ADD UNIQUE KEY
 --                          alone does NOT create graph identity.
---   ADD CONSTRAINT ... AS REFERENCE LOGICAL: Declare a paradigm-neutral logical
+--   ADD CONSTRAINT ... AS REFERENCE: Declare a paradigm-neutral logical
 --                         reference (Cassandra has no FK; this is *not*
 --                         ADD FOREIGN KEY which would assert enforcement).
 --                         Cardinality flows via the relationship trace.
@@ -94,10 +94,10 @@ DELETE PARTITION KEY (order_id, product_id) FROM order_details
 -- ============================================
 
 -- employees self-reference: reports_to column -> REPORTS_TO relationship
--- Use ADD CONSTRAINT REFERENCE LOGICAL (not ADD FOREIGN KEY) because
+-- Use ADD CONSTRAINT REFERENCE (not ADD FOREIGN KEY) because
 -- Cassandra has no FK paradigm; this declares the logical reference whose
 -- cardinality flows via the relationship trace into the new graph Edge.
-ADD CONSTRAINT employees.reports_to AS REFERENCE LOGICAL TO employees(employee_id) WITH CARDINALITY ZERO_TO_ONE
+ADD CONSTRAINT employees.reports_to AS REFERENCE TO employees(employee_id) WITH CARDINALITY ZERO_TO_ONE
 DELETE PROPERTY employees.reports_to
 ADD ENTITY REPORTS_TO FROM employees TO employees
 -- Result:
@@ -105,7 +105,7 @@ ADD ENTITY REPORTS_TO FROM employees TO employees
 -- + REPORTS_TO relationship (employees -> employees)
 
 -- products -> supplier: supplier_id column -> SUPPLIES relationship
-ADD CONSTRAINT products.supplier_id AS REFERENCE LOGICAL TO suppliers(supplier_id) WITH CARDINALITY ONE_TO_ONE
+ADD CONSTRAINT products.supplier_id AS REFERENCE TO suppliers(supplier_id) WITH CARDINALITY ONE_TO_ONE
 DELETE PROPERTY products.supplier_id
 ADD ENTITY SUPPLIES FROM suppliers TO products
 -- Result:
@@ -113,14 +113,14 @@ ADD ENTITY SUPPLIES FROM suppliers TO products
 -- + SUPPLIES relationship (suppliers -> products)
 
 -- products -> category: category_id column -> PART_OF relationship
-ADD CONSTRAINT products.category_id AS REFERENCE LOGICAL TO categories(category_id) WITH CARDINALITY ONE_TO_ONE
+ADD CONSTRAINT products.category_id AS REFERENCE TO categories(category_id) WITH CARDINALITY ONE_TO_ONE
 DELETE PROPERTY products.category_id
 ADD ENTITY PART_OF FROM products TO categories
 -- Result:
 -- products: { product_id [PK], product_name, unit_price, units_in_stock, discontinued, quantity_per_unit }
 
 -- orders -> customer: customer_id column -> PURCHASED relationship
-ADD CONSTRAINT orders.customer_id AS REFERENCE LOGICAL TO customers(customer_id) WITH CARDINALITY ONE_TO_ONE
+ADD CONSTRAINT orders.customer_id AS REFERENCE TO customers(customer_id) WITH CARDINALITY ONE_TO_ONE
 DELETE PROPERTY orders.customer_id
 ADD ENTITY PURCHASED FROM customers TO orders
 -- Result:
@@ -128,7 +128,7 @@ ADD ENTITY PURCHASED FROM customers TO orders
 -- + PURCHASED relationship (customers -> orders)
 
 -- orders -> employee: employee_id column -> SOLD relationship
-ADD CONSTRAINT orders.employee_id AS REFERENCE LOGICAL TO employees(employee_id) WITH CARDINALITY ONE_TO_ONE
+ADD CONSTRAINT orders.employee_id AS REFERENCE TO employees(employee_id) WITH CARDINALITY ONE_TO_ONE
 DELETE PROPERTY orders.employee_id
 ADD ENTITY SOLD FROM employees TO orders
 -- Result:
@@ -136,7 +136,7 @@ ADD ENTITY SOLD FROM employees TO orders
 -- + SOLD relationship (employees -> orders)
 
 -- orders -> shipper: shipper_id column -> SHIPPED_VIA relationship
-ADD CONSTRAINT orders.shipper_id AS REFERENCE LOGICAL TO shippers(shipper_id) WITH CARDINALITY ONE_TO_ONE
+ADD CONSTRAINT orders.shipper_id AS REFERENCE TO shippers(shipper_id) WITH CARDINALITY ONE_TO_ONE
 DELETE PROPERTY orders.shipper_id
 ADD ENTITY SHIPPED_VIA FROM orders TO shippers
 -- Result:

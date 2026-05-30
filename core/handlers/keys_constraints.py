@@ -114,7 +114,7 @@ class KeysConstraintsHandlersMixin:
                 # ADD_FOREIGN_KEY always produces an *enforced* reference. If
                 # the existing Reference came from a previous logical-only
                 # declaration (e.g. parsed from a Mongo cross-collection
-                # description, or set by ADD_CONSTRAINT REFERENCE LOGICAL),
+                # description, or set by ADD_CONSTRAINT ... AS REFERENCE),
                 # this op upgrades it. Without this flip the FKConstraint
                 # below would be created on top of a Reference still flagged
                 # as logical, leaving the meta model in an inconsistent
@@ -165,7 +165,7 @@ class KeysConstraintsHandlersMixin:
     # ------------------------------------------------------------------
     # ADD_CONSTRAINT covers the constraint kinds NOT addressed by the narrow
     # operators (PK / UNIQUE / FK / PARTITION / CLUSTERING / LABEL):
-    #   * REFERENCE LOGICAL  -> Reference(is_enforced=False) — non-enforced
+    #   * REFERENCE          -> Reference(is_enforced=False) — non-enforced
     #     cross-entity reference (Mongo cross-collection, Cass denormalised
     #     columns, self-references). The enforced FK case is intentionally
     #     not covered here: ``ADD_FOREIGN_KEY`` is the SQL-traditional path
@@ -189,7 +189,7 @@ class KeysConstraintsHandlersMixin:
             f"add_constraint: unknown body kind {params.body_kind!r}")
 
     def _handle_add_constraint_reference(self, params: AddConstraintParams) -> OperationResult:
-        """ADD_CONSTRAINT entity.field AS REFERENCE LOGICAL TO target(col)."""
+        """ADD_CONSTRAINT entity.field AS REFERENCE TO target(col)."""
         entity_name, field_name = self._split_path(params.target)
         if not entity_name or not field_name:
             return OperationResult.skipped(

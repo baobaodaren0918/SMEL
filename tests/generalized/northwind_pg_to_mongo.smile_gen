@@ -46,7 +46,7 @@ DELETE ENTITY shippers
 -- Step 6: NEST employees into orders (L1, with nested address at L2)
 NEST employees:last_name, first_name, title, birth_date, hire_date, phone, notes, reports_to, address{street, city, region, postal_code, country} IN orders.employee WHERE orders.employee_id = employees.employee_id
 -- Self-reference: reports_to points at another employee in the same nested collection.
-ADD CONSTRAINT orders.employee.reports_to AS REFERENCE LOGICAL TO orders.employee(employee_id) WITH CARDINALITY ZERO_TO_ONE
+ADD CONSTRAINT orders.employee.reports_to AS REFERENCE TO orders.employee(employee_id) WITH CARDINALITY ZERO_TO_ONE
 DELETE ENTITY employees
 
 -- Step 7: NEST order_details into orders.details[] (L1 array)
@@ -61,4 +61,4 @@ CAST CONSTRAINT customers._id TO DOCUMENT_ID
 RENAME PROPERTY order_id TO _id IN orders
 CAST CONSTRAINT orders._id TO DOCUMENT_ID
 DELETE FOREIGN KEY orders.customer_id
-ADD CONSTRAINT orders.customer_id AS REFERENCE LOGICAL TO customers(_id) WITH CARDINALITY ONE_TO_ONE
+ADD CONSTRAINT orders.customer_id AS REFERENCE TO customers(_id) WITH CARDINALITY ONE_TO_ONE

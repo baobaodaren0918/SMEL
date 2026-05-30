@@ -302,28 +302,26 @@ cast_constraint: CAST_CONSTRAINT qualifiedName TO constraintKeyType;
 // ADD_CONSTRAINT: Add a constraint that is NOT covered by the narrow operators
 // (i.e. ADD_PRIMARY_KEY / ADD_UNIQUE_KEY / ADD_FOREIGN_KEY / ADD_PARTITION_KEY /
 //  ADD_CLUSTERING_KEY / ADD_LABEL). Three branches:
-//   AS REFERENCE LOGICAL  -> Reference(is_enforced=False)  (Mongo cross-coll, Cass denorm)
-//   AS REFERENCE ENFORCED -> Reference(is_enforced=True) + ForeignKeyConstraint
-//   AS CHECK <expr>       -> CheckConstraint with structured AST
-//   AS EXISTENCE          -> ExistenceConstraint (post-hoc NOT NULL)
+//   AS REFERENCE         -> Reference(is_enforced=False)  (Mongo cross-coll, Cass denorm)
+//   AS CHECK <expr>      -> CheckConstraint with structured AST
+//   AS EXISTENCE         -> ExistenceConstraint (post-hoc NOT NULL)
 // Examples:
-//   ADD_CONSTRAINT orders.customer_id AS REFERENCE LOGICAL TO customers(_id) WITH CARDINALITY ONE_TO_MANY
+//   ADD_CONSTRAINT orders.customer_id AS REFERENCE TO customers(_id) WITH CARDINALITY ONE_TO_MANY
 //   ADD_CONSTRAINT products.price AS CHECK price > 0
 //   ADD_CONSTRAINT orders.shipped_date AS CHECK RAW "shipped_date IS NULL OR shipped_date >= order_date"
 //   ADD_CONSTRAINT customers.contact_name AS EXISTENCE
 add_constraint: ADD_CONSTRAINT qualifiedName AS constraintBody;
 
 constraintBody
-    : REFERENCE LOGICAL TO qualifiedName LPAREN identifierList RPAREN (WITH CARDINALITY cardinalityType)?  # ConstraintBodyReference
-    | CHECK checkExpr                                                                                       # ConstraintBodyCheck
-    | EXISTENCE                                                                                             # ConstraintBodyExistence
+    : REFERENCE TO qualifiedName LPAREN identifierList RPAREN (WITH CARDINALITY cardinalityType)?  # ConstraintBodyReference
+    | CHECK checkExpr                                                                                # ConstraintBodyCheck
+    | EXISTENCE                                                                                      # ConstraintBodyExistence
     ;
-// ADD_CONSTRAINT REFERENCE only supports LOGICAL — non-enforced cross-entity
-// references. Enforced references are the SQL-traditional FK case and use
-// ``ADD_FOREIGN_KEY`` directly (also the only path that supports composite
-// keys). Keeping a single ``LOGICAL`` keyword here removes a previously-
-// redundant ``ENFORCED`` alias that produced byte-identical output but
-// confused the user-facing semantics.
+// ADD_CONSTRAINT REFERENCE is always non-enforced; for SQL-traditional
+// enforced foreign keys (including composite keys), use ``ADD_FOREIGN_KEY``
+// directly. A previous design also exposed an ``ENFORCED`` alias here, but
+// it was removed to keep one canonical, paradigm-honest entry point per
+// constraint kind.
 
 // DELETE_CONSTRAINT: Remove the constraint attached to entity.field. Handler
 // inspects the entity to determine which constraint kind (logical Reference,
@@ -520,7 +518,6 @@ MATCHES: 'MATCHES';
 RAW: 'RAW';
 
 // ADD_CONSTRAINT body keywords
-LOGICAL: 'LOGICAL';
 EXISTENCE: 'EXISTENCE';
 CHECK: 'CHECK';
 

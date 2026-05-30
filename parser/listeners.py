@@ -334,7 +334,7 @@ class BaseSMILEListener:
         cls_name = type(body_ctx).__name__
 
         if cls_name == "ConstraintBodyReferenceContext":
-            # ADD_CONSTRAINT REFERENCE is always LOGICAL (the grammar no
+            # ADD_CONSTRAINT REFERENCE is always non-enforced (the grammar no
             # longer admits ENFORCED — that case is handled by ADD_FOREIGN_KEY).
             target_table = body_ctx.qualifiedName().getText()
             target_columns = [i.getText()

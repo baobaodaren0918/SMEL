@@ -145,14 +145,14 @@
       "specific": "ADD_CONSTRAINT",
       "generalized": "ADD CONSTRAINT",
       "doc": "Add a logical reference, CHECK predicate, or EXISTENCE constraint. Covers constraint kinds NOT addressed by the narrow operators (ADD_PRIMARY_KEY / ADD_UNIQUE_KEY / ADD_FOREIGN_KEY / ADD_PARTITION_KEY / ADD_CLUSTERING_KEY / ADD_LABEL). Enforced foreign keys go through ADD_FOREIGN_KEY (also the only path that supports composite keys).",
-      "syntax_specific": "ADD_CONSTRAINT <entity.field> AS (REFERENCE LOGICAL TO <target>(<col>) [WITH CARDINALITY <type>] | CHECK <expr> | EXISTENCE)",
-      "syntax_generalized": "ADD CONSTRAINT <entity.field> AS (REFERENCE LOGICAL TO <target>(<col>) [WITH CARDINALITY <type>] | CHECK <expr> | EXISTENCE)",
-      "snippet_specific": "ADD_CONSTRAINT ${1:entity}.${2:field} AS ${3|REFERENCE LOGICAL TO target(_id),CHECK price > 0,EXISTENCE|}$0",
-      "snippet_generalized": "ADD CONSTRAINT ${1:entity}.${2:field} AS ${3|REFERENCE LOGICAL TO target(_id),CHECK price > 0,EXISTENCE|}$0",
+      "syntax_specific": "ADD_CONSTRAINT <entity.field> AS (REFERENCE TO <target>(<col>) [WITH CARDINALITY <type>] | CHECK <expr> | EXISTENCE)",
+      "syntax_generalized": "ADD CONSTRAINT <entity.field> AS (REFERENCE TO <target>(<col>) [WITH CARDINALITY <type>] | CHECK <expr> | EXISTENCE)",
+      "snippet_specific": "ADD_CONSTRAINT ${1:entity}.${2:field} AS ${3|REFERENCE TO target(_id),CHECK price > 0,EXISTENCE|}$0",
+      "snippet_generalized": "ADD CONSTRAINT ${1:entity}.${2:field} AS ${3|REFERENCE TO target(_id),CHECK price > 0,EXISTENCE|}$0",
       "template_specific": "ADD_CONSTRAINT {target} AS {body}",
       "template_generalized": "ADD CONSTRAINT {target} AS {body}",
       "clauses": [
-        {"name": "AS REFERENCE LOGICAL TO ...", "snippet": "AS REFERENCE LOGICAL TO ${1:target_entity}(${2:target_field}) WITH CARDINALITY ${3|ONE_TO_ONE,ZERO_TO_ONE,ONE_TO_MANY,ZERO_TO_MANY|}", "optional": false, "doc": "Logical (non-enforced) cross-entity reference. Useful for Mongo cross-collection ObjectId refs, Cassandra denormalised columns, and self-references. Enforced FKs go through ADD_FOREIGN_KEY."},
+        {"name": "AS REFERENCE TO ...", "snippet": "AS REFERENCE TO ${1:target_entity}(${2:target_field}) WITH CARDINALITY ${3|ONE_TO_ONE,ZERO_TO_ONE,ONE_TO_MANY,ZERO_TO_MANY|}", "optional": false, "doc": "Non-enforced cross-entity reference. Useful for Mongo cross-collection ObjectId refs, Cassandra denormalised columns, and self-references. Enforced FKs go through ADD_FOREIGN_KEY."},
         {"name": "AS CHECK <expr>", "snippet": "AS CHECK ${1:price} ${2|>,>=,<,<=,==,!=|} ${3:0}", "optional": false, "doc": "Structured CHECK predicate. Atoms: ``f op v``, ``f IN (v1, v2)``, ``f BETWEEN low AND high``, ``f MATCHES \"pattern\"``, ``f IS [NOT] NULL``. Compose with AND / OR / NOT / parens. RAW \"...\" is the escape hatch for unsupported predicates."},
         {"name": "AS EXISTENCE", "snippet": "AS EXISTENCE", "optional": false, "doc": "NOT NULL applied post-hoc to an existing property. Native on PG / Mongo / Neo4j; key columns only on Cassandra."}
       ]
