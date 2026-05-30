@@ -988,8 +988,8 @@ class RelationshipTrace:
     holder: str                 # source entity that held the original relationship
     ref_name: str               # Reference/Embedded name (e.g. "customer_id", "employee")
     target: str                 # target entity of the original relationship
-    cardinality: Cardinality                          # source-side multiplicity
-    target_cardinality: Optional[Cardinality] = None  # target-side, if known
+    target_end_cardinality: Cardinality                          # multiplicity at the target end (per source, how many targets)
+    source_end_cardinality: Optional[Cardinality] = None         # multiplicity at the source end (per target, how many sources), if known
     origin: TraceOrigin = TraceOrigin.DELETED_REFERENCE
 
 
@@ -997,25 +997,27 @@ class RelationshipTrace:
 class Relationship(ABC):
     """Base for Reference / Embedded / Edge.
 
-    Cardinality is bidirectional: ``cardinality`` is the source-side
-    multiplicity (per source entity, how many targets); ``target_cardinality``
-    is the target-side (per target entity, how many sources). ``None`` on the
-    target side means "not declared" — distinct from the explicit unconstrained
-    default ``ZERO_TO_MANY``.
+    Cardinality is bidirectional and follows the UML "located-at" convention:
+    ``target_end_cardinality`` is the multiplicity at the target end of the
+    association — i.e., for each source entity, how many target entities it
+    references. ``source_end_cardinality`` is the multiplicity at the source
+    end — i.e., for each target entity, how many source entities reference it.
+    ``None`` on the source end means "not declared" — distinct from the
+    explicit unconstrained default ``ZERO_TO_MANY``.
     """
-    cardinality: Cardinality = Cardinality.ONE_TO_ONE
-    target_cardinality: Optional[Cardinality] = None
+    target_end_cardinality: Cardinality = Cardinality.ONE_TO_ONE
+    source_end_cardinality: Optional[Cardinality] = None
     is_optional: bool = True
     description: Optional[str] = None
     meta_id: str = field(default_factory=_uid)
 
     @property
     def lower_bound(self) -> int:
-        return self.cardinality.to_bounds()[0]
+        return self.target_end_cardinality.to_bounds()[0]
 
     @property
     def upper_bound(self) -> int:
-        return self.cardinality.to_bounds()[1]
+        return self.target_end_cardinality.to_bounds()[1]
 
     @abstractmethod
     def get_target_entity_name(self) -> str:
@@ -1060,11 +1062,11 @@ class Reference(Relationship):
             "meta_id": self.meta_id,
             "ref_name": self.ref_name,
             "refs_to": self.refs_to,
-            "cardinality": self.cardinality.value,
+            "target_end_cardinality": self.target_end_cardinality.value,
             "is_optional": self.is_optional
         }
-        if self.target_cardinality is not None:
-            d["target_cardinality"] = self.target_cardinality.value
+        if self.source_end_cardinality is not None:
+            d["source_end_cardinality"] = self.source_end_cardinality.value
         # Emit ``is_enforced`` only when the reference is logical so that JSON
         # output for every existing Reference (which all default to enforced)
         # remains byte-identical to the pre-feature serialization.
@@ -1079,13 +1081,13 @@ class Reference(Relationship):
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'Reference':
         edge_props = [Property.from_dict(a) for a in data.get("edge_properties", [])]
-        target_card_str = data.get("target_cardinality")
-        target_cardinality = Cardinality.from_symbol(target_card_str) if target_card_str else None
+        source_end_card_str = data.get("source_end_cardinality")
+        source_end_cardinality = Cardinality.from_symbol(source_end_card_str) if source_end_card_str else None
         return cls(
             ref_name=data.get("ref_name", ""),
             refs_to=data.get("refs_to", ""),
-            cardinality=Cardinality.from_symbol(data.get("cardinality", "1..1")),
-            target_cardinality=target_cardinality,
+            target_end_cardinality=Cardinality.from_symbol(data.get("target_end_cardinality", "1..1")),
+            source_end_cardinality=source_end_cardinality,
             is_optional=data.get("is_optional", True),
             description=data.get("description"),
             meta_id=data.get("meta_id", _uid()),
@@ -1104,7 +1106,7 @@ class Embedded(Relationship):
         return self.aggregates
 
     def is_array(self) -> bool:
-        return self.cardinality.is_multiple()
+        return self.target_end_cardinality.is_multiple()
 
     def to_dict(self) -> Dict[str, Any]:
         d = {
@@ -1112,25 +1114,25 @@ class Embedded(Relationship):
             "meta_id": self.meta_id,
             "aggr_name": self.aggr_name,
             "aggregates": self.aggregates,
-            "cardinality": self.cardinality.value,
+            "target_end_cardinality": self.target_end_cardinality.value,
             "is_optional": self.is_optional,
             "is_array": self.is_array()
         }
-        if self.target_cardinality is not None:
-            d["target_cardinality"] = self.target_cardinality.value
+        if self.source_end_cardinality is not None:
+            d["source_end_cardinality"] = self.source_end_cardinality.value
         if self.description:
             d["description"] = self.description
         return d
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'Embedded':
-        target_card_str = data.get("target_cardinality")
-        target_cardinality = Cardinality.from_symbol(target_card_str) if target_card_str else None
+        source_end_card_str = data.get("source_end_cardinality")
+        source_end_cardinality = Cardinality.from_symbol(source_end_card_str) if source_end_card_str else None
         return cls(
             aggr_name=data.get("aggr_name", data.get("em_name", "")),
             aggregates=data.get("aggregates", data.get("embeds", "")),
-            cardinality=Cardinality.from_symbol(data.get("cardinality", "1..1")),
-            target_cardinality=target_cardinality,
+            target_end_cardinality=Cardinality.from_symbol(data.get("target_end_cardinality", "1..1")),
+            source_end_cardinality=source_end_cardinality,
             is_optional=data.get("is_optional", True),
             description=data.get("description"),
             meta_id=data.get("meta_id", _uid())
@@ -1154,25 +1156,25 @@ class Edge(Relationship):
             "rel_type_name": self.rel_type_name,
             "source_entity": self.source_entity,
             "target_entity": self.target_entity,
-            "cardinality": self.cardinality.value,
+            "target_end_cardinality": self.target_end_cardinality.value,
             "is_optional": self.is_optional
         }
-        if self.target_cardinality is not None:
-            d["target_cardinality"] = self.target_cardinality.value
+        if self.source_end_cardinality is not None:
+            d["source_end_cardinality"] = self.source_end_cardinality.value
         if self.description:
             d["description"] = self.description
         return d
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'Edge':
-        target_card_str = data.get("target_cardinality")
-        target_cardinality = Cardinality.from_symbol(target_card_str) if target_card_str else None
+        source_end_card_str = data.get("source_end_cardinality")
+        source_end_cardinality = Cardinality.from_symbol(source_end_card_str) if source_end_card_str else None
         return cls(
             rel_type_name=data.get("rel_type_name", ""),
             source_entity=data.get("source_entity", ""),
             target_entity=data.get("target_entity", ""),
-            cardinality=Cardinality.from_symbol(data.get("cardinality", "0..n")),
-            target_cardinality=target_cardinality,
+            target_end_cardinality=Cardinality.from_symbol(data.get("target_end_cardinality", "0..n")),
+            source_end_cardinality=source_end_cardinality,
             is_optional=data.get("is_optional", True),
             description=data.get("description"),
             meta_id=data.get("meta_id", _uid())
@@ -1193,8 +1195,8 @@ class EntityType:
     labels: List[str] = field(default_factory=list)  # Graph-specific: additional node labels (e.g. customers:Employee)
     source_entity: Optional[str] = None  # EDGE only: source node entity name
     target_entity: Optional[str] = None  # EDGE only: target node entity name
-    edge_cardinality: Optional[Cardinality] = None  # EDGE only: relationship cardinality (source-side)
-    edge_target_cardinality: Optional[Cardinality] = None  # EDGE only: target-side cardinality
+    edge_target_end_cardinality: Optional[Cardinality] = None  # EDGE only: multiplicity at the target end (per source, how many targets)
+    edge_source_end_cardinality: Optional[Cardinality] = None  # EDGE only: multiplicity at the source end (per target, how many sources)
     description: Optional[str] = None
     # When True, _normalize_entity_kinds() leaves this entity's entity_kind alone
     # (set by CAST_ENTITY handler so the user's explicit choice is preserved
@@ -1296,10 +1298,10 @@ class EntityType:
             d["source_entity"] = self.source_entity
         if self.target_entity is not None:
             d["target_entity"] = self.target_entity
-        if self.edge_cardinality is not None:
-            d["edge_cardinality"] = self.edge_cardinality.value
-        if self.edge_target_cardinality is not None:
-            d["edge_target_cardinality"] = self.edge_target_cardinality.value
+        if self.edge_target_end_cardinality is not None:
+            d["edge_target_end_cardinality"] = self.edge_target_end_cardinality.value
+        if self.edge_source_end_cardinality is not None:
+            d["edge_source_end_cardinality"] = self.edge_source_end_cardinality.value
         if self.description:
             d["description"] = self.description
         return d
@@ -1317,11 +1319,11 @@ class EntityType:
 
         object_name = data.get("object_name") or [""]
 
-        edge_card_str = data.get("edge_cardinality")
-        edge_cardinality = Cardinality.from_symbol(edge_card_str) if edge_card_str else None
+        edge_target_card_str = data.get("edge_target_end_cardinality")
+        edge_target_end_cardinality = Cardinality.from_symbol(edge_target_card_str) if edge_target_card_str else None
 
-        edge_target_card_str = data.get("edge_target_cardinality")
-        edge_target_cardinality = Cardinality.from_symbol(edge_target_card_str) if edge_target_card_str else None
+        edge_source_card_str = data.get("edge_source_end_cardinality")
+        edge_source_end_cardinality = Cardinality.from_symbol(edge_source_card_str) if edge_source_card_str else None
 
         return cls(
             object_name=object_name,
@@ -1332,8 +1334,8 @@ class EntityType:
             relationships=rels,
             source_entity=data.get("source_entity"),
             target_entity=data.get("target_entity"),
-            edge_cardinality=edge_cardinality,
-            edge_target_cardinality=edge_target_cardinality,
+            edge_target_end_cardinality=edge_target_end_cardinality,
+            edge_source_end_cardinality=edge_source_end_cardinality,
             description=data.get("description"),
             meta_id=data.get("meta_id", _uid())
         )
@@ -1348,8 +1350,8 @@ class RelationshipType:
     source_entity: str = ""  # Entity name (string only)
     target_entity: str = ""  # Entity name (string only)
     properties: List[Property] = field(default_factory=list)
-    cardinality: Cardinality = Cardinality.ZERO_TO_MANY
-    target_cardinality: Optional[Cardinality] = None  # target-side cardinality
+    target_end_cardinality: Cardinality = Cardinality.ZERO_TO_MANY  # multiplicity at the target end
+    source_end_cardinality: Optional[Cardinality] = None  # multiplicity at the source end, if known
     bidirectional: Optional[bool] = None  # bidirectional edge flag
     description: Optional[str] = None
     meta_id: str = field(default_factory=_uid)
@@ -1374,10 +1376,10 @@ class RelationshipType:
             "source_entity": self.source_entity,
             "target_entity": self.target_entity,
             "properties": [a.to_dict() for a in self.properties],
-            "cardinality": self.cardinality.value
+            "target_end_cardinality": self.target_end_cardinality.value
         }
-        if self.target_cardinality is not None:
-            d["target_cardinality"] = self.target_cardinality.value
+        if self.source_end_cardinality is not None:
+            d["source_end_cardinality"] = self.source_end_cardinality.value
         if self.bidirectional is not None:
             d["bidirectional"] = self.bidirectional
         if self.description:
@@ -1387,15 +1389,15 @@ class RelationshipType:
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'RelationshipType':
         attrs = [Property.from_dict(a) for a in data.get("properties", [])]
-        target_card_str = data.get("target_cardinality")
-        target_cardinality = Cardinality.from_symbol(target_card_str) if target_card_str else None
+        source_end_card_str = data.get("source_end_cardinality")
+        source_end_cardinality = Cardinality.from_symbol(source_end_card_str) if source_end_card_str else None
         return cls(
             rel_name=data.get("rel_name", ""),
             source_entity=data.get("source_entity", ""),
             target_entity=data.get("target_entity", ""),
             properties=attrs,
-            cardinality=Cardinality.from_symbol(data.get("cardinality", "0..n")),
-            target_cardinality=target_cardinality,
+            target_end_cardinality=Cardinality.from_symbol(data.get("target_end_cardinality", "0..n")),
+            source_end_cardinality=source_end_cardinality,
             bidirectional=data.get("bidirectional"),
             description=data.get("description"),
             meta_id=data.get("meta_id", _uid())
@@ -1488,7 +1490,7 @@ class Database:
                 "source_entity": e.source_entity or "",
                 "target_entity": e.target_entity or "",
                 "properties": [a.to_dict() for a in e.properties],
-                "cardinality": (e.edge_cardinality or Cardinality.ZERO_TO_MANY).value,
+                "target_end_cardinality": (e.edge_target_end_cardinality or Cardinality.ZERO_TO_MANY).value,
             } for n, e in edge_entities.items()}
         if self.description:
             d["description"] = self.description
@@ -1549,13 +1551,13 @@ class Database:
         for r_data in data.get("relationship_types", {}).values():
             rel_name = r_data.get("rel_name", "")
             attrs = [Property.from_dict(a) for a in r_data.get("properties", [])]
-            card_str = r_data.get("cardinality", "0..n")
+            card_str = r_data.get("target_end_cardinality", "0..n")
             edge_entity = EntityType(
                 object_name=[rel_name],
                 entity_kind=EntityKind.EDGE,
                 source_entity=r_data.get("source_entity", ""),
                 target_entity=r_data.get("target_entity", ""),
-                edge_cardinality=Cardinality.from_symbol(card_str),
+                edge_target_end_cardinality=Cardinality.from_symbol(card_str),
                 properties=attrs,
                 meta_id=r_data.get("meta_id", _uid())
             )

@@ -115,7 +115,7 @@ class MongoDBAdapter(DatabaseAdapter):
                 embedded = Embedded(
                     aggr_name=prop_name_lower,
                     aggregates=embedded_entity.full_path,  # Use full path for reference
-                    cardinality=Cardinality.ONE_TO_ONE if is_required else Cardinality.ZERO_TO_ONE,
+                    target_end_cardinality=Cardinality.ONE_TO_ONE if is_required else Cardinality.ZERO_TO_ONE,
                     is_optional=not is_required
                 )
                 entity.add_relationship(embedded)
@@ -140,7 +140,7 @@ class MongoDBAdapter(DatabaseAdapter):
                     embedded = Embedded(
                         aggr_name=prop_name_lower,
                         aggregates=embedded_entity.full_path,  # Use full path for reference
-                        cardinality=Cardinality.ONE_TO_MANY if is_required else Cardinality.ZERO_TO_MANY,
+                        target_end_cardinality=Cardinality.ONE_TO_MANY if is_required else Cardinality.ZERO_TO_MANY,
                         is_optional=not is_required
                     )
                     entity.add_relationship(embedded)
@@ -183,32 +183,32 @@ class MongoDBAdapter(DatabaseAdapter):
                 # description regexes (cross-collection or self-reference).
                 # The returned ``target_table`` distinguishes the two flavours:
                 #   * target == owning entity's full_path -> self-reference
-                #     (cardinality follows the 0..1 / 1..1 convention because
+                #     (target_end_cardinality follows the 0..1 / 1..1 convention because
                 #     the column points at *another instance* of the same
                 #     entity, not at a multi-row collection)
                 #   * target != owner -> cross-collection reference
-                #     (cardinality follows Mongo's array/non-array convention)
+                #     (target_end_cardinality follows Mongo's array/non-array convention)
                 if not is_key:
                     target_table, _target_column = \
                         self._extract_logical_ref_target(
                             prop_schema, owner_entity=entity)
                     if target_table:
                         is_self_ref = (target_table == entity.full_path)
-                        # Source-side cardinality: per source document, how many
-                        # target documents are referenced by this scalar field.
-                        # A scalar reference is always 1..1 (NOT NULL) or 0..1.
-                        cardinality = Cardinality.ONE_TO_ONE \
+                        # Multiplicity at the target end: per source document,
+                        # how many target documents are referenced by this scalar
+                        # field. A scalar reference is always 1..1 (NOT NULL) or 0..1.
+                        target_end_cardinality = Cardinality.ONE_TO_ONE \
                             if is_required else Cardinality.ZERO_TO_ONE
-                        # Target-side cardinality: cross-collection references
-                        # default to ZERO_TO_MANY (many docs may carry the same
-                        # FK value); self-refs are typically 0..n as well (an
-                        # employee can have many direct reports).
-                        target_cardinality = Cardinality.ZERO_TO_MANY
+                        # Multiplicity at the source end: cross-collection
+                        # references default to ZERO_TO_MANY (many docs may carry
+                        # the same FK value); self-refs are typically 0..n as well
+                        # (an employee can have many direct reports).
+                        source_end_cardinality = Cardinality.ZERO_TO_MANY
                         entity.add_relationship(Reference(
                             ref_name=prop_name_lower,
                             refs_to=target_table,
-                            cardinality=cardinality,
-                            target_cardinality=target_cardinality,
+                            target_end_cardinality=target_end_cardinality,
+                            source_end_cardinality=source_end_cardinality,
                             is_optional=not is_required,
                             is_enforced=False,
                             description=prop_schema.get('description') or None,
@@ -328,7 +328,7 @@ class MongoDBAdapter(DatabaseAdapter):
                 rt_dict = {
                     "source": rt.source_entity,
                     "target": rt.target_entity,
-                    "cardinality": rt.cardinality.value if rt.cardinality else "0..n",
+                    "target_end_cardinality": rt.target_end_cardinality.value if rt.target_end_cardinality else "0..n",
                 }
                 if rt.properties:
                     rt_dict["properties"] = [attr.name for attr in rt.properties]
@@ -437,7 +437,7 @@ class MongoDBAdapter(DatabaseAdapter):
                 embedded_schema = cls._export_entity_to_schema(database, embedded_entity, is_root=False)
 
                 # Check if it's an array (ONE_TO_MANY, ZERO_TO_MANY)
-                if rel.cardinality in (Cardinality.ONE_TO_MANY, Cardinality.ZERO_TO_MANY):
+                if rel.target_end_cardinality in (Cardinality.ONE_TO_MANY, Cardinality.ZERO_TO_MANY):
                     schema["properties"][rel.aggr_name] = {
                         "bsonType": "array",
                         "description": f"{rel.aggr_name} array",
@@ -446,7 +446,7 @@ class MongoDBAdapter(DatabaseAdapter):
                 else:
                     schema["properties"][rel.aggr_name] = embedded_schema
 
-                if rel.cardinality.is_required():
+                if rel.target_end_cardinality.is_required():
                     schema["required"].append(rel.aggr_name)
 
         # Clean up empty required list

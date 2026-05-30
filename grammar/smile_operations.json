@@ -538,7 +538,7 @@
       "category": "cast",
       "specific": "RECARD",
       "generalized": "RECARD",
-      "doc": "Change the source-side cardinality of a reference (target_cardinality is preserved)",
+      "doc": "Change the target-end cardinality of a reference (source_end_cardinality is preserved)",
       "syntax_specific": "RECARD <entity.field> TO <cardinalityType>",
       "syntax_generalized": "RECARD <entity.field> TO <cardinalityType>",
       "snippet_specific": "RECARD ${1:entity}.${2:field} TO ${3|ONE_TO_ONE,ONE_TO_MANY,ZERO_TO_ONE,ZERO_TO_MANY|}$0",

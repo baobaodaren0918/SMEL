@@ -34,35 +34,35 @@
 // Relationship: SUPPLIES (suppliers -> products)
 // Per supplier: 0..n products; Per product: 1..1 supplier (NOT NULL FK in PG)
 // Cardinality: 0..n
-// Target-Cardinality: 1..1
+// Source-Cardinality: 1..1
 
 // Relationship: PART_OF (products -> categories)
 // Per product: 1..1 category (NOT NULL FK in PG); Per category: 0..n products
 // Cardinality: 1..1
-// Target-Cardinality: 0..n
+// Source-Cardinality: 0..n
 
 // Relationship: PURCHASED (customers -> orders)
 // Per customer: 0..n orders; Per order: 1..1 customer (NOT NULL FK in PG)
 // Cardinality: 0..n
-// Target-Cardinality: 1..1
+// Source-Cardinality: 1..1
 
 // Relationship: SOLD (employees -> orders)
 // Per employee: 0..n orders; Per order: 1..1 employee (NOT NULL FK in PG)
 // Cardinality: 0..n
-// Target-Cardinality: 1..1
+// Source-Cardinality: 1..1
 
 // Relationship: SHIPPED_VIA (orders -> shippers)
 // Per order: 1..1 shipper (NOT NULL FK in PG); Per shipper: 0..n orders
 // Cardinality: 1..1
-// Target-Cardinality: 0..n
+// Source-Cardinality: 0..n
 
 // Relationship: REPORTS_TO (employees -> employees)
 // Per employee: 0..1 manager (self-ref, nullable FK); per manager: 0..n direct reports
 // Cardinality: 0..1
-// Target-Cardinality: 0..n
+// Source-Cardinality: 0..n
 
 // Relationship: CONTAINS (orders -> products)
 // Properties: unit_price (double), quantity (integer), discount (double)
 // Per order: 0..n products; Per product: 0..n orders (M:N junction)
 // Cardinality: 0..n
-// Target-Cardinality: 0..n
+// Source-Cardinality: 0..n

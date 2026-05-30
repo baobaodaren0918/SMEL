@@ -74,8 +74,8 @@ class SchemaTransformerBase:
 
     def _remember_relationship_trace(
         self, holder: str, ref_name: str, target: str,
-        cardinality: Cardinality,
-        target_cardinality: Optional[Cardinality] = None,
+        target_end_cardinality: Cardinality,
+        source_end_cardinality: Optional[Cardinality] = None,
         origin: TraceOrigin = TraceOrigin.DELETED_REFERENCE,
     ) -> None:
         """Append a relationship trace entry for a relationship destroyed by
@@ -85,32 +85,31 @@ class SchemaTransformerBase:
             return
         self._relationship_trace.append(RelationshipTrace(
             holder=holder, ref_name=ref_name or "", target=target,
-            cardinality=cardinality, target_cardinality=target_cardinality,
+            target_end_cardinality=target_end_cardinality, source_end_cardinality=source_end_cardinality,
             origin=origin,
         ))
 
     def _remember_deleted_fk(self, fk_holder: str, ref_name: str,
                              fk_target: str, was_required: bool,
-                             target_cardinality: Optional[Cardinality] = None) -> None:
+                             source_end_cardinality: Optional[Cardinality] = None) -> None:
         """Convenience helper for FK deletion: maps NOT NULL → 1..1, nullable
         → 0..1, and forwards to _remember_relationship_trace."""
-        cardinality = Cardinality.ONE_TO_ONE if was_required else Cardinality.ZERO_TO_ONE
+        target_end_cardinality = Cardinality.ONE_TO_ONE if was_required else Cardinality.ZERO_TO_ONE
         self._remember_relationship_trace(
             holder=fk_holder, ref_name=ref_name, target=fk_target,
-            cardinality=cardinality, target_cardinality=target_cardinality,
+            target_end_cardinality=target_end_cardinality, source_end_cardinality=source_end_cardinality,
             origin=TraceOrigin.DELETED_REFERENCE,
         )
 
     def _consume_deleted_fk_for_edge(
         self, edge_source: str, edge_target: str
     ) -> Tuple[Optional[Cardinality], Optional[Cardinality]]:
-        """Return (source_card, target_card) recovered from the relationship
-        trace for the given Edge endpoints. Both sides of the trace entry's
-        bidirectional cardinality are mapped to the new Edge: when FK
-        direction matches Edge direction (same-dir), entry.cardinality is
-        the Edge's source side and entry.target_cardinality is the Edge's
-        target side; when the FK direction is reversed (opp-dir), the two
-        sides swap.
+        """Return ``(target_end_card, source_end_card)`` recovered from the
+        relationship trace for the given Edge endpoints. Both ends of the trace
+        entry's bidirectional cardinality are mapped to the new Edge: when the
+        FK direction matches the Edge direction (same-dir), entry's two ends
+        map straight through to the Edge's two ends; when the FK direction is
+        reversed (opp-dir), the two ends swap.
 
         Lookup ignores ref_name because ADD_ENTITY does not carry the
         original FK column name. If multiple relationship trace entries
@@ -139,7 +138,7 @@ class SchemaTransformerBase:
                 return None, None
             t = same_dir[0]
             self._relationship_trace.remove(t)
-            return t.cardinality, t.target_cardinality
+            return t.target_end_cardinality, t.source_end_cardinality
 
         # Non-self-ref: both directions matching is genuinely ambiguous.
         if same_dir and opp_dir:
@@ -160,7 +159,7 @@ class SchemaTransformerBase:
                 return None, None
             t = same_dir[0]
             self._relationship_trace.remove(t)
-            return t.cardinality, t.target_cardinality
+            return t.target_end_cardinality, t.source_end_cardinality
 
         if opp_dir:
             if len(opp_dir) > 1:
@@ -172,29 +171,30 @@ class SchemaTransformerBase:
                 return None, None
             t = opp_dir[0]
             self._relationship_trace.remove(t)
-            # FK direction reversed: trace.cardinality is now the Edge's
-            # target side, trace.target_cardinality is the Edge's source side.
-            return t.target_cardinality, t.cardinality
+            # FK direction reversed: swap the trace's two ends —
+            # trace.target_end_cardinality (per trace-source, how many targets)
+            # becomes the Edge's source_end_cardinality, and vice versa.
+            return t.source_end_cardinality, t.target_end_cardinality
 
         return None, None
 
     @staticmethod
-    def _default_target_cardinality(value: Optional[Cardinality]) -> Cardinality:
-        """When the handler cannot recover a target-side cardinality from the
+    def _default_source_end_cardinality(value: Optional[Cardinality]) -> Cardinality:
+        """When the handler cannot recover a source-end cardinality from the
         relationship trace, substitute the unconstrained default ZERO_TO_MANY
         so the new Edge carries an explicit value instead of None. The default
-        reflects the typical reverse-side multiplicity of a relational FK
+        reflects the typical multiplicity at the source end of a relational FK
         (any PK admits 0..n references); it is not a universal semantic
         equivalence.
         """
         return value if value is not None else Cardinality.ZERO_TO_MANY
 
     @staticmethod
-    def _fk_was_required(rel_cardinality: Cardinality, fk_attr: Optional[Property]) -> bool:
-        """A FK / Reference is required iff its declared source-side cardinality
+    def _fk_was_required(rel_target_end_cardinality: Cardinality, fk_attr: Optional[Property]) -> bool:
+        """A FK / Reference is required iff its declared target-end cardinality
         has a non-zero lower bound (``is_required()``) OR the underlying property
         has NOT NULL (is_optional=False)."""
-        return rel_cardinality.is_required() or (
+        return rel_target_end_cardinality.is_required() or (
             fk_attr is not None and not fk_attr.is_optional
         )
 

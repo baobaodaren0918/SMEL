@@ -58,7 +58,7 @@ def _walk_embedded(entities: Dict, entity_name: str, path: str, result: Dict):
         new_embedded.append({
             "name": emb["name"],
             "target": child_path,
-            "cardinality": emb.get("cardinality", "1..1"),
+            "target_end_cardinality": emb.get("target_end_cardinality", "1..1"),
         })
         # Recurse into child
         _walk_embedded(entities, child_name, child_path, result)

@@ -150,7 +150,7 @@ def _serialize_entity(name: str, entity, db: Optional[Database] = None) -> Dict[
             {
                 "name": r.ref_name,
                 "target": r.get_target_entity_name(),
-                "cardinality": r.cardinality.value if hasattr(r, 'cardinality') else '1..1',
+                "target_end_cardinality": r.target_end_cardinality.value if hasattr(r, 'target_end_cardinality') else '1..1',
                 # ``is_enforced`` is emitted only when False (the non-default)
                 # so that the JSON for every existing enforced Reference stays
                 # byte-identical to the pre-feature serialization.
@@ -166,7 +166,7 @@ def _serialize_entity(name: str, entity, db: Optional[Database] = None) -> Dict[
             {
                 "name": r.aggr_name,
                 "target": r.get_target_entity_name(),
-                "cardinality": r.cardinality.value
+                "target_end_cardinality": r.target_end_cardinality.value
             }
             for r in entity.relationships if isinstance(r, Embedded)
         ],
@@ -175,7 +175,7 @@ def _serialize_entity(name: str, entity, db: Optional[Database] = None) -> Dict[
                 "name": r.rel_type_name,
                 "target": r.get_target_entity_name(),
                 "source": r.source_entity,
-                "cardinality": r.cardinality.value
+                "target_end_cardinality": r.target_end_cardinality.value
             }
             for r in entity.relationships if isinstance(r, Edge)
         ],
@@ -197,10 +197,10 @@ def _serialize_relationship_types(db: Database) -> Dict[str, Any]:
                 {"name": a.name, "type": _get_type_str(a.data_type)}
                 for a in e.properties
             ],
-            "cardinality": (e.edge_cardinality or Cardinality.ZERO_TO_MANY).value
+            "target_end_cardinality": (e.edge_target_end_cardinality or Cardinality.ZERO_TO_MANY).value
         }
-        if e.edge_target_cardinality is not None:
-            d["target_cardinality"] = e.edge_target_cardinality.value
+        if e.edge_source_end_cardinality is not None:
+            d["source_end_cardinality"] = e.edge_source_end_cardinality.value
         result[name] = d
     return result
 

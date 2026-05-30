@@ -211,7 +211,7 @@ def _format_entity_validation(ed: EntityDiff) -> Dict[str, Any]:
         hard={"mismatches": edge_mismatches},
         warn={"cardinality_warnings": [
             {"name": cc.name, "actual": cc.left, "expected": cc.right,
-             "field": getattr(cc, "field", "cardinality")}
+             "field": getattr(cc, "field", "target_end_cardinality")}
             for cc in ed.edge_cardinality_changes
         ]},
     )
@@ -267,7 +267,7 @@ def to_validation_report(
             for cc in rd.cardinality_changes:
                 cardinality_warnings.append({
                     "name": n, "actual": cc.left, "expected": cc.right,
-                    "field": getattr(cc, "field", "cardinality"),
+                    "field": getattr(cc, "field", "target_end_cardinality"),
                 })
             for ac in rd.attr_mismatches:
                 mismatches.append({

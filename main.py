@@ -100,7 +100,7 @@ def print_schema_comparison(result):
                     is_highlighted = (i == 1 and emb_key in nest_highlights)
                     prefix = f"{GREEN}{BOLD}" if is_highlighted else ""
                     suffix = f"{RESET}" if is_highlighted else ""
-                    line = f"    <> {emb['name']} [{emb['cardinality']}]"
+                    line = f"    <> {emb['name']} [{emb['target_end_cardinality']}]"
                     lines.append(f"{prefix}{line}{suffix}".ljust(col_width + (len(prefix) + len(suffix) if is_highlighted else 0)))
             else:
                 lines = [f"  {YELLOW}({entity_name} --){RESET}".ljust(col_width + len(YELLOW) + len(RESET))]

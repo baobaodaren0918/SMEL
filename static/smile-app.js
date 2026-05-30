@@ -793,7 +793,7 @@
                         affected.new_embedded.forEach(emb => {
                             html += '<div class="change-item new">';
                             html += '<span class="change-prefix add">+</span>';
-                            html += '&lt;&gt; ' + emb.name + ' [' + emb.cardinality + ']';
+                            html += '&lt;&gt; ' + emb.name + ' [' + emb.target_end_cardinality + ']';
                             html += '<span class="change-label">new</span>';
                             html += '</div>';
                         });
@@ -801,7 +801,7 @@
                         entity.embedded.forEach(emb => {
                             html += '<div class="change-item new">';
                             html += '<span class="change-prefix add">+</span>';
-                            html += '&lt;&gt; ' + emb.name + ' [' + emb.cardinality + ']';
+                            html += '&lt;&gt; ' + emb.name + ' [' + emb.target_end_cardinality + ']';
                             html += '<span class="change-label">new</span>';
                             html += '</div>';
                         });
@@ -1099,7 +1099,7 @@
                         if (!connections[ref.target]) connections[ref.target] = new Set();
                         connections[entity.name].add(ref.target);
                         connections[ref.target].add(entity.name);
-                        const card = ref.cardinality || '1..n';
+                        const card = ref.target_end_cardinality || '1..n';
                         let headLabel = 'N', tailLabel = '1';
                         if (card === '1..1') { headLabel = '1'; tailLabel = '1'; }
                         else if (card === '0..1') { headLabel = '0..1'; tailLabel = '1'; }
@@ -1115,7 +1115,7 @@
                         if (!connections[emb.target]) connections[emb.target] = new Set();
                         connections[entity.name].add(emb.target);
                         connections[emb.target].add(entity.name);
-                        const card = emb.cardinality || '1..1';
+                        const card = emb.target_end_cardinality || '1..1';
                         let headLabel = '1', tailLabel = '1';
                         if (card === '1..n' || card === '0..n') headLabel = 'N';
                         edgeList.push({ from: entity.name, to: emb.target, headLabel, tailLabel, label: 'embedded' });
@@ -1128,7 +1128,7 @@
                         if (!connections[edge.target]) connections[edge.target] = new Set();
                         connections[entity.name].add(edge.target);
                         connections[edge.target].add(entity.name);
-                        const card = edge.cardinality || '1..1';
+                        const card = edge.target_end_cardinality || '1..1';
                         let headLabel = '1', tailLabel = '1';
                         if (card === '1..n' || card === '0..n') headLabel = 'N';
                         edgeList.push({ from: entity.name, to: edge.target, headLabel, tailLabel, label: edge.name });
@@ -1662,12 +1662,12 @@
                 html += '</div>';
             });
 
-            (entity.embedded || []).forEach(e => { html += '<div class="embedded-item">&lt;&gt; ' + e.name + ' [' + e.cardinality + ']</div>'; });
+            (entity.embedded || []).forEach(e => { html += '<div class="embedded-item">&lt;&gt; ' + e.name + ' [' + e.target_end_cardinality + ']</div>'; });
 
             if (!isSource) {
                 (entity.references || []).forEach(r => { html += '<div class="reference-item">' + r.name + ' &rarr; ' + r.target + '</div>'; });
             }
-            (entity.edges || []).forEach(e => { html += '<div class="edge-item">&#x2194; ' + e.name + ' &rarr; ' + e.target + ' [' + e.cardinality + ']</div>'; });
+            (entity.edges || []).forEach(e => { html += '<div class="edge-item">&#x2194; ' + e.name + ' &rarr; ' + e.target + ' [' + e.target_end_cardinality + ']</div>'; });
             html += '</div></div>';
             return html;
         }
@@ -1709,13 +1709,13 @@
 
             // Fallback for non-nested structure
             if (entity.embedded) {
-                entity.embedded.forEach(e => { html += '<div class="embedded-item">&lt;&gt; ' + e.name + ' [' + e.cardinality + ']</div>'; });
+                entity.embedded.forEach(e => { html += '<div class="embedded-item">&lt;&gt; ' + e.name + ' [' + e.target_end_cardinality + ']</div>'; });
             }
             if (entity.references) {
                 entity.references.forEach(r => { html += '<div class="reference-item">' + r.name + ' &rarr; ' + r.target + '</div>'; });
             }
             if (entity.edges) {
-                entity.edges.forEach(e => { html += '<div class="edge-item">&#x2194; ' + e.name + ' &rarr; ' + e.target + ' [' + e.cardinality + ']</div>'; });
+                entity.edges.forEach(e => { html += '<div class="edge-item">&#x2194; ' + e.name + ' &rarr; ' + e.target + ' [' + e.target_end_cardinality + ']</div>'; });
             }
 
             html += '</div></div>';
@@ -2267,7 +2267,7 @@
                              + ': <span class="dt-type">' + escapeHtml(p.type || '?') + '</span>' + keyTag);
                 } else {
                     const e = item.data;
-                    const card = e.cardinality || '1..1';
+                    const card = e.target_end_cardinality || '1..1';
                     const isArray = card.endsWith('..n') || card.endsWith('..*');
                     const tag = isArray ? '<span class="dt-arr">[array]</span>'
                                         : '<span class="dt-obj">{object}</span>';

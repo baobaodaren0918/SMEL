@@ -38,23 +38,23 @@ class StructuralHandlersMixin:
         if not source_entity or not target_entity:
             return OperationResult.skipped("nest: precondition not met")
 
-        # Determine embedding cardinality based on FK direction:
+        # Determine embedding target_end_cardinality based on FK direction:
         #   - target holds FK to source (e.g., orders.customer_id → customers):
         #     each target has ONE source → embed as object (1..1 or 0..1)
         #   - source holds FK to target (e.g., order_details.order_id → orders):
         #     each target has MANY sources → embed as array (1..n or 0..n)
-        cardinality = Cardinality.ONE_TO_ONE
+        target_end_cardinality = Cardinality.ONE_TO_ONE
         # Check if SOURCE has FK pointing to TARGET → many-to-one → embed as array
         for rel in source_entity.relationships:
             if isinstance(rel, Reference) and rel.get_target_entity_name() == target_name:
                 # Source holds FK to target: many sources per target → ONE_TO_MANY
-                cardinality = Cardinality.ONE_TO_MANY if not rel.is_optional else Cardinality.ZERO_TO_MANY
+                target_end_cardinality = Cardinality.ONE_TO_MANY if not rel.is_optional else Cardinality.ZERO_TO_MANY
                 break
         # Check if TARGET has FK pointing to SOURCE → one-to-one → embed as object
-        if cardinality == Cardinality.ONE_TO_ONE:
+        if target_end_cardinality == Cardinality.ONE_TO_ONE:
             for rel in target_entity.relationships:
                 if isinstance(rel, Reference) and rel.get_target_entity_name() == source_name:
-                    cardinality = Cardinality.ONE_TO_ONE if not rel.is_optional else Cardinality.ZERO_TO_ONE
+                    target_end_cardinality = Cardinality.ONE_TO_ONE if not rel.is_optional else Cardinality.ZERO_TO_ONE
                     break
 
         # Create embedded entity with specified properties (or all non-FK properties if not specified).
@@ -97,7 +97,7 @@ class StructuralHandlersMixin:
                 if rel.aggr_name == nested_name:
                     embedded_entity.add_relationship(
                         Embedded(aggr_name=nested_name, aggregates=rel.aggregates,
-                                 cardinality=rel.cardinality, is_optional=rel.is_optional))
+                                 target_end_cardinality=rel.target_end_cardinality, is_optional=rel.is_optional))
                     break
 
         # Remove FK reference from target to source
@@ -116,15 +116,15 @@ class StructuralHandlersMixin:
                 target_entity.remove_property(rel.ref_name)
                 fk_removed = True
 
-        # Fallback cardinality: when no Reference objects exist (non-relational sources),
+        # Fallback target_end_cardinality: when no Reference objects exist (non-relational sources),
         # infer from WHERE clause direction. If source holds the FK → many sources per target → array.
-        if cardinality == Cardinality.ONE_TO_ONE:
+        if target_end_cardinality == Cardinality.ONE_TO_ONE:
             source_fk_param = params.source_fk
             if source_fk_param and "." in source_fk_param:
                 fk_entity, _ = source_fk_param.split(".", 1)
                 if fk_entity == source_name:
                     # Source holds FK to target → ONE_TO_MANY (array)
-                    cardinality = Cardinality.ONE_TO_MANY
+                    target_end_cardinality = Cardinality.ONE_TO_MANY
 
         # Fallback: remove FK property from target using WHERE clause
         # (for non-relational sources that don't have Reference objects)
@@ -140,8 +140,8 @@ class StructuralHandlersMixin:
         # database.get_entity_type() finds it deterministically without leaning
         # on the simple-name lenient fallback.
         target_entity.add_relationship(Embedded(aggr_name=alias, aggregates=embedded_full_path,
-                                                cardinality=cardinality,
-                                                is_optional=not cardinality.is_required()))
+                                                target_end_cardinality=target_end_cardinality,
+                                                is_optional=not target_end_cardinality.is_required()))
         self._touch(source_name, target_name, alias)
         self.changes.append(f"NEST:{target_name}.{alias}")
         return OperationResult.ok()
@@ -243,7 +243,7 @@ class StructuralHandlersMixin:
         entity.add_relationship(Embedded(
             aggr_name=nested_name,
             aggregates=nested_full_path,
-            cardinality=Cardinality.ONE_TO_ONE
+            target_end_cardinality=Cardinality.ONE_TO_ONE
         ))
 
         self._touch(entity_name, nested_name)
@@ -291,7 +291,7 @@ class StructuralHandlersMixin:
                 holder=parent_path,
                 ref_name=embedded_rel.aggr_name,
                 target=target_name,
-                cardinality=embedded_rel.cardinality,
+                target_end_cardinality=embedded_rel.target_end_cardinality,
                 origin=TraceOrigin.UNNESTED_EMBEDDED,
             )
 
@@ -340,7 +340,7 @@ class StructuralHandlersMixin:
                     field_name, PrimitiveDataType(PrimitiveType.STRING), False, True
                 ))
 
-        # Forward the cardinality of References on the embedded entity into
+        # Forward the target_end_cardinality of References on the embedded entity into
         # the relationship trace rather than re-attaching the References to
         # the new entity — re-attaching would pollute paradigms (like
         # Cassandra) that carry no References. Self-refs are remapped to the
@@ -362,8 +362,8 @@ class StructuralHandlersMixin:
                     holder=target_name,
                     ref_name=rel.ref_name,
                     target=new_refs_to,
-                    cardinality=rel.cardinality,
-                    target_cardinality=rel.target_cardinality,
+                    target_end_cardinality=rel.target_end_cardinality,
+                    source_end_cardinality=rel.source_end_cardinality,
                     origin=(TraceOrigin.UNNESTED_SELF_REF
                             if new_refs_to == target_name
                             else TraceOrigin.UNNESTED_EMBEDDED_REF),
@@ -411,7 +411,7 @@ class StructuralHandlersMixin:
             new_entity.add_relationship(Embedded(
                 aggr_name=inner_rel.aggr_name,
                 aggregates=emb_new_path,
-                cardinality=inner_rel.cardinality,
+                target_end_cardinality=inner_rel.target_end_cardinality,
                 is_optional=inner_rel.is_optional,
             ))
 

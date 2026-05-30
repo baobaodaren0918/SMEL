@@ -143,7 +143,7 @@ def normalize_document_cardinality(db: Database, source_type: str) -> None:
     for entity in db.entity_types.values():
         for rel in entity.relationships:
             if isinstance(rel, Embedded):
-                if rel.cardinality == Cardinality.ZERO_TO_ONE:
-                    rel.cardinality = Cardinality.ONE_TO_ONE
-                elif rel.cardinality == Cardinality.ZERO_TO_MANY:
-                    rel.cardinality = Cardinality.ONE_TO_MANY
+                if rel.target_end_cardinality == Cardinality.ZERO_TO_ONE:
+                    rel.target_end_cardinality = Cardinality.ONE_TO_ONE
+                elif rel.target_end_cardinality == Cardinality.ZERO_TO_MANY:
+                    rel.target_end_cardinality = Cardinality.ONE_TO_MANY

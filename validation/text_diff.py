@@ -117,7 +117,7 @@ def _normalize_sql_like(text: str, comment_prefix: str) -> str:
 
 
 _BLOCK_HEADER_RE = re.compile(r"^//\s*(node|relationship)\s*:", re.IGNORECASE)
-_CARD_RE = re.compile(r"^//\s*(cardinality|per\s+\w+)\s*:", re.IGNORECASE)
+_CARD_RE = re.compile(r"^//\s*([\w-]*cardinality|per\s+\w+)\s*:", re.IGNORECASE)
 _PROPS_RE = re.compile(r"^//\s*properties\s*:\s*(.+)$", re.IGNORECASE)
 
 

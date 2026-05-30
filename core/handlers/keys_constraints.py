@@ -1,4 +1,4 @@
-"""Handlers for constraint-aware ops — keys, FKs, labels, cardinality, vertex/edge transforms."""
+"""Handlers for constraint-aware ops — keys, FKs, labels, target_end_cardinality, vertex/edge transforms."""
 
 import logging
 from typing import Dict, List
@@ -36,14 +36,14 @@ class KeysConstraintsHandlersMixin:
         if entity:
             # Append a relationship trace entry before removing the Reference
             # so a subsequent ADD_ENTITY (EDGE) in a cross-paradigm script can
-            # recover the bidirectional cardinality the FK encoded.
+            # recover the bidirectional target_end_cardinality the FK encoded.
             fk_attr_for_trace = entity.get_property(ref_name)
             for rel in entity.relationships:
                 if isinstance(rel, Reference) and rel.ref_name == ref_name:
                     self._remember_deleted_fk(
                         entity_name, ref_name, rel.refs_to,
-                        self._fk_was_required(rel.cardinality, fk_attr_for_trace),
-                        target_cardinality=rel.target_cardinality,
+                        self._fk_was_required(rel.target_end_cardinality, fk_attr_for_trace),
+                        source_end_cardinality=rel.source_end_cardinality,
                     )
                     break
 
@@ -81,10 +81,10 @@ class KeysConstraintsHandlersMixin:
         target_entity = self._get_entity(target_table)
 
         # Cardinality applies to the FK as a whole, not to individual columns.
-        cardinality = Cardinality.ONE_TO_ONE
+        target_end_cardinality = Cardinality.ONE_TO_ONE
         clauses = params.clauses
         if 'cardinality' in clauses:
-            cardinality = CARDINALITY_MAP.get(clauses['cardinality'], Cardinality.ONE_TO_ONE)
+            target_end_cardinality = CARDINALITY_MAP.get(clauses['cardinality'], Cardinality.ONE_TO_ONE)
 
         fk_props: List[ForeignKeyProperty] = []
         for src_col, tgt_col in zip(field_names, target_columns):
@@ -93,10 +93,10 @@ class KeysConstraintsHandlersMixin:
             if not entity.get_property(src_col):
                 entity.add_property(Property(src_col, fk_type, False, True))
 
-            # Target-side cardinality: 0..1 if FK column is unique / sole PK,
+            # Source-end cardinality: 0..1 if FK column is unique / sole PK,
             # otherwise 0..n (relational-algebra default).
             src_attr_for_uniq = entity.get_property(src_col)
-            target_card = (
+            source_end_card = (
                 Cardinality.ZERO_TO_ONE
                 if self._is_fk_column_unique(entity, src_attr_for_uniq)
                 else Cardinality.ZERO_TO_MANY
@@ -109,8 +109,8 @@ class KeysConstraintsHandlersMixin:
             )
             if existing_ref:
                 existing_ref.refs_to = target_table
-                existing_ref.cardinality = cardinality
-                existing_ref.target_cardinality = target_card
+                existing_ref.target_end_cardinality = target_end_cardinality
+                existing_ref.source_end_cardinality = source_end_card
                 # ADD_FOREIGN_KEY always produces an *enforced* reference. If
                 # the existing Reference came from a previous logical-only
                 # declaration (e.g. parsed from a Mongo cross-collection
@@ -124,13 +124,13 @@ class KeysConstraintsHandlersMixin:
             else:
                 entity.add_relationship(Reference(
                     ref_name=src_col, refs_to=target_table,
-                    cardinality=cardinality,
-                    target_cardinality=target_card,
-                    is_optional=not cardinality.is_required(),
+                    target_end_cardinality=target_end_cardinality,
+                    source_end_cardinality=source_end_card,
+                    is_optional=not target_end_cardinality.is_required(),
                 ))
 
             fk_attr = entity.get_property(src_col)
-            if fk_attr and cardinality.is_required():
+            if fk_attr and target_end_cardinality.is_required():
                 fk_attr.is_optional = False
 
             if fk_attr:
@@ -210,36 +210,36 @@ class KeysConstraintsHandlersMixin:
         # equivalent ADD_FOREIGN_KEY behaviour.
         fk_type = self._resolve_fk_type(target_entity, target_columns[0])
 
-        cardinality = Cardinality.ONE_TO_ONE
+        target_end_cardinality = Cardinality.ONE_TO_ONE
         if params.ref_cardinality:
-            cardinality = CARDINALITY_MAP.get(
+            target_end_cardinality = CARDINALITY_MAP.get(
                 params.ref_cardinality, Cardinality.ONE_TO_ONE)
 
         # Ensure the source property exists.
         if not entity.get_property(field_name):
             entity.add_property(Property(field_name, fk_type, False, True))
 
-        # Mirror the cardinality's required-ness onto the source property's
-        # ``is_optional``. The Reference itself records cardinality, but the
+        # Mirror the target_end_cardinality's required-ness onto the source property's
+        # ``is_optional``. The Reference itself records target_end_cardinality, but the
         # Mongo / PG adapters read ``Property.is_optional`` to decide whether
         # the column appears in ``required[]`` / carries ``NOT NULL``. Without
         # this propagation, an ADD_CONSTRAINT REFERENCE WITH CARDINALITY
         # ONE_TO_* would silently leave the property nullable.
         src_attr = entity.get_property(field_name)
         if src_attr is not None:
-            src_attr.is_optional = not cardinality.is_required()
+            src_attr.is_optional = not target_end_cardinality.is_required()
 
-        # Target-side cardinality: default ZERO_TO_MANY (logical Reference
+        # Source-end cardinality: default ZERO_TO_MANY (logical Reference
         # bears no uniqueness signal). Override to ZERO_TO_ONE only if the
         # source column happens to be unique / sole PK.
-        target_card = (
+        source_end_card = (
             Cardinality.ZERO_TO_ONE
             if self._is_fk_column_unique(entity, src_attr)
             else Cardinality.ZERO_TO_MANY
         )
 
         # Upsert the Reference. If one already exists for this column,
-        # update its target / cardinality and force ``is_enforced=False``
+        # update its target / target_end_cardinality and force ``is_enforced=False``
         # so this op cleanly downgrades a previously-enforced reference.
         existing_ref = next(
             (r for r in entity.relationships
@@ -248,16 +248,16 @@ class KeysConstraintsHandlersMixin:
         )
         if existing_ref:
             existing_ref.refs_to = target_table
-            existing_ref.cardinality = cardinality
-            existing_ref.target_cardinality = target_card
+            existing_ref.target_end_cardinality = target_end_cardinality
+            existing_ref.source_end_cardinality = source_end_card
             existing_ref.is_enforced = False
         else:
             entity.add_relationship(Reference(
                 ref_name=field_name,
                 refs_to=target_table,
-                cardinality=cardinality,
-                target_cardinality=target_card,
-                is_optional=not cardinality.is_required(),
+                target_end_cardinality=target_end_cardinality,
+                source_end_cardinality=source_end_card,
+                is_optional=not target_end_cardinality.is_required(),
                 is_enforced=False,
             ))
 
@@ -337,7 +337,7 @@ class KeysConstraintsHandlersMixin:
         # 1. Logical references (Reference.is_enforced == False).
         # Mirrors DELETE_FOREIGN_KEY's trace hook: append a relationship trace
         # entry before removing the Reference, so a later ADD_ENTITY (EDGE) /
-        # TRANSFORM can recover its bidirectional cardinality.
+        # TRANSFORM can recover its bidirectional target_end_cardinality.
         new_relationships = []
         removed_logical_ref = False
         for rel in entity.relationships:
@@ -348,8 +348,8 @@ class KeysConstraintsHandlersMixin:
                     holder=entity.full_path,
                     ref_name=field_name,
                     target=rel.refs_to,
-                    cardinality=rel.cardinality,
-                    target_cardinality=rel.target_cardinality,
+                    target_end_cardinality=rel.target_end_cardinality,
+                    source_end_cardinality=rel.source_end_cardinality,
                 )
                 removed_kinds.append("REFERENCE_LOGICAL")
                 removed_logical_ref = True
@@ -358,11 +358,11 @@ class KeysConstraintsHandlersMixin:
         entity.relationships = new_relationships
 
         # Restore is_optional=True on the anchor property when the deleted
-        # logical Reference had imposed a required cardinality. Symmetric with
+        # logical Reference had imposed a required target_end_cardinality. Symmetric with
         # the EXISTENCE branch below — the property's nullability constraint
         # was an artefact of the now-removed Reference, so the default
         # (optional) state is reasserted. Without this restoration, scripts
-        # that briefly declare a logical FK only to capture cardinality for
+        # that briefly declare a logical FK only to capture target_end_cardinality for
         # the relationship trace would leave the column NOT NULL even after
         # the FK is dropped.
         if removed_logical_ref:
@@ -628,7 +628,7 @@ class KeysConstraintsHandlersMixin:
     def _is_fk_column_unique(entity, attr) -> bool:
         """A FK column counts as ``unique`` if it has a single-column UNIQUE
         constraint of its own, or if it is the sole column of the entity's PK.
-        Used to derive Reference.target_cardinality: unique → 0..1, else 0..n."""
+        Used to derive Reference.source_end_cardinality: unique → 0..1, else 0..n."""
         if not attr:
             return False
         for c in entity.constraints:
@@ -744,7 +744,7 @@ class KeysConstraintsHandlersMixin:
                             # ADD_KEY's symmetric is_optional=False on
                             # promotion. A subsequent SMILE op (ADD_KEY,
                             # ADD_FOREIGN_KEY, ADD_CONSTRAINT REFERENCE with
-                            # required cardinality) is responsible for
+                            # required target_end_cardinality) is responsible for
                             # re-asserting non-null if intended.
                             up_attr.is_optional = True
                             removed_any = True
@@ -833,53 +833,53 @@ class KeysConstraintsHandlersMixin:
 
     @register_handler(OpType.RECARD)
     def _handle_recard(self, params: RecardParams) -> OperationResult:
-        """RECARD: Change the source-side cardinality of a Reference or Edge.
+        """RECARD: Change the target-end cardinality of a Reference or Edge.
 
-        ``target_cardinality`` is intentionally preserved across this operation;
+        ``source_end_cardinality`` is intentionally preserved across this operation;
         SMILE currently has no TARGET_CARDINALITY grammar clause, so the reverse
         side is only mutated by re-derivation from the trace at the next Edge
         construction (or by explicit ADD_FOREIGN_KEY re-declaration).
         """
         target = params.target
-        new_cardinality_str = params.cardinality
+        new_target_end_cardinality_str = params.cardinality
 
         entity, ref_name = self._resolve_entity_attr(target)
         if not entity:
             return OperationResult.skipped("recard: precondition not met")
 
-        new_cardinality = CARDINALITY_MAP.get(new_cardinality_str, None)
-        if not new_cardinality:
+        new_target_end_cardinality = CARDINALITY_MAP.get(new_target_end_cardinality_str, None)
+        if not new_target_end_cardinality:
             return OperationResult.skipped("recard: precondition not met")
 
-        # Find the reference relationship and update its cardinality
+        # Find the reference relationship and update its target_end_cardinality
         for rel in entity.relationships:
             if isinstance(rel, Reference) and rel.ref_name == ref_name:
-                rel.cardinality = new_cardinality
+                rel.target_end_cardinality = new_target_end_cardinality
                 self._touch(entity.name)
-                self.changes.append(f"RECARD:{target}->{new_cardinality_str}")
+                self.changes.append(f"RECARD:{target}->{new_target_end_cardinality_str}")
                 return OperationResult.ok()
             elif isinstance(rel, Edge) and rel.rel_type_name == ref_name:
-                # Edge cardinality is duplicated on the EDGE entity and on the
+                # Edge target_end_cardinality is duplicated on the EDGE entity and on the
                 # Edge relationship object; sync both via helper so they
                 # cannot drift apart.
-                self._sync_edge_cardinality(ref_name, new_cardinality)
+                self._sync_edge_target_end_cardinality(ref_name, new_target_end_cardinality)
                 self._touch(entity.name, ref_name)
-                self.changes.append(f"RECARD:{target}->{new_cardinality_str}")
+                self.changes.append(f"RECARD:{target}->{new_target_end_cardinality_str}")
                 return OperationResult.ok()
         return OperationResult.skipped("recard: precondition not met")
 
-    def _sync_edge_cardinality(self, edge_name: str, new_cardinality: Cardinality) -> None:
-        """Keep the cardinality of an EDGE consistent across its two storage sites."""
+    def _sync_edge_target_end_cardinality(self, edge_name: str, new_target_end_cardinality: Cardinality) -> None:
+        """Keep the target_end_cardinality of an EDGE consistent across its two storage sites."""
         edge_entity = self.database.get_entity_type(edge_name)
         if not edge_entity or edge_entity.entity_kind != EntityKind.EDGE:
             return
-        edge_entity.edge_cardinality = new_cardinality
+        edge_entity.edge_target_end_cardinality = new_target_end_cardinality
         if edge_entity.source_entity:
             source_ent = self.database.get_entity_type(edge_entity.source_entity)
             if source_ent:
                 for rel in source_ent.relationships:
                     if isinstance(rel, Edge) and rel.rel_type_name == edge_name:
-                        rel.cardinality = new_cardinality
+                        rel.target_end_cardinality = new_target_end_cardinality
                         break
 
     @register_handler(OpType.TRANSFORM)
@@ -896,25 +896,25 @@ class KeysConstraintsHandlersMixin:
             if not entity:
                 return OperationResult.skipped("transform: precondition not met")
 
-            # Resolve cardinality (default: ZERO_TO_MANY)
-            script_set_cardinality = bool(params.cardinality)
-            cardinality = Cardinality.ZERO_TO_MANY
-            if script_set_cardinality:
-                cardinality = CARDINALITY_MAP.get(params.cardinality, Cardinality.ZERO_TO_MANY)
+            # Resolve target_end_cardinality (default: ZERO_TO_MANY)
+            script_set_target_end_cardinality = bool(params.cardinality)
+            target_end_cardinality = Cardinality.ZERO_TO_MANY
+            if script_set_target_end_cardinality:
+                target_end_cardinality = CARDINALITY_MAP.get(params.cardinality, Cardinality.ZERO_TO_MANY)
 
             recovered_source, recovered_target = self._consume_deleted_fk_for_edge(
                 source_entity_name, target_entity_name
             )
-            if recovered_source is not None and not script_set_cardinality:
-                cardinality = recovered_source
-            recovered_target = self._default_target_cardinality(recovered_target)
+            if recovered_source is not None and not script_set_target_end_cardinality:
+                target_end_cardinality = recovered_source
+            recovered_target = self._default_source_end_cardinality(recovered_target)
 
             # Convert VERTEX -> EDGE
             entity.entity_kind = EntityKind.EDGE
             entity.source_entity = source_entity_name
             entity.target_entity = target_entity_name
-            entity.edge_cardinality = cardinality
-            entity.edge_target_cardinality = recovered_target
+            entity.edge_target_end_cardinality = target_end_cardinality
+            entity.edge_source_end_cardinality = recovered_target
 
             # Add Edge to source entity's relationships (avoid duplicates)
             source_ent = self.database.get_entity_type(source_entity_name)
@@ -928,8 +928,8 @@ class KeysConstraintsHandlersMixin:
                         rel_type_name=name,
                         source_entity=source_entity_name,
                         target_entity=target_entity_name,
-                        cardinality=cardinality,
-                        target_cardinality=recovered_target,
+                        target_end_cardinality=target_end_cardinality,
+                        source_end_cardinality=recovered_target,
                     )
                     source_ent.add_relationship(edge)
 
@@ -951,7 +951,7 @@ class KeysConstraintsHandlersMixin:
             edge_entity.entity_kind = EntityKind.VERTEX
             edge_entity.source_entity = None
             edge_entity.target_entity = None
-            edge_entity.edge_cardinality = None
+            edge_entity.edge_target_end_cardinality = None
 
             self.changes.append(f"TRANSFORM:{name}->ENTITY")
             return OperationResult.ok()

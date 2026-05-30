@@ -64,7 +64,7 @@ def test_add_primary_key_relinks_incoming_fks():
     orders.add_relationship(Reference(
         ref_name="customer_id",
         refs_to="customers",
-        cardinality=Cardinality.ONE_TO_ONE,
+        target_end_cardinality=Cardinality.ONE_TO_ONE,
         is_optional=False,
         is_enforced=True,
     ))

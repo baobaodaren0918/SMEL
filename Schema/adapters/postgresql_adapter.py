@@ -740,17 +740,19 @@ class PostgreSQLAdapter(DatabaseAdapter):
 
     @staticmethod
     def _derive_fk_cardinalities(is_optional: bool, is_unique: bool):
-        """Return (source_cardinality, target_cardinality) for a FK column under
-        the source-side cardinality convention:
+        """Return ``(target_end_cardinality, source_end_cardinality)`` for a FK
+        column under the UML "located-at" convention:
 
-            source = per FK row, how many target rows
-                   = 1..1 (NOT NULL) | 0..1 (nullable)
-            target = per target PK row, how many source FK rows
-                   = 0..1 (FK has UNIQUE) | 0..n (otherwise)
+            target_end = multiplicity at the target end (per FK row, how many
+                         target rows)
+                       = 1..1 (NOT NULL) | 0..1 (nullable)
+            source_end = multiplicity at the source end (per target PK row, how
+                         many FK rows)
+                       = 0..1 (FK column UNIQUE) | 0..n (otherwise)
         """
-        source = Cardinality.ZERO_TO_ONE if is_optional else Cardinality.ONE_TO_ONE
-        target = Cardinality.ZERO_TO_ONE if is_unique else Cardinality.ZERO_TO_MANY
-        return source, target
+        target_end = Cardinality.ZERO_TO_ONE if is_optional else Cardinality.ONE_TO_ONE
+        source_end = Cardinality.ZERO_TO_ONE if is_unique else Cardinality.ZERO_TO_MANY
+        return target_end, source_end
 
     @staticmethod
     def _is_fk_column_unique(entity, attr) -> bool:
@@ -780,13 +782,13 @@ class PostgreSQLAdapter(DatabaseAdapter):
                 attr = entity.get_property(ref_name)
                 is_optional = attr.is_optional if attr else True
                 is_unique = self._is_fk_column_unique(entity, attr)
-                source_card, target_card = self._derive_fk_cardinalities(is_optional, is_unique)
+                target_end_card, source_end_card = self._derive_fk_cardinalities(is_optional, is_unique)
 
                 reference = Reference(
                     ref_name=ref_name,
                     refs_to=target_name,
-                    cardinality=source_card,
-                    target_cardinality=target_card,
+                    target_end_cardinality=target_end_card,
+                    source_end_cardinality=source_end_card,
                     is_optional=is_optional,
                 )
                 entity.add_relationship(reference)
@@ -836,13 +838,13 @@ class PostgreSQLAdapter(DatabaseAdapter):
                     continue
                 src_optional = src_attr.is_optional
                 is_unique = self._is_fk_column_unique(entity, src_attr)
-                source_card, target_card = self._derive_fk_cardinalities(src_optional, is_unique)
+                target_end_card, source_end_card = self._derive_fk_cardinalities(src_optional, is_unique)
 
                 entity.add_relationship(Reference(
                     ref_name=src_col,
                     refs_to=target_name,
-                    cardinality=source_card,
-                    target_cardinality=target_card,
+                    target_end_cardinality=target_end_card,
+                    source_end_cardinality=source_end_card,
                     is_optional=src_optional,
                 ))
 
@@ -900,7 +902,7 @@ class PostgreSQLAdapter(DatabaseAdapter):
         if database.relationship_types:
             lines.append("-- Relationship Types (Graph metadata):")
             for rt in database.relationship_types.values():
-                cardinality_str = rt.cardinality.value if rt.cardinality else "0..n"
+                cardinality_str = rt.target_end_cardinality.value if rt.target_end_cardinality else "0..n"
                 lines.append(f"-- {rt.rel_name}: {rt.source_entity} -> {rt.target_entity} ({cardinality_str})")
             lines.append("")
 

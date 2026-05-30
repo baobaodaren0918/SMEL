@@ -4,10 +4,10 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 
 
 # Validation tolerance (not a global semantic rule): for comparison purposes
-# only, a missing target_cardinality is treated as equivalent to the
+# only, a missing source_end_cardinality is treated as equivalent to the
 # unconstrained reverse default 0..n. At the meta-model level, None and 0..n
 # remain semantically distinct (None = unspecified, 0..n = explicitly many).
-def _norm_target_card(v):
+def _norm_source_end_card(v):
     return v if v else "0..n"
 
 
@@ -32,7 +32,7 @@ class CardinalityChange:
     name: str
     left: str
     right: str
-    field: str = "cardinality"  # or "target_cardinality"
+    field: str = "target_end_cardinality"  # or "source_end_cardinality"
 
 
 @dataclass
@@ -229,11 +229,11 @@ def _diff_entity(
                              left_target=a.get("target", ""),
                              right_target=b.get("target", ""))
             )
-        if a.get("cardinality") != b.get("cardinality"):
+        if a.get("target_end_cardinality") != b.get("target_end_cardinality"):
             diff.embedded_cardinality_changes.append(
                 CardinalityChange(name=n,
-                                  left=a.get("cardinality", ""),
-                                  right=b.get("cardinality", ""))
+                                  left=a.get("target_end_cardinality", ""),
+                                  right=b.get("target_end_cardinality", ""))
             )
 
     # ---- References ----
@@ -257,11 +257,11 @@ def _diff_entity(
             diff.ref_attr_changes.append(
                 ReferenceAttrChange(name=n, left_attrs=a_attrs, right_attrs=b_attrs)
             )
-        if a.get("cardinality") != b.get("cardinality"):
+        if a.get("target_end_cardinality") != b.get("target_end_cardinality"):
             diff.ref_cardinality_changes.append(
                 CardinalityChange(name=n,
-                                  left=a.get("cardinality", ""),
-                                  right=b.get("cardinality", ""))
+                                  left=a.get("target_end_cardinality", ""),
+                                  right=b.get("target_end_cardinality", ""))
             )
 
     # ---- Edges ----
@@ -283,18 +283,18 @@ def _diff_entity(
                 left_target=a.get("target") if t_diff else None,
                 right_target=b.get("target") if t_diff else None,
             ))
-        if a.get("cardinality") != b.get("cardinality"):
+        if a.get("target_end_cardinality") != b.get("target_end_cardinality"):
             diff.edge_cardinality_changes.append(
                 CardinalityChange(name=n,
-                                  left=a.get("cardinality", ""),
-                                  right=b.get("cardinality", ""))
+                                  left=a.get("target_end_cardinality", ""),
+                                  right=b.get("target_end_cardinality", ""))
             )
-        if _norm_target_card(a.get("target_cardinality")) != _norm_target_card(b.get("target_cardinality")):
+        if _norm_source_end_card(a.get("source_end_cardinality")) != _norm_source_end_card(b.get("source_end_cardinality")):
             diff.edge_cardinality_changes.append(
                 CardinalityChange(name=n,
-                                  left=a.get("target_cardinality") or "",
-                                  right=b.get("target_cardinality") or "",
-                                  field="target_cardinality")
+                                  left=a.get("source_end_cardinality") or "",
+                                  right=b.get("source_end_cardinality") or "",
+                                  field="source_end_cardinality")
             )
 
     # ---- Constraints ----
@@ -381,18 +381,18 @@ def _diff_relationship_types(left: Dict, right: Dict) -> Tuple[List[str], List[s
                 left_target=a.get("target_entity"),
                 right_target=b.get("target_entity"),
             ))
-        if a.get("cardinality") != b.get("cardinality"):
+        if a.get("target_end_cardinality") != b.get("target_end_cardinality"):
             rd.cardinality_changes.append(CardinalityChange(
                 name=n,
-                left=a.get("cardinality", ""),
-                right=b.get("cardinality", ""),
+                left=a.get("target_end_cardinality", ""),
+                right=b.get("target_end_cardinality", ""),
             ))
-        if _norm_target_card(a.get("target_cardinality")) != _norm_target_card(b.get("target_cardinality")):
+        if _norm_source_end_card(a.get("source_end_cardinality")) != _norm_source_end_card(b.get("source_end_cardinality")):
             rd.cardinality_changes.append(CardinalityChange(
                 name=n,
-                left=a.get("target_cardinality") or "",
-                right=b.get("target_cardinality") or "",
-                field="target_cardinality",
+                left=a.get("source_end_cardinality") or "",
+                right=b.get("source_end_cardinality") or "",
+                field="source_end_cardinality",
             ))
         a_attrs = {x["name"]: x.get("type", "") for x in a.get("properties", [])}
         b_attrs = {x["name"]: x.get("type", "") for x in b.get("properties", [])}
